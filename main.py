@@ -511,38 +511,16 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
 
     header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
 
+    # Only the zero-input action lives in the top bar as a plain Button; every
+    # action that needs data (competitor name, segment, profile edits, the
+    # Content Strategy handoff) is a real ui.Form embedded in its own tab --
+    # submits straight to its @chat.function, no chat message required.
     action_bar = ui.Row(
         gap=2,
         children=[
             ui.Button(
                 "Run SWOT Analysis", variant="primary", icon="Sparkles",
                 on_click=ui.Call("run_swot_analysis", brand_id=brand_id),
-            ),
-            ui.Button(
-                "Run Gap Analysis", variant="secondary", icon="Target",
-                on_click=ui.Send(
-                    f"Запусти gap-анализ для бренда «{brand_name}» (brand_id={brand_id}) -- "
-                    f"выбери подходящий целевой сегмент из list_target_segments."
-                ),
-            ),
-            ui.Button(
-                "Add competitor", variant="secondary", icon="Plus",
-                on_click=ui.Send(f"Добавь конкурента бренду «{brand_name}» (brand_id={brand_id}): "),
-            ),
-            ui.Button(
-                "Add segment", variant="secondary", icon="Users",
-                on_click=ui.Send(f"Добавь целевой сегмент бренду «{brand_name}» (brand_id={brand_id}): "),
-            ),
-            ui.Button(
-                "Send to Content Strategy Hub", variant="ghost", icon="Send",
-                on_click=ui.Send(
-                    f"Собери build_content_strategy_handoff для бренда «{brand_name}» "
-                    f"(brand_id={brand_id}) и передай в Content Strategy Hub create_site_profile."
-                ),
-            ),
-            ui.Button(
-                "Edit profile", variant="ghost", icon="Pencil",
-                on_click=ui.Send(f"Хочу обновить профиль бренда «{brand_name}» (brand_id={brand_id}): "),
             ),
         ],
     )
@@ -572,6 +550,47 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                     ui.Empty(message="No USPs recorded yet.", icon="—")
                 ),
             ),
+            ui.Card(
+                title="Edit profile",
+                content=ui.Form(
+                    action="update_brand_profile",
+                    submit_label="Save changes",
+                    defaults={"brand_id": brand_id},
+                    children=[
+                        ui.Input(param_name="brand_name", placeholder="Brand name",
+                                 value=data.get("brand_name", "")),
+                        ui.Input(param_name="industry", placeholder="Industry",
+                                 value=data.get("industry", "")),
+                        ui.TextArea(param_name="mission", placeholder="Mission",
+                                    value=data.get("mission", ""), rows=2),
+                        ui.TextArea(param_name="vision", placeholder="Vision",
+                                    value=data.get("vision", ""), rows=2),
+                        ui.TextArea(param_name="value_proposition", placeholder="Value proposition",
+                                    value=data.get("value_proposition", ""), rows=2),
+                        ui.Input(param_name="tone_of_voice", placeholder="Tone of voice",
+                                 value=data.get("tone_of_voice", "")),
+                        ui.TagInput(param_name="unique_selling_points",
+                                    values=data.get("unique_selling_points", []),
+                                    placeholder="Add a USP and press Enter"),
+                    ],
+                ),
+            ),
+            ui.Card(
+                title="Send to Content Strategy Hub",
+                subtitle="Reshapes this brand into create_site_profile's fields",
+                content=ui.Form(
+                    action="build_content_strategy_handoff",
+                    submit_label="Build handoff",
+                    defaults={"brand_id": brand_id},
+                    children=[
+                        ui.Input(param_name="site_id", placeholder="Site id, e.g. g4s.md",
+                                 value=data.get("site_id", "")),
+                        ui.Input(param_name="domain", placeholder="Domain (optional, defaults to site id)"),
+                        ui.TagInput(param_name="target_languages",
+                                    placeholder="Add a language code (e.g. ru) and press Enter"),
+                    ],
+                ),
+            ),
         ],
     )
 
@@ -590,16 +609,43 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         swot_tab = ui.Empty(message="No SWOT analysis yet -- run one from the action bar above.", icon="Sparkles")
 
     # ── Gap analysis tab ─────────────────────────────────────────────
+    segment_options = [
+        {"value": d.id, "label": d.data.get("segment_name", "") or d.id} for d in segments
+    ]
+    gap_form = (
+        ui.Form(
+            action="run_gap_analysis",
+            submit_label="Run gap analysis",
+            defaults={"brand_id": brand_id},
+            children=[
+                ui.Select(param_name="segment_id", options=segment_options,
+                          placeholder="Choose a target segment"),
+            ],
+        )
+        if segment_options else
+        ui.Alert(
+            title="No target segments yet",
+            message="Add a target segment in the Segments tab first, then come back here to run the gap analysis.",
+            type="info",
+        )
+    )
     if latest_gap:
         gap_tab = ui.Stack(
             direction="v", gap=3,
             children=[
                 ui.Card(title="Gaps between brand and audience", content=_swot_list(latest_gap.get("gaps", []))),
                 ui.Card(title="Recommendations to fill the gap", content=_swot_list(latest_gap.get("recommendations", []))),
+                ui.Card(title="Run again for another segment", content=gap_form),
             ],
         )
     else:
-        gap_tab = ui.Empty(message="No gap analysis yet -- run one from the action bar above.", icon="Target")
+        gap_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Empty(message="No gap analysis yet -- pick a segment below and run one.", icon="Target"),
+                ui.Card(title="Run gap analysis", content=gap_form),
+            ],
+        )
 
     # ── Competitors tab ──────────────────────────────────────────────
     if competitors:
@@ -612,9 +658,26 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
             )
             for c in competitors
         ]
-        competitors_tab = ui.List(items=comp_items, searchable=True)
+        competitors_list = ui.List(items=comp_items, searchable=True)
     else:
-        competitors_tab = ui.Empty(message="No competitors tracked yet.", icon="Users")
+        competitors_list = ui.Empty(message="No competitors tracked yet.", icon="Users")
+
+    add_competitor_form = ui.Card(
+        title="Add competitor",
+        content=ui.Form(
+            action="add_competitor_profile",
+            submit_label="Add competitor",
+            defaults={"brand_id": brand_id},
+            children=[
+                ui.Input(param_name="name", placeholder="Competitor name"),
+                ui.Input(param_name="url", placeholder="Website (optional)"),
+                ui.TagInput(param_name="strengths", placeholder="Add a strength and press Enter"),
+                ui.TagInput(param_name="weaknesses", placeholder="Add a weakness and press Enter"),
+                ui.TextArea(param_name="notes", placeholder="Notes (optional)", rows=2),
+            ],
+        ),
+    )
+    competitors_tab = ui.Stack(direction="v", gap=3, children=[competitors_list, add_competitor_form])
 
     # ── Segments tab ─────────────────────────────────────────────────
     if segments:
@@ -627,9 +690,27 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
             )
             for d in segments
         ]
-        segments_tab = ui.List(items=seg_items, searchable=True)
+        segments_list = ui.List(items=seg_items, searchable=True)
     else:
-        segments_tab = ui.Empty(message="No target segments defined yet.", icon="Users")
+        segments_list = ui.Empty(message="No target segments defined yet.", icon="Users")
+
+    add_segment_form = ui.Card(
+        title="Add target segment",
+        content=ui.Form(
+            action="create_target_segment",
+            submit_label="Add segment",
+            defaults={"brand_id": brand_id},
+            children=[
+                ui.Input(param_name="segment_name", placeholder="Segment name, e.g. 'SMB office managers'"),
+                ui.Input(param_name="demographics", placeholder="Demographics (optional)"),
+                ui.Input(param_name="psychographics", placeholder="Psychographics (optional)"),
+                ui.TagInput(param_name="pain_points", placeholder="Add a pain point and press Enter"),
+                ui.TagInput(param_name="needs", placeholder="Add a need and press Enter"),
+                ui.TagInput(param_name="preferred_channels", placeholder="Add a channel and press Enter"),
+            ],
+        ),
+    )
+    segments_tab = ui.Stack(direction="v", gap=3, children=[segments_list, add_segment_form])
 
     tab_defs = [
         ("profile", "Profile", profile_tab),

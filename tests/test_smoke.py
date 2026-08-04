@@ -332,3 +332,98 @@ async def test_brand_detail_panel_shows_competitors_and_segments_when_present():
     assert "RivalCo" in repr(comp_node)
     seg_node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="segments")
     assert "Homeowners" in repr(seg_node)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Regression: every data-collecting action must be a real ui.Form the user
+# fills in and submits directly (no chat needed) -- not a ui.Send button
+# that just pre-types a chat message the user still has to send themselves.
+# Goal: "a UI I control that reaches every detail without talking in chat."
+# ──────────────────────────────────────────────────────────────────────────
+
+def _find_forms(node, actions):
+    """Collect the `action` prop of every Form node in the tree."""
+    node_type = getattr(node, "type", None)
+    if node_type == "Form":
+        actions.append(getattr(node, "props", {}).get("action", ""))
+    if node_type is not None:
+        props = getattr(node, "props", {}) or {}
+        for value in props.values():
+            if isinstance(value, list):
+                for item in value:
+                    _find_forms(item, actions)
+            else:
+                _find_forms(value, actions)
+    return actions
+
+
+def _tree_repr_has_send_action(node) -> bool:
+    """True if any UIAction(action='send', ...) appears anywhere in the tree."""
+    return "action='send'" in repr(node) or 'action="send"' in repr(node)
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_has_no_send_to_chat_actions_anywhere():
+    """No button/form in the whole panel should fall back to 'type this into
+    chat yourself' -- every data-entry action must be a real embedded form."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    await m.add_competitor_profile(
+        ctx, AddCompetitorParams(brand_id=brand.data.id, name="RivalCo", strengths=["cheap"])
+    )
+    await m.create_target_segment(
+        ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Homeowners")
+    )
+    for tab in ("profile", "swot", "gap", "competitors", "segments"):
+        node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab=tab)
+        assert not _tree_repr_has_send_action(node), f"tab={tab} still sends to chat instead of using a Form"
+
+
+@pytest.mark.asyncio
+async def test_profile_tab_has_edit_and_handoff_forms():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="profile")
+    actions = _find_forms(node, [])
+    assert "update_brand_profile" in actions
+    assert "build_content_strategy_handoff" in actions
+
+
+@pytest.mark.asyncio
+async def test_competitors_tab_has_add_competitor_form():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="competitors")
+    actions = _find_forms(node, [])
+    assert "add_competitor_profile" in actions
+
+
+@pytest.mark.asyncio
+async def test_segments_tab_has_add_segment_form():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="segments")
+    actions = _find_forms(node, [])
+    assert "create_target_segment" in actions
+
+
+@pytest.mark.asyncio
+async def test_gap_tab_has_run_gap_analysis_form_once_a_segment_exists():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    await m.create_target_segment(
+        ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Homeowners")
+    )
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="gap")
+    actions = _find_forms(node, [])
+    assert "run_gap_analysis" in actions
+
+
+@pytest.mark.asyncio
+async def test_gap_tab_without_any_segment_shows_hint_not_a_broken_form():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="gap")
+    actions = _find_forms(node, [])
+    assert "run_gap_analysis" not in actions
+    assert "No target segments yet" in repr(node)
