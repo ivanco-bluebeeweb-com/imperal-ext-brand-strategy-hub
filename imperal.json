@@ -1,0 +1,2504 @@
+{
+  "manifest_schema_version": 3,
+  "sdk_version": "5.9.13",
+  "app_id": "brand-strategy-hub",
+  "version": "1.0.0",
+  "name": "Brand Strategy Hub",
+  "description": "Defines who your brand is and who it's for: brand profile (mission, value proposition, USPs), tracked competitors, target audience segments, SWOT analysis, and brand-vs-audience gap analysis with concrete recommendations to fill the gap. Hands a structured brand context downstream to Content Strategy Hub so the rest of the content pipeline is grounded in real positioning, not guesswork.",
+  "icon": "icon.svg",
+  "actions_explicit": true,
+  "system": false,
+  "capabilities": [
+    "brand-strategy:read",
+    "brand-strategy:write"
+  ],
+  "tools": [
+    {
+      "name": "create_brand_profile",
+      "description": "Create a new brand profile — mission, vision, value proposition, tone of voice, and unique selling points. The anchor for SWOT, competitor tracking, and target segments for this brand.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:brand_profile"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_name": {
+            "description": "Brand/company name",
+            "minLength": 1,
+            "title": "Brand Name",
+            "type": "string"
+          },
+          "site_id": {
+            "default": "",
+            "description": "Optional link to a Content Strategy Hub site_id, e.g. 'g4s.md'",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "mission": {
+            "default": "",
+            "description": "One or two sentences on why the brand exists",
+            "title": "Mission",
+            "type": "string"
+          },
+          "vision": {
+            "default": "",
+            "description": "One or two sentences on where the brand wants to be",
+            "title": "Vision",
+            "type": "string"
+          },
+          "value_proposition": {
+            "default": "",
+            "description": "The core promise made to customers",
+            "title": "Value Proposition",
+            "type": "string"
+          },
+          "tone_of_voice": {
+            "default": "",
+            "description": "How the brand sounds, e.g. 'confident, warm, no jargon'",
+            "title": "Tone Of Voice",
+            "type": "string"
+          },
+          "unique_selling_points": {
+            "description": "What makes this brand different, one point per item",
+            "items": {
+              "type": "string"
+            },
+            "title": "Unique Selling Points",
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "description": "Industry/category, e.g. 'private security services'",
+            "title": "Industry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_name"
+        ],
+        "title": "CreateBrandProfileParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One brand under strategic analysis — the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "site_id": {
+            "default": "",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "brand_name": {
+            "default": "",
+            "title": "Brand Name",
+            "type": "string"
+          },
+          "mission": {
+            "default": "",
+            "title": "Mission",
+            "type": "string"
+          },
+          "vision": {
+            "default": "",
+            "title": "Vision",
+            "type": "string"
+          },
+          "value_proposition": {
+            "default": "",
+            "title": "Value Proposition",
+            "type": "string"
+          },
+          "tone_of_voice": {
+            "default": "",
+            "title": "Tone Of Voice",
+            "type": "string"
+          },
+          "unique_selling_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unique Selling Points",
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "title": "Industry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "BrandProfile",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "update_brand_profile",
+      "description": "Update selected fields of an existing brand profile. Only given fields change.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:brand_profile"
+      ],
+      "id_projection": "brand_id",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "brand_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New brand name; omit to keep",
+            "title": "Brand Name"
+          },
+          "mission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New mission; omit to keep",
+            "title": "Mission"
+          },
+          "vision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New vision; omit to keep",
+            "title": "Vision"
+          },
+          "value_proposition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New value proposition; omit to keep",
+            "title": "Value Proposition"
+          },
+          "tone_of_voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New tone of voice; omit to keep",
+            "title": "Tone Of Voice"
+          },
+          "unique_selling_points": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Replace USPs; omit to keep",
+            "title": "Unique Selling Points"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New industry; omit to keep",
+            "title": "Industry"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "UpdateBrandProfileParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One brand under strategic analysis — the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "site_id": {
+            "default": "",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "brand_name": {
+            "default": "",
+            "title": "Brand Name",
+            "type": "string"
+          },
+          "mission": {
+            "default": "",
+            "title": "Mission",
+            "type": "string"
+          },
+          "vision": {
+            "default": "",
+            "title": "Vision",
+            "type": "string"
+          },
+          "value_proposition": {
+            "default": "",
+            "title": "Value Proposition",
+            "type": "string"
+          },
+          "tone_of_voice": {
+            "default": "",
+            "title": "Tone Of Voice",
+            "type": "string"
+          },
+          "unique_selling_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unique Selling Points",
+            "type": "array"
+          },
+          "industry": {
+            "default": "",
+            "title": "Industry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "BrandProfile",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "updated",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_brand_profiles",
+      "description": "List brand profiles.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "limit": {
+            "default": 20,
+            "description": "Max items to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListBrandProfilesParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "BrandProfile": {
+            "description": "One brand under strategic analysis — the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "site_id": {
+                "default": "",
+                "title": "Site Id",
+                "type": "string"
+              },
+              "brand_name": {
+                "default": "",
+                "title": "Brand Name",
+                "type": "string"
+              },
+              "mission": {
+                "default": "",
+                "title": "Mission",
+                "type": "string"
+              },
+              "vision": {
+                "default": "",
+                "title": "Vision",
+                "type": "string"
+              },
+              "value_proposition": {
+                "default": "",
+                "title": "Value Proposition",
+                "type": "string"
+              },
+              "tone_of_voice": {
+                "default": "",
+                "title": "Tone Of Voice",
+                "type": "string"
+              },
+              "unique_selling_points": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Unique Selling Points",
+                "type": "array"
+              },
+              "industry": {
+                "default": "",
+                "title": "Industry",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "BrandProfile",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/BrandProfile"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BrandProfileList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "add_competitor_profile",
+      "description": "Track a named competitor against a brand, with observed strengths and weaknesses.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:competitor_profile"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Competitor name",
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "description": "Competitor website",
+            "title": "Url",
+            "type": "string"
+          },
+          "strengths": {
+            "description": "What the competitor does well",
+            "items": {
+              "type": "string"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "description": "Where the competitor falls short",
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaknesses",
+            "type": "array"
+          },
+          "notes": {
+            "default": "",
+            "description": "Freeform observations",
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "name"
+        ],
+        "title": "AddCompetitorParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One named competitor tracked against a brand.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "strengths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaknesses",
+            "type": "array"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "CompetitorProfile",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_competitor_profiles",
+      "description": "List tracked competitors, optionally filtered by brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "default": "",
+            "description": "Optional brand filter. Empty = all.",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max items to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListCompetitorsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "CompetitorProfile": {
+            "description": "One named competitor tracked against a brand.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "default": "",
+                "title": "Url",
+                "type": "string"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "name": {
+                "default": "",
+                "title": "Name",
+                "type": "string"
+              },
+              "strengths": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Strengths",
+                "type": "array"
+              },
+              "weaknesses": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Weaknesses",
+                "type": "array"
+              },
+              "notes": {
+                "default": "",
+                "title": "Notes",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "CompetitorProfile",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/CompetitorProfile"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CompetitorProfileList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "create_target_segment",
+      "description": "Define one target audience segment for a brand: demographics, psychographics, pain points, needs, preferred channels.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:target_segment"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "segment_name": {
+            "description": "Segment label, e.g. 'SMB office managers'",
+            "minLength": 1,
+            "title": "Segment Name",
+            "type": "string"
+          },
+          "demographics": {
+            "default": "",
+            "description": "Age, role, company size, location, etc.",
+            "title": "Demographics",
+            "type": "string"
+          },
+          "psychographics": {
+            "default": "",
+            "description": "Values, motivations, attitudes",
+            "title": "Psychographics",
+            "type": "string"
+          },
+          "pain_points": {
+            "description": "Problems this segment currently has",
+            "items": {
+              "type": "string"
+            },
+            "title": "Pain Points",
+            "type": "array"
+          },
+          "needs": {
+            "description": "What this segment is looking for",
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          },
+          "preferred_channels": {
+            "description": "Where this segment can be reached, e.g. 'LinkedIn', 'local search'",
+            "items": {
+              "type": "string"
+            },
+            "title": "Preferred Channels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "brand_id",
+          "segment_name"
+        ],
+        "title": "CreateTargetSegmentParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One audience segment a brand is trying to reach.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "segment_name": {
+            "default": "",
+            "title": "Segment Name",
+            "type": "string"
+          },
+          "demographics": {
+            "default": "",
+            "title": "Demographics",
+            "type": "string"
+          },
+          "psychographics": {
+            "default": "",
+            "title": "Psychographics",
+            "type": "string"
+          },
+          "pain_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Pain Points",
+            "type": "array"
+          },
+          "needs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          },
+          "preferred_channels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Preferred Channels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "TargetSegment",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_target_segments",
+      "description": "List target audience segments, optionally filtered by brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "default": "",
+            "description": "Optional brand filter. Empty = all.",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max items to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListTargetSegmentsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "TargetSegment": {
+            "description": "One audience segment a brand is trying to reach.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "segment_name": {
+                "default": "",
+                "title": "Segment Name",
+                "type": "string"
+              },
+              "demographics": {
+                "default": "",
+                "title": "Demographics",
+                "type": "string"
+              },
+              "psychographics": {
+                "default": "",
+                "title": "Psychographics",
+                "type": "string"
+              },
+              "pain_points": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Pain Points",
+                "type": "array"
+              },
+              "needs": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Needs",
+                "type": "array"
+              },
+              "preferred_channels": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Preferred Channels",
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "TargetSegment",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/TargetSegment"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TargetSegmentList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "run_swot_analysis",
+      "description": "Run a SWOT analysis for a brand: strengths/weaknesses derived from its own profile, opportunities/threats derived from tracked competitors' weaknesses/strengths. Add competitors first via add_competitor_profile for a sharper result.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:swot_result"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "RunSWOTAnalysisParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "strengths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaknesses",
+            "type": "array"
+          },
+          "opportunities": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Opportunities",
+            "type": "array"
+          },
+          "threats": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Threats",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SWOTResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_swot_results",
+      "description": "List past SWOT analysis snapshots, optionally filtered by brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "default": "",
+            "description": "Optional brand filter. Empty = all.",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max items to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListSWOTResultsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "SWOTResult": {
+            "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.",
+            "properties": {
+              "body": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Body",
+                "x-sdl-role": "content.body"
+              },
+              "body_format": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "md",
+                      "html",
+                      "plain",
+                      "rich"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Body Format",
+                "x-sdl-role": "content.body_format"
+              },
+              "raw_body": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Raw Body",
+                "x-sdl-role": "content.raw_body"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "strengths": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Strengths",
+                "type": "array"
+              },
+              "weaknesses": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Weaknesses",
+                "type": "array"
+              },
+              "opportunities": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Opportunities",
+                "type": "array"
+              },
+              "threats": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Threats",
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "SWOTResult",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/SWOTResult"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SWOTResultList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "run_gap_analysis",
+      "description": "Run a gap analysis between a brand's current positioning and one target segment's needs/pain points -- what the segment needs that the brand doesn't yet address, plus concrete recommendations to fill the gap.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:gap_analysis_result"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "description": "UUID of an existing target segment — from list_target_segments, never invented",
+            "title": "Segment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "segment_id"
+        ],
+        "title": "RunGapAnalysisParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "default": "",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "gaps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "recommendations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "GapAnalysisResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_gap_analyses",
+      "description": "List past brand-vs-audience gap analysis results, optionally filtered by brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "default": "",
+            "description": "Optional brand filter. Empty = all.",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max items to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListGapAnalysesParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "GapAnalysisResult": {
+            "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.",
+            "properties": {
+              "body": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Body",
+                "x-sdl-role": "content.body"
+              },
+              "body_format": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "md",
+                      "html",
+                      "plain",
+                      "rich"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Body Format",
+                "x-sdl-role": "content.body_format"
+              },
+              "raw_body": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Raw Body",
+                "x-sdl-role": "content.raw_body"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "segment_id": {
+                "default": "",
+                "title": "Segment Id",
+                "type": "string"
+              },
+              "gaps": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Gaps",
+                "type": "array"
+              },
+              "recommendations": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Recommendations",
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "GapAnalysisResult",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/GapAnalysisResult"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "GapAnalysisResultList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "build_content_strategy_handoff",
+      "description": "Reshape a brand profile into the exact fields Content Strategy Hub's create_site_profile expects, so the rest of the pipeline (Content Strategy Hub -> Article Writer -> Media Studio Hub -> WordPress Hub) starts from real brand positioning. There is no cross-extension IPC on this platform -- Webbee relays this payload into Content Strategy Hub's own create_site_profile in the same chat turn.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "site_id": {
+            "description": "Site id to use downstream, e.g. 'g4s.md' — matches Content Strategy Hub's site_id",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "domain": {
+            "default": "",
+            "description": "Domain for the site; defaults to site_id if omitted",
+            "title": "Domain",
+            "type": "string"
+          },
+          "target_languages": {
+            "description": "Target languages for content, e.g. ['ru','ro']",
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "brand_id",
+          "site_id"
+        ],
+        "title": "BuildContentStrategyHandoffParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Reshapes a brand profile into the exact fields Content Strategy Hub's\ncreate_site_profile/update expects, so brand strategy work does not have\nto be manually re-typed into the content-planning layer downstream.\nThere is no direct extension-to-extension call on this platform — Webbee\nrelays this payload into Content Strategy Hub's own tool in the same\nchat turn.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "site_id": {
+            "default": "",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "domain": {
+            "default": "",
+            "title": "Domain",
+            "type": "string"
+          },
+          "brand_name": {
+            "default": "",
+            "title": "Brand Name",
+            "type": "string"
+          },
+          "business_description": {
+            "default": "",
+            "title": "Business Description",
+            "type": "string"
+          },
+          "content_categories": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Content Categories",
+            "type": "array"
+          },
+          "cta_default": {
+            "default": "",
+            "title": "Cta Default",
+            "type": "string"
+          },
+          "target_languages": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "BrandContentHandoff",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    }
+  ],
+  "signals": [],
+  "schedules": [],
+  "required_scopes": [],
+  "icon_size_bytes": 299,
+  "lifecycle": {
+    "health_check": {
+      "interval_sec": 60
+    }
+  },
+  "panels": [
+    {
+      "panel_id": "brands",
+      "slot": "left",
+      "title": "Brands",
+      "tree": {},
+      "icon": "🎯",
+      "refresh": "manual",
+      "center_overlay": false,
+      "default_width": 280,
+      "min_width": 220,
+      "max_width": 420
+    },
+    {
+      "panel_id": "brand_detail",
+      "slot": "center",
+      "title": "Brand Detail",
+      "tree": {},
+      "icon": "🎯",
+      "refresh": "manual",
+      "center_overlay": true
+    }
+  ]
+}

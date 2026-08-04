@@ -20,7 +20,7 @@ talking to a second, empty copy of this module).
 """
 from __future__ import annotations
 
-from imperal_sdk import ActionResult, Extension, ChatExtension
+from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
     AddCompetitorParams, BuildContentStrategyHandoffParams,
@@ -402,3 +402,91 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
         brand_doc.data, params.brand_id, params.site_id, params.domain, params.target_languages
     )
     return ActionResult.success(handoff, summary=f"Content strategy handoff ready for site '{params.site_id}'.")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Panels
+# ──────────────────────────────────────────────────────────────────────────
+
+@ext.panel(
+    "brands",
+    slot="left",
+    title="Brands",
+    icon="🎯",
+    default_width=280,
+    min_width=220,
+    max_width=420,
+)
+async def brands_panel(ctx, **kwargs) -> object:
+    """Sidebar list of tracked brand profiles -> opens the detail overlay."""
+    page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
+    docs = list(page.data)
+
+    if not docs:
+        return ui.Stack(
+            direction="v",
+            gap=3,
+            children=[
+                ui.Empty(
+                    message="No brands yet — create one from chat to start a SWOT / gap analysis.",
+                    icon="🎯",
+                ),
+            ],
+        )
+
+    items = []
+    for d in docs:
+        data = d.data
+        items.append(
+            ui.ListItem(
+                id=d.id,
+                title=data.get("brand_name", "") or d.id,
+                subtitle=data.get("industry", "") or data.get("site_id", ""),
+                on_click=ui.Call("__panel__brand_detail", brand_id=d.id),
+            )
+        )
+
+    return ui.List(items=items, searchable=True)
+
+
+@ext.panel(
+    "brand_detail",
+    slot="center",
+    title="Brand Detail",
+    icon="🎯",
+    center_overlay=True,
+)
+async def brand_detail_panel(ctx, brand_id: str = "", **kwargs) -> object:
+    """Detail overlay for one brand: profile, latest SWOT, latest gap analysis."""
+    if not brand_id:
+        return ui.Empty(message="Pick a brand from the list.", icon="🎯")
+
+    brand_doc = await ctx.store.get("brand_profiles", brand_id)
+    if not brand_doc:
+        return ui.Empty(message="Brand not found.", icon="⚠️")
+
+    data = brand_doc.data
+    sections = [
+        ui.Markdown(
+            f"# {data.get('brand_name', '')}\n\n"
+            f"**Industry:** {data.get('industry', '—')}  \n"
+            f"**Mission:** {data.get('mission', '—')}  \n"
+            f"**Vision:** {data.get('vision', '—')}  \n"
+            f"**Value proposition:** {data.get('value_proposition', '—')}\n\n"
+            + "\n".join(f"- {u}" for u in data.get("unique_selling_points", []))
+        ),
+    ]
+
+    swot_page = await ctx.store.query(
+        "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=1
+    )
+    if swot_page.data:
+        sections.append(ui.Markdown(swot_page.data[0].data.get("body", "")))
+
+    gap_page = await ctx.store.query(
+        "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=1
+    )
+    if gap_page.data:
+        sections.append(ui.Markdown(gap_page.data[0].data.get("body", "")))
+
+    return ui.Stack(direction="v", gap=3, children=sections)
