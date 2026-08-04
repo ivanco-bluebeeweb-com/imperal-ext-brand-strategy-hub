@@ -30,6 +30,7 @@ from schemas import (
     RunSWOTAnalysisParams, UpdateBrandProfileParams,
     BrandContentHandoff,
     BrandProfile, BrandProfileList,
+    ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
     CompetitorProfile, CompetitorProfileList,
     GapAnalysisResult, GapAnalysisResultList,
     SWOTResult, SWOTResultList,
@@ -84,22 +85,30 @@ async def health_check(ctx) -> dict:
 SITE_PROVIDER_APP_IDS: list[str] = ["wp-site-connector"]
 
 
-async def fetch_connected_sites(ctx) -> list[dict]:
+async def fetch_connected_sites(ctx) -> tuple[list[dict], list[dict]]:
     """Pull every connected site from every registered site-provider
     extension via ctx.extensions.call -- direct in-process IPC (no chat
-    round-trip, no manual site_id typing). A provider that is not
-    installed/reachable is skipped silently, so Quick Add just shows
-    fewer candidates instead of surfacing an error the user can't act on.
+    round-trip, no manual site_id typing).
+
+    Returns (sites, problems). A provider that fails is reported in
+    `problems` as {"provider", "reason"} instead of vanishing: the Quick Add
+    card then SHOWS why it is empty, so the failure is visible and fixable
+    in the UI rather than silently hiding the whole feature.
     """
     sites: list[dict] = []
+    problems: list[dict] = []
     for app_id in SITE_PROVIDER_APP_IDS:
         try:
             rows = await ctx.extensions.call(app_id, "list_connected_sites")
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 -- surfaced to the panel, not swallowed
+            problems.append({
+                "provider": app_id,
+                "reason": f"{type(exc).__name__}: {exc}".strip()[:300],
+            })
             continue
         for r in rows or []:
             sites.append({**r, "provider": app_id})
-    return sites
+    return sites, problems
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -448,36 +457,127 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
     return ActionResult.success(handoff, summary=f"Content strategy handoff ready for site '{params.site_id}'.")
 
 
+@chat.function(
+    "list_connected_sites",
+    description=(
+        "List the sites already connected in other apps (WordPress Hub today, "
+        "any future site provider) that Quick Add offers as one-click brand "
+        "candidates, flagging which ones already have a brand profile here. "
+        "Also the diagnostic for an empty Quick Add list: it reports whether "
+        "a provider could not be reached and why."
+    ),
+    action_type="read",
+    data_model=ConnectedSiteList,
+)
+async def list_connected_sites(ctx, params: ListConnectedSitesParams) -> ActionResult:
+    """Read connected sites from every registered site-provider extension."""
+    sites, problems = await fetch_connected_sites(ctx)
+
+    page = await ctx.store.query("brand_profiles", limit=500)
+    existing_site_ids = {
+        d.data.get("site_id") for d in page.data if d.data.get("site_id")
+    }
+
+    items = [
+        ConnectedSite(
+            id=s.get("site_id", ""),
+            title=s.get("name") or s.get("site_id", ""),
+            kind="connected_site",
+            site_id=s.get("site_id", ""),
+            url=s.get("url", ""),
+            status=s.get("status", ""),
+            provider=s.get("provider", ""),
+            already_tracked=s.get("site_id") in existing_site_ids,
+        )
+        for s in sites[: max(1, min(params.limit, 100))]
+    ]
+
+    if problems:
+        detail = "; ".join(f"{p['provider']}: {p['reason']}" for p in problems)
+        return ActionResult.success(
+            ConnectedSiteList(items=items),
+            summary=(
+                f"{len(items)} connected site(s) readable. "
+                f"Could not read from — {detail}"
+            ),
+        )
+
+    fresh = sum(1 for i in items if not i.already_tracked)
+    return ActionResult.success(
+        ConnectedSiteList(items=items),
+        summary=f"{len(items)} connected site(s), {fresh} without a brand profile yet.",
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Panels
 # ──────────────────────────────────────────────────────────────────────────
 
-def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str]) -> object | None:
+def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str],
+                     problems: list[dict] | None = None) -> object:
     """Quick Add: one real button per connected site not yet tracked as a
     brand here, pre-filling create_brand_profile's site_id/brand_name via
     ui.Call so a brand can be started in one click straight from whatever
     is already connected in WordPress Hub (or any future site provider in
-    SITE_PROVIDER_APP_IDS) -- no retyping the domain, no chat message."""
+    SITE_PROVIDER_APP_IDS) -- no retyping the domain, no chat message.
+
+    ALWAYS returns a card, never None: if there is nothing to offer, the card
+    says WHY (no provider reachable / nothing connected / all already added)
+    and carries a Refresh button. A silently missing card is unfixable from
+    the UI, which is exactly the failure mode this replaces.
+    """
+    problems = problems or []
     candidates = [s for s in connected_sites if s.get("site_id") not in existing_site_ids]
-    if not candidates:
-        return None
-    buttons = [
-        ui.Button(
-            s.get("name") or s["site_id"],
-            variant="secondary", size="sm", icon="Plus",
-            on_click=ui.Call(
-                "create_brand_profile",
-                brand_name=s.get("name") or s["site_id"],
-                site_id=s["site_id"],
+
+    refresh = ui.Button(
+        "Refresh", variant="ghost", size="sm", icon="RefreshCw",
+        on_click=ui.Call("__panel__brands"),
+    )
+
+    if candidates:
+        body: list = [
+            ui.Text(
+                f"{len(candidates)} connected site(s) not tracked as a brand yet — "
+                "click one to create its brand profile.",
+                variant="caption",
             ),
-        )
-        for s in candidates
-    ]
+            ui.Stack(direction="h", gap=1, wrap=True, children=[
+                ui.Button(
+                    s.get("name") or s["site_id"],
+                    variant="secondary", size="sm", icon="Plus",
+                    on_click=ui.Call(
+                        "create_brand_profile",
+                        brand_name=s.get("name") or s["site_id"],
+                        site_id=s["site_id"],
+                    ),
+                )
+                for s in candidates
+            ]),
+        ]
+    elif problems:
+        body = [
+            ui.Text(
+                "Could not read connected sites from: "
+                + ", ".join(p["provider"] for p in problems),
+                variant="body",
+            ),
+            ui.Text(problems[0]["reason"], variant="caption"),
+        ]
+    elif connected_sites:
+        body = [ui.Text(
+            "Every connected site already has a brand profile.",
+            variant="caption",
+        )]
+    else:
+        body = [ui.Text(
+            "No sites connected yet — connect one in WordPress Hub and it "
+            "will appear here.",
+            variant="caption",
+        )]
+
     return ui.Card(
         title="Quick Add — from connected sites",
-        content=ui.Stack(direction="v", gap=2, children=[
-            ui.Stack(direction="h", gap=1, wrap=True, children=buttons),
-        ]),
+        content=ui.Stack(direction="v", gap=2, children=body + [refresh]),
     )
 
 
@@ -500,8 +600,8 @@ async def brands_panel(ctx, **kwargs) -> object:
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
     existing_site_ids = {d.data.get("site_id") for d in docs if d.data.get("site_id")}
-    connected_sites = await fetch_connected_sites(ctx)
-    quick_add = _quick_add_block(connected_sites, existing_site_ids)
+    connected_sites, site_problems = await fetch_connected_sites(ctx)
+    quick_add = _quick_add_block(connected_sites, existing_site_ids, site_problems)
 
     new_brand_form = ui.Card(
         title="New brand",
@@ -523,8 +623,7 @@ async def brands_panel(ctx, **kwargs) -> object:
                 icon="🎯",
             ),
         ]
-        if quick_add:
-            empty_children.append(quick_add)
+        empty_children.append(quick_add)
         empty_children.append(new_brand_form)
         return ui.Stack(direction="v", gap=3, children=empty_children)
 
@@ -540,10 +639,7 @@ async def brands_panel(ctx, **kwargs) -> object:
             )
         )
 
-    children = [ui.List(items=items, searchable=True)]
-    if quick_add:
-        children.append(quick_add)
-    children.append(new_brand_form)
+    children = [ui.List(items=items, searchable=True), quick_add, new_brand_form]
 
     return ui.Stack(direction="v", gap=3, children=children)
 

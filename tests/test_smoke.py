@@ -16,6 +16,7 @@ from schemas import (
     AddCompetitorParams, BuildContentStrategyHandoffParams,
     CreateBrandProfileParams, CreateTargetSegmentParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
+    ListConnectedSitesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, RunGapAnalysisParams,
     RunSWOTAnalysisParams, UpdateBrandProfileParams,
 )
@@ -465,18 +466,22 @@ async def test_fetch_connected_sites_calls_every_registered_provider():
         "wp-site-connector", "list_connected_sites",
         lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
     )
-    sites = await m.fetch_connected_sites(ctx)
+    sites, problems = await m.fetch_connected_sites(ctx)
     assert sites == [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md",
                        "status": "connected", "provider": "wp-site-connector"}]
+    assert problems == []
 
 
 @pytest.mark.asyncio
-async def test_fetch_connected_sites_skips_unreachable_provider_silently():
-    """A provider not installed/reachable must not crash Quick Add -- it's
-    just fewer candidates, never a broken panel."""
+async def test_fetch_connected_sites_reports_unreachable_provider_instead_of_hiding_it():
+    """A provider that cannot be reached must be REPORTED, not swallowed --
+    a silently missing Quick Add card is unfixable from the UI."""
     ctx = MockContext()  # no providers registered at all
-    sites = await m.fetch_connected_sites(ctx)
+    sites, problems = await m.fetch_connected_sites(ctx)
     assert sites == []
+    assert len(problems) == 1
+    assert problems[0]["provider"] == "wp-site-connector"
+    assert problems[0]["reason"]  # carries a real cause, not an empty string
 
 
 @pytest.mark.asyncio
@@ -494,7 +499,9 @@ async def test_brands_panel_shows_quick_add_for_unclaimed_connected_site():
 
 
 @pytest.mark.asyncio
-async def test_brands_panel_quick_add_omits_sites_already_tracked_as_brands():
+async def test_brands_panel_quick_add_card_stays_visible_when_all_sites_tracked():
+    """The card must never vanish -- when every site already has a brand it
+    explains that, so the user can still see the feature exists."""
     ctx = MockContext()
     ctx.extensions.register(
         "wp-site-connector", "list_connected_sites",
@@ -503,12 +510,52 @@ async def test_brands_panel_quick_add_omits_sites_already_tracked_as_brands():
     await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S Moldova", site_id="g4s.md"))
     node = await m.brands_panel(ctx)
     rendered = repr(node)
-    assert "Quick Add" not in rendered
+    assert "Quick Add" in rendered
+    assert "already has a brand profile" in rendered
+    # the already-tracked site must NOT be offered as a Quick Add button again
+    quick_add_section = rendered.split("Quick Add")[1].split("New brand")[0]
+    assert "create_brand_profile" not in quick_add_section
 
 
 @pytest.mark.asyncio
-async def test_brands_panel_no_quick_add_block_when_no_sites_connected():
+async def test_brands_panel_quick_add_card_explains_unreachable_provider():
+    """No provider reachable -> the card is still rendered and names the
+    reason, instead of disappearing without a trace."""
     ctx = MockContext()  # no providers registered
     node = await m.brands_panel(ctx)
     rendered = repr(node)
-    assert "Quick Add" not in rendered
+    assert "Quick Add" in rendered
+    assert "Could not read connected sites" in rendered
+    assert "wp-site-connector" in rendered
+    assert "Refresh" in rendered
+
+
+@pytest.mark.asyncio
+async def test_list_connected_sites_flags_already_tracked_sites():
+    ctx = MockContext()
+    ctx.extensions.register(
+        "wp-site-connector", "list_connected_sites",
+        lambda **kw: [
+            {"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"},
+            {"site_id": "climtec.md", "name": "Climtec", "url": "https://climtec.md", "status": "connected"},
+        ],
+    )
+    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S Moldova", site_id="g4s.md"))
+    result = await m.list_connected_sites(ctx, ListConnectedSitesParams())
+    assert result.status == "success"
+    by_id = {i.site_id: i for i in result.data.items}
+    assert by_id["g4s.md"].already_tracked is True
+    assert by_id["climtec.md"].already_tracked is False
+    assert by_id["g4s.md"].provider == "wp-site-connector"
+
+
+@pytest.mark.asyncio
+async def test_list_connected_sites_surfaces_provider_failure_in_summary():
+    """The diagnostic path: an unreachable provider must be named in the
+    summary so an empty Quick Add list is explainable, not mysterious."""
+    ctx = MockContext()  # no providers registered
+    result = await m.list_connected_sites(ctx, ListConnectedSitesParams())
+    assert result.status == "success"
+    assert result.data.items == []
+    assert "Could not read from" in result.summary
+    assert "wp-site-connector" in result.summary

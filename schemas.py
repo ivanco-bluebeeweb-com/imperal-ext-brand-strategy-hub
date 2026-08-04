@@ -190,3 +190,26 @@ class BuildContentStrategyHandoffParams(BaseModel):
     site_id: str = Field(description="Site id to use downstream, e.g. 'g4s.md' — matches Content Strategy Hub's site_id")
     domain: str = Field("", description="Domain for the site; defaults to site_id if omitted")
     target_languages: list[str] = Field(default_factory=list, description="Target languages for content, e.g. ['ru','ro']")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Cross-app site discovery (Quick Add source)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class ConnectedSite(sdl.Entity):
+    """One site read from a site-provider extension (WordPress Hub today,
+    more providers later) — the raw material behind the Quick Add list."""
+    site_id: str = ""
+    url: str = ""
+    status: str = ""
+    provider: str = ""
+    already_tracked: bool = False
+
+
+class ConnectedSiteList(sdl.EntityList[ConnectedSite]):
+    pass
+
+
+class ListConnectedSitesParams(BaseModel):
+    limit: int = Field(50, description="Max items to return (1-100)")
