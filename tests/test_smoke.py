@@ -319,6 +319,29 @@ async def test_brand_detail_panel_empty_states_for_swot_gap_competitors_segments
 
 
 @pytest.mark.asyncio
+async def test_brands_panel_empty_state_still_has_create_form():
+    """Even with zero brands, the sidebar must offer a real way to create
+    the first one -- not just point the user at the chat box."""
+    ctx = MockContext()
+    node = await m.brands_panel(ctx)
+    types = _walk(node, set())
+    assert "Form" in types
+    assert "Input" in types
+    assert "Empty" in types
+
+
+@pytest.mark.asyncio
+async def test_brands_panel_with_brands_still_offers_create_form():
+    ctx = MockContext()
+    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brands_panel(ctx)
+    types = _walk(node, set())
+    assert "List" in types
+    assert "Form" in types
+    assert not _tree_repr_has_send_action(node)
+
+
+@pytest.mark.asyncio
 async def test_brand_detail_panel_shows_competitors_and_segments_when_present():
     ctx = MockContext()
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))

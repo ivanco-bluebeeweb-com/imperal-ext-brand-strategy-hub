@@ -434,9 +434,25 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
     max_width=420,
 )
 async def brands_panel(ctx, **kwargs) -> object:
-    """Sidebar list of tracked brand profiles -> opens the detail overlay."""
+    """Sidebar list of tracked brand profiles -> opens the detail overlay.
+    Always carries its own 'New brand' ui.Form so the very first brand
+    (and every one after) can be created directly from the panel --
+    no chat message required."""
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
+
+    new_brand_form = ui.Card(
+        title="New brand",
+        content=ui.Form(
+            action="create_brand_profile",
+            submit_label="Create brand",
+            children=[
+                ui.Input(param_name="brand_name", placeholder="Brand name"),
+                ui.Input(param_name="industry", placeholder="Industry (optional)"),
+                ui.Input(param_name="site_id", placeholder="Content Strategy Hub site_id (optional)"),
+            ],
+        ),
+    )
 
     if not docs:
         return ui.Stack(
@@ -444,9 +460,10 @@ async def brands_panel(ctx, **kwargs) -> object:
             gap=3,
             children=[
                 ui.Empty(
-                    message="No brands yet — create one from chat to start a SWOT / gap analysis.",
+                    message="No brands yet — create one below to start a SWOT / gap analysis.",
                     icon="🎯",
                 ),
+                new_brand_form,
             ],
         )
 
@@ -462,7 +479,10 @@ async def brands_panel(ctx, **kwargs) -> object:
             )
         )
 
-    return ui.List(items=items, searchable=True)
+    return ui.Stack(
+        direction="v", gap=3,
+        children=[ui.List(items=items, searchable=True), new_brand_form],
+    )
 
 
 @ext.panel(
