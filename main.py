@@ -768,19 +768,15 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
 
     header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
 
-    # Only the zero-input action lives in the top bar as a plain Button; every
-    # action that needs data (competitor name, segment, profile edits, the
-    # Content Strategy handoff) is a real ui.Form embedded in its own tab --
-    # submits straight to its @chat.function, no chat message required.
-    action_bar = ui.Row(
-        gap=2,
-        children=[
-            ui.Button(
-                "Run SWOT Analysis", variant="primary", icon="Sparkles",
-                on_click=ui.Call("run_swot_analysis", brand_id=brand_id),
-            ),
-        ],
-    )
+    # Every action lives inside the tab it affects, never in a bar that is
+    # visible on every tab. A refresh_panels=["brand_detail"] re-fetch keeps
+    # the currently-accumulated `tab` param unchanged -- so a button that
+    # runs a write and is shown on, say, the Profile tab would refresh the
+    # panel back onto Profile, and the user would never see the SWOT tab
+    # actually update. Keeping "Run SWOT Analysis" inside the SWOT tab
+    # itself (mirroring the Gap Analysis tab's own embedded form) guarantees
+    # the user is already looking at the tab that will show the result.
+    action_bar = None
 
     # ── Profile tab ──────────────────────────────────────────────────
     profile_tab = ui.Stack(
@@ -852,18 +848,34 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     )
 
     # ── SWOT tab ─────────────────────────────────────────────────────
+    run_swot_button = ui.Button(
+        "Run SWOT Analysis", variant="primary", icon="Sparkles",
+        on_click=ui.Call("run_swot_analysis", brand_id=brand_id),
+    )
     if latest_swot:
-        swot_tab = ui.Grid(
-            columns=2, gap=3,
+        swot_tab = ui.Stack(
+            direction="v", gap=3,
             children=[
-                ui.Card(title="Strengths", content=_swot_list(latest_swot.get("strengths", []))),
-                ui.Card(title="Weaknesses", content=_swot_list(latest_swot.get("weaknesses", []))),
-                ui.Card(title="Opportunities", content=_swot_list(latest_swot.get("opportunities", []))),
-                ui.Card(title="Threats", content=_swot_list(latest_swot.get("threats", []))),
+                ui.Grid(
+                    columns=2, gap=3,
+                    children=[
+                        ui.Card(title="Strengths", content=_swot_list(latest_swot.get("strengths", []))),
+                        ui.Card(title="Weaknesses", content=_swot_list(latest_swot.get("weaknesses", []))),
+                        ui.Card(title="Opportunities", content=_swot_list(latest_swot.get("opportunities", []))),
+                        ui.Card(title="Threats", content=_swot_list(latest_swot.get("threats", []))),
+                    ],
+                ),
+                ui.Card(title="Run again", content=run_swot_button),
             ],
         )
     else:
-        swot_tab = ui.Empty(message="No SWOT analysis yet -- run one from the action bar above.", icon="Sparkles")
+        swot_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Empty(message="No SWOT analysis yet -- run one below.", icon="Sparkles"),
+                ui.Card(title="Run SWOT analysis", content=run_swot_button),
+            ],
+        )
 
     # ── Gap analysis tab ─────────────────────────────────────────────
     segment_options = [
@@ -994,7 +1006,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
 
     return ui.Stack(
         direction="v", gap=3,
-        children=[header, action_bar, ui.Divider(), tab_switcher, active_content],
+        children=[header, ui.Divider(), tab_switcher, active_content],
     )
 
 

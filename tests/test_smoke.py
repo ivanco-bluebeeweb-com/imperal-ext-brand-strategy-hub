@@ -309,6 +309,23 @@ async def test_brand_detail_panel_unknown_tab_falls_back_to_profile():
 
 
 @pytest.mark.asyncio
+async def test_run_swot_button_lives_only_inside_swot_tab_not_a_global_bar():
+    """Regression guard: 'Run SWOT Analysis' used to sit in a top action bar
+    visible on every tab. A user on the Profile tab could click it, the
+    analysis would run and save fine, but refresh_panels re-fetches the
+    panel with its *current* accumulated tab param (still "profile") --
+    so nothing looked like it happened. The button must now live inside
+    the SWOT tab itself (mirroring Gap Analysis), so it can only be
+    clicked while already looking at the tab that shows the result."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    profile_node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="profile")
+    swot_node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="swot")
+    assert "Run SWOT Analysis" not in repr(profile_node)
+    assert "Run SWOT Analysis" in repr(swot_node)
+
+
+@pytest.mark.asyncio
 async def test_brand_detail_panel_empty_states_for_swot_gap_competitors_segments():
     """Every tab must render something sane (Empty prompt) before any data
     exists -- guards against a KeyError/crash on a brand-new brand."""
