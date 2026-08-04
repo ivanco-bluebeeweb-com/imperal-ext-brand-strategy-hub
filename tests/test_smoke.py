@@ -83,7 +83,7 @@ async def test_list_brand_profiles():
 async def test_add_competitor_profile_and_list():
     ctx = MockContext()
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
-    result = await m.add_competitor_profile(
+    result = await m.add_brand_competitor(
         ctx, AddCompetitorParams(
             brand_id=brand.data.id, name="SecureCo",
             strengths=["fast response"], weaknesses=["no local presence"],
@@ -92,14 +92,14 @@ async def test_add_competitor_profile_and_list():
     assert result.status == "success"
     assert result.data.name == "SecureCo"
 
-    listed = await m.list_competitor_profiles(ctx, ListCompetitorsParams(brand_id=brand.data.id))
+    listed = await m.list_brand_competitors(ctx, ListCompetitorsParams(brand_id=brand.data.id))
     assert len(listed.data.items) == 1
 
 
 @pytest.mark.asyncio
 async def test_add_competitor_missing_brand_errors():
     ctx = MockContext()
-    result = await m.add_competitor_profile(
+    result = await m.add_brand_competitor(
         ctx, AddCompetitorParams(brand_id="nonexistent", name="X")
     )
     assert result.status == "error"
@@ -130,7 +130,7 @@ async def test_run_swot_analysis_uses_brand_and_competitors():
             unique_selling_points=["licensed guards"],
         )
     )
-    await m.add_competitor_profile(
+    await m.add_brand_competitor(
         ctx, AddCompetitorParams(
             brand_id=brand.data.id, name="SecureCo",
             strengths=["cheaper pricing"], weaknesses=["slow response times"],
@@ -363,7 +363,7 @@ async def test_brands_panel_with_brands_still_offers_create_form():
 async def test_brand_detail_panel_shows_competitors_and_segments_when_present():
     ctx = MockContext()
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
-    await m.add_competitor_profile(
+    await m.add_brand_competitor(
         ctx, AddCompetitorParams(brand_id=brand.data.id, name="RivalCo", strengths=["cheap"])
     )
     await m.create_target_segment(
@@ -409,7 +409,7 @@ async def test_brand_detail_panel_has_no_send_to_chat_actions_anywhere():
     chat yourself' -- every data-entry action must be a real embedded form."""
     ctx = MockContext()
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
-    await m.add_competitor_profile(
+    await m.add_brand_competitor(
         ctx, AddCompetitorParams(brand_id=brand.data.id, name="RivalCo", strengths=["cheap"])
     )
     await m.create_target_segment(
@@ -436,7 +436,7 @@ async def test_competitors_tab_has_add_competitor_form():
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
     node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="competitors")
     actions = _find_forms(node, [])
-    assert "add_competitor_profile" in actions
+    assert "add_brand_competitor" in actions
 
 
 @pytest.mark.asyncio

@@ -221,7 +221,7 @@ async def list_brand_profiles(ctx, params: ListBrandProfilesParams) -> ActionRes
 # ──────────────────────────────────────────────────────────────────────────
 
 @chat.function(
-    "add_competitor_profile",
+    "add_brand_competitor",
     description="Track a named competitor against a brand, with observed strengths and weaknesses.",
     action_type="write",
     chain_callable=True,
@@ -229,7 +229,7 @@ async def list_brand_profiles(ctx, params: ListBrandProfilesParams) -> ActionRes
     event="created",
     data_model=CompetitorProfile,
 )
-async def add_competitor_profile(ctx, params: AddCompetitorParams) -> ActionResult:
+async def add_brand_competitor(ctx, params: AddCompetitorParams) -> ActionResult:
     """Add one competitor profile linked to a brand."""
     brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not brand_doc:
@@ -253,12 +253,12 @@ async def add_competitor_profile(ctx, params: AddCompetitorParams) -> ActionResu
 
 
 @chat.function(
-    "list_competitor_profiles",
+    "list_brand_competitors",
     description="List tracked competitors, optionally filtered by brand.",
     action_type="read",
     data_model=CompetitorProfileList,
 )
-async def list_competitor_profiles(ctx, params: ListCompetitorsParams) -> ActionResult:
+async def list_brand_competitors(ctx, params: ListCompetitorsParams) -> ActionResult:
     """List competitor profiles, optionally filtered by brand."""
     page = await ctx.store.query("competitor_profiles", order_by="-created_at", limit=500)
     items = list(page.data)
@@ -333,7 +333,7 @@ async def list_target_segments(ctx, params: ListTargetSegmentsParams) -> ActionR
         "Run a SWOT analysis for a brand: strengths/weaknesses derived from "
         "its own profile, opportunities/threats derived from tracked "
         "competitors' weaknesses/strengths. Add competitors first via "
-        "add_competitor_profile for a sharper result."
+        "add_brand_competitor for a sharper result."
     ),
     action_type="write",
     chain_callable=True,
@@ -934,7 +934,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     add_competitor_form = ui.Card(
         title="Add competitor",
         content=ui.Form(
-            action="add_competitor_profile",
+            action="add_brand_competitor",
             submit_label="Add competitor",
             defaults={"brand_id": brand_id},
             children=[

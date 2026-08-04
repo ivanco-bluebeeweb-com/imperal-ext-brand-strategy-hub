@@ -653,7 +653,7 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
-      "name": "add_brand_competitor",
+      "name": "add_competitor_profile",
       "description": "Track a named competitor against a brand, with observed strengths and weaknesses.",
       "action_type": "write",
       "chain_callable": true,
@@ -821,7 +821,7 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
-      "name": "list_brand_competitors",
+      "name": "list_competitor_profiles",
       "description": "List tracked competitors, optionally filtered by brand.",
       "action_type": "read",
       "chain_callable": true,
@@ -1404,7 +1404,7 @@
     },
     {
       "name": "run_swot_analysis",
-      "description": "Run a SWOT analysis for a brand: strengths/weaknesses derived from its own profile, opportunities/threats derived from tracked competitors' weaknesses/strengths. Add competitors first via add_brand_competitor for a sharper result.",
+      "description": "Run a SWOT analysis for a brand: strengths/weaknesses derived from its own profile, opportunities/threats derived from tracked competitors' weaknesses/strengths. Add competitors first via add_competitor_profile for a sharper result.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
