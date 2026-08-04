@@ -219,3 +219,116 @@ async def test_build_content_strategy_handoff_missing_brand_errors():
         ctx, BuildContentStrategyHandoffParams(brand_id="nonexistent", site_id="g4s.md")
     )
     assert result.status == "error"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Panel rendering — regression coverage for the brand_detail_panel tab
+# switcher. ui.Tabs was swapped out for a plain Button + ui.Call("tab=...")
+# switcher because ui.Tabs is unproven anywhere else in this workspace's
+# live panels, unlike Button/ui.Call which is the exact mechanism the
+# Brands list already uses to open this very panel.
+# ──────────────────────────────────────────────────────────────────────────
+
+def _walk(node, seen_types):
+    """Collect every UINode type in the tree, recursing into props."""
+    node_type = getattr(node, "type", None)
+    if node_type is not None:
+        seen_types.add(node_type)
+        props = getattr(node, "props", {}) or {}
+        for value in props.values():
+            if isinstance(value, list):
+                for item in value:
+                    _walk(item, seen_types)
+            else:
+                _walk(value, seen_types)
+    return seen_types
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_no_brand_id_shows_empty_state():
+    ctx = MockContext()
+    node = await m.brand_detail_panel(ctx, brand_id="")
+    assert getattr(node, "type", None) == "Empty"
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_unknown_brand_shows_empty_state():
+    ctx = MockContext()
+    node = await m.brand_detail_panel(ctx, brand_id="nonexistent")
+    assert getattr(node, "type", None) == "Empty"
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_renders_without_ui_tabs():
+    """ui.Tabs is not proven anywhere else in this workspace -- assert the
+    panel tree never emits one, so nobody re-introduces it by accident."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id)
+    types = _walk(node, set())
+    assert "Tabs" not in types
+    assert "Button" in types
+    # ui.Row is an alias that emits type "Stack" (direction="h"), not a
+    # distinct "Row" node type -- assert on what the SDK actually emits.
+    assert "Stack" in types
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_default_tab_is_profile():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(brand_name="Climtec", mission="Keep homes warm")
+    )
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id)
+    rendered = repr(node)
+    assert "Keep homes warm" in rendered
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_switches_to_swot_tab_via_param():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(brand_name="Climtec", unique_selling_points=["fast install"])
+    )
+    await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="swot")
+    rendered = repr(node)
+    assert "fast install" in rendered
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_unknown_tab_falls_back_to_profile():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(brand_name="Climtec", mission="Keep homes warm")
+    )
+    node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="not-a-real-tab")
+    rendered = repr(node)
+    assert "Keep homes warm" in rendered
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_empty_states_for_swot_gap_competitors_segments():
+    """Every tab must render something sane (Empty prompt) before any data
+    exists -- guards against a KeyError/crash on a brand-new brand."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    for tab in ("profile", "swot", "gap", "competitors", "segments"):
+        node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab=tab)
+        assert getattr(node, "type", None) == "Stack"
+
+
+@pytest.mark.asyncio
+async def test_brand_detail_panel_shows_competitors_and_segments_when_present():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    await m.add_competitor_profile(
+        ctx, AddCompetitorParams(brand_id=brand.data.id, name="RivalCo", strengths=["cheap"])
+    )
+    await m.create_target_segment(
+        ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Homeowners")
+    )
+    comp_node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="competitors")
+    assert "RivalCo" in repr(comp_node)
+    seg_node = await m.brand_detail_panel(ctx, brand_id=brand.data.id, tab="segments")
+    assert "Homeowners" in repr(seg_node)

@@ -472,10 +472,13 @@ async def brands_panel(ctx, **kwargs) -> object:
     icon="🎯",
     center_overlay=True,
 )
-async def brand_detail_panel(ctx, brand_id: str = "", **kwargs) -> object:
-    """Detail overlay for one brand: action bar up top, then tabs for
-    Profile / SWOT / Gap Analysis / Competitors / Segments -- mirrors the
-    list-then-detail-with-tabs pattern used across the other Hub apps."""
+async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:
+    """Detail overlay for one brand: action bar up top, then a tab switcher
+    for Profile / SWOT / Gap Analysis / Competitors / Segments. Tabs are
+    plain Buttons that re-call this same panel with a `tab` param (not
+    ui.Tabs) -- that component isn't proven anywhere else in this
+    workspace's panels, while Button + ui.Call("__panel__...") is already
+    the exact mechanism the Brands list uses to open this very panel."""
     if not brand_id:
         return ui.Empty(message="Pick a brand from the list.", icon="🎯")
 
@@ -628,15 +631,33 @@ async def brand_detail_panel(ctx, brand_id: str = "", **kwargs) -> object:
     else:
         segments_tab = ui.Empty(message="No target segments defined yet.", icon="Users")
 
-    tabs = ui.Tabs(tabs=[
-        {"label": "Profile", "content": profile_tab},
-        {"label": "SWOT", "content": swot_tab},
-        {"label": "Gap Analysis", "content": gap_tab},
-        {"label": f"Competitors ({len(competitors)})", "content": competitors_tab},
-        {"label": f"Segments ({len(segments)})", "content": segments_tab},
-    ])
+    tab_defs = [
+        ("profile", "Profile", profile_tab),
+        ("swot", "SWOT", swot_tab),
+        ("gap", "Gap Analysis", gap_tab),
+        ("competitors", f"Competitors ({len(competitors)})", competitors_tab),
+        ("segments", f"Segments ({len(segments)})", segments_tab),
+    ]
+    active_tab = tab if tab in {t[0] for t in tab_defs} else "profile"
 
-    return ui.Stack(direction="v", gap=3, children=[header, action_bar, ui.Divider(), tabs])
+    tab_switcher = ui.Row(
+        gap=2,
+        children=[
+            ui.Button(
+                label,
+                variant="primary" if key == active_tab else "ghost",
+                size="sm",
+                on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=key),
+            )
+            for key, label, _content in tab_defs
+        ],
+    )
+    active_content = next(content for key, _label, content in tab_defs if key == active_tab)
+
+    return ui.Stack(
+        direction="v", gap=3,
+        children=[header, action_bar, ui.Divider(), tab_switcher, active_content],
+    )
 
 
 def _swot_list(items: list) -> object:
