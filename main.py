@@ -109,6 +109,7 @@ async def create_brand_profile(ctx, params: CreateBrandProfileParams) -> ActionR
     return ActionResult.success(
         _to_brand_profile(doc),
         summary=f"Brand profile created: {params.brand_name}",
+        refresh_panels=["brands"],
     )
 
 
@@ -140,7 +141,10 @@ async def update_brand_profile(ctx, params: UpdateBrandProfileParams) -> ActionR
         return ActionResult.error("No fields given to update.", retryable=False)
 
     updated = await ctx.store.update("brand_profiles", params.brand_id, updates)
-    return ActionResult.success(_to_brand_profile(updated), summary="Brand profile updated.")
+    return ActionResult.success(
+        _to_brand_profile(updated), summary="Brand profile updated.",
+        refresh_panels=["brand_detail", "brands"],
+    )
 
 
 @chat.function(
@@ -186,7 +190,10 @@ async def add_competitor_profile(ctx, params: AddCompetitorParams) -> ActionResu
             "notes": params.notes,
         },
     )
-    return ActionResult.success(_to_competitor_profile(doc), summary=f"Competitor added: {params.name}")
+    return ActionResult.success(
+        _to_competitor_profile(doc), summary=f"Competitor added: {params.name}",
+        refresh_panels=["brand_detail"],
+    )
 
 
 @chat.function(
@@ -237,7 +244,10 @@ async def create_target_segment(ctx, params: CreateTargetSegmentParams) -> Actio
             "preferred_channels": params.preferred_channels,
         },
     )
-    return ActionResult.success(_to_target_segment(doc), summary=f"Target segment created: {params.segment_name}")
+    return ActionResult.success(
+        _to_target_segment(doc), summary=f"Target segment created: {params.segment_name}",
+        refresh_panels=["brand_detail"],
+    )
 
 
 @chat.function(
@@ -296,7 +306,10 @@ async def run_swot_analysis(ctx, params: RunSWOTAnalysisParams) -> ActionResult:
             "threats": threats,
         },
     )
-    return ActionResult.success(_to_swot_result(doc), summary=f"SWOT analysis run for brand {params.brand_id}.")
+    return ActionResult.success(
+        _to_swot_result(doc), summary=f"SWOT analysis run for brand {params.brand_id}.",
+        refresh_panels=["brand_detail"],
+    )
 
 
 @chat.function(
@@ -354,7 +367,10 @@ async def run_gap_analysis(ctx, params: RunGapAnalysisParams) -> ActionResult:
             "recommendations": recommendations,
         },
     )
-    return ActionResult.success(_to_gap_analysis_result(doc), summary="Gap analysis run.")
+    return ActionResult.success(
+        _to_gap_analysis_result(doc), summary="Gap analysis run.",
+        refresh_panels=["brand_detail"],
+    )
 
 
 @chat.function(
@@ -457,7 +473,9 @@ async def brands_panel(ctx, **kwargs) -> object:
     center_overlay=True,
 )
 async def brand_detail_panel(ctx, brand_id: str = "", **kwargs) -> object:
-    """Detail overlay for one brand: profile, latest SWOT, latest gap analysis."""
+    """Detail overlay for one brand: action bar up top, then tabs for
+    Profile / SWOT / Gap Analysis / Competitors / Segments -- mirrors the
+    list-then-detail-with-tabs pattern used across the other Hub apps."""
     if not brand_id:
         return ui.Empty(message="Pick a brand from the list.", icon="🎯")
 
@@ -466,27 +484,162 @@ async def brand_detail_panel(ctx, brand_id: str = "", **kwargs) -> object:
         return ui.Empty(message="Brand not found.", icon="⚠️")
 
     data = brand_doc.data
-    sections = [
-        ui.Markdown(
-            f"# {data.get('brand_name', '')}\n\n"
-            f"**Industry:** {data.get('industry', '—')}  \n"
-            f"**Mission:** {data.get('mission', '—')}  \n"
-            f"**Vision:** {data.get('vision', '—')}  \n"
-            f"**Value proposition:** {data.get('value_proposition', '—')}\n\n"
-            + "\n".join(f"- {u}" for u in data.get("unique_selling_points", []))
-        ),
-    ]
+    brand_name = data.get("brand_name", "") or brand_id
+
+    comp_page = await ctx.store.query(
+        "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+    )
+    competitors = [{"id": d.id, **d.data} for d in comp_page.data]
+
+    seg_page = await ctx.store.query(
+        "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+    )
+    segments = list(seg_page.data)
 
     swot_page = await ctx.store.query(
         "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=1
     )
-    if swot_page.data:
-        sections.append(ui.Markdown(swot_page.data[0].data.get("body", "")))
+    latest_swot = swot_page.data[0].data if swot_page.data else None
 
     gap_page = await ctx.store.query(
         "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=1
     )
-    if gap_page.data:
-        sections.append(ui.Markdown(gap_page.data[0].data.get("body", "")))
+    latest_gap = gap_page.data[0].data if gap_page.data else None
 
-    return ui.Stack(direction="v", gap=3, children=sections)
+    header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
+
+    action_bar = ui.Row(
+        gap=2,
+        children=[
+            ui.Button(
+                "Run SWOT Analysis", variant="primary", icon="Sparkles",
+                on_click=ui.Call("run_swot_analysis", brand_id=brand_id),
+            ),
+            ui.Button(
+                "Run Gap Analysis", variant="secondary", icon="Target",
+                on_click=ui.Send(
+                    f"Запусти gap-анализ для бренда «{brand_name}» (brand_id={brand_id}) -- "
+                    f"выбери подходящий целевой сегмент из list_target_segments."
+                ),
+            ),
+            ui.Button(
+                "Add competitor", variant="secondary", icon="Plus",
+                on_click=ui.Send(f"Добавь конкурента бренду «{brand_name}» (brand_id={brand_id}): "),
+            ),
+            ui.Button(
+                "Add segment", variant="secondary", icon="Users",
+                on_click=ui.Send(f"Добавь целевой сегмент бренду «{brand_name}» (brand_id={brand_id}): "),
+            ),
+            ui.Button(
+                "Send to Content Strategy Hub", variant="ghost", icon="Send",
+                on_click=ui.Send(
+                    f"Собери build_content_strategy_handoff для бренда «{brand_name}» "
+                    f"(brand_id={brand_id}) и передай в Content Strategy Hub create_site_profile."
+                ),
+            ),
+            ui.Button(
+                "Edit profile", variant="ghost", icon="Pencil",
+                on_click=ui.Send(f"Хочу обновить профиль бренда «{brand_name}» (brand_id={brand_id}): "),
+            ),
+        ],
+    )
+
+    # ── Profile tab ──────────────────────────────────────────────────
+    profile_tab = ui.Stack(
+        direction="v", gap=3,
+        children=[
+            ui.Card(
+                title="Positioning",
+                content=ui.KeyValue(
+                    columns=1,
+                    items=[
+                        {"key": "Mission", "value": data.get("mission", "—")},
+                        {"key": "Vision", "value": data.get("vision", "—")},
+                        {"key": "Value proposition", "value": data.get("value_proposition", "—")},
+                        {"key": "Tone of voice", "value": data.get("tone_of_voice", "—")},
+                        {"key": "Site id", "value": data.get("site_id", "—")},
+                    ],
+                ),
+            ),
+            ui.Card(
+                title="Unique selling points",
+                content=(
+                    ui.Markdown("\n".join(f"- {u}" for u in data.get("unique_selling_points", [])))
+                    if data.get("unique_selling_points") else
+                    ui.Empty(message="No USPs recorded yet.", icon="—")
+                ),
+            ),
+        ],
+    )
+
+    # ── SWOT tab ─────────────────────────────────────────────────────
+    if latest_swot:
+        swot_tab = ui.Grid(
+            columns=2, gap=3,
+            children=[
+                ui.Card(title="Strengths", content=_swot_list(latest_swot.get("strengths", []))),
+                ui.Card(title="Weaknesses", content=_swot_list(latest_swot.get("weaknesses", []))),
+                ui.Card(title="Opportunities", content=_swot_list(latest_swot.get("opportunities", []))),
+                ui.Card(title="Threats", content=_swot_list(latest_swot.get("threats", []))),
+            ],
+        )
+    else:
+        swot_tab = ui.Empty(message="No SWOT analysis yet -- run one from the action bar above.", icon="Sparkles")
+
+    # ── Gap analysis tab ─────────────────────────────────────────────
+    if latest_gap:
+        gap_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Card(title="Gaps between brand and audience", content=_swot_list(latest_gap.get("gaps", []))),
+                ui.Card(title="Recommendations to fill the gap", content=_swot_list(latest_gap.get("recommendations", []))),
+            ],
+        )
+    else:
+        gap_tab = ui.Empty(message="No gap analysis yet -- run one from the action bar above.", icon="Target")
+
+    # ── Competitors tab ──────────────────────────────────────────────
+    if competitors:
+        comp_items = [
+            ui.ListItem(
+                id=c.get("id", ""),
+                title=c.get("name", ""),
+                subtitle=c.get("url", ""),
+                meta=f"{len(c.get('strengths', []))} strengths · {len(c.get('weaknesses', []))} weaknesses",
+            )
+            for c in competitors
+        ]
+        competitors_tab = ui.List(items=comp_items, searchable=True)
+    else:
+        competitors_tab = ui.Empty(message="No competitors tracked yet.", icon="Users")
+
+    # ── Segments tab ─────────────────────────────────────────────────
+    if segments:
+        seg_items = [
+            ui.ListItem(
+                id=d.id,
+                title=d.data.get("segment_name", "") or d.id,
+                subtitle=d.data.get("demographics", ""),
+                meta=f"{len(d.data.get('pain_points', []))} pain points · {len(d.data.get('needs', []))} needs",
+            )
+            for d in segments
+        ]
+        segments_tab = ui.List(items=seg_items, searchable=True)
+    else:
+        segments_tab = ui.Empty(message="No target segments defined yet.", icon="Users")
+
+    tabs = ui.Tabs(tabs=[
+        {"label": "Profile", "content": profile_tab},
+        {"label": "SWOT", "content": swot_tab},
+        {"label": "Gap Analysis", "content": gap_tab},
+        {"label": f"Competitors ({len(competitors)})", "content": competitors_tab},
+        {"label": f"Segments ({len(segments)})", "content": segments_tab},
+    ])
+
+    return ui.Stack(direction="v", gap=3, children=[header, action_bar, ui.Divider(), tabs])
+
+
+def _swot_list(items: list) -> object:
+    if not items:
+        return ui.Empty(message="(none identified)", icon="—")
+    return ui.Markdown("\n".join(f"- {i}" for i in items))
