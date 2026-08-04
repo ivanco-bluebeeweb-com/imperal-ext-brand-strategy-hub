@@ -75,6 +75,34 @@ async def health_check(ctx) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Cross-app site discovery for Quick Add -- not just WordPress, on purpose.
+# ──────────────────────────────────────────────────────────────────────────
+# Registry of app_ids that expose a "list_connected_sites" IPC method
+# returning [{"site_id", "name", "url", "status"}, ...]. Any future site
+# provider (Shopify, Webflow, a plain-domain connector, ...) is added here
+# and Quick Add picks it up automatically -- no panel code changes needed.
+SITE_PROVIDER_APP_IDS: list[str] = ["wp-site-connector"]
+
+
+async def fetch_connected_sites(ctx) -> list[dict]:
+    """Pull every connected site from every registered site-provider
+    extension via ctx.extensions.call -- direct in-process IPC (no chat
+    round-trip, no manual site_id typing). A provider that is not
+    installed/reachable is skipped silently, so Quick Add just shows
+    fewer candidates instead of surfacing an error the user can't act on.
+    """
+    sites: list[dict] = []
+    for app_id in SITE_PROVIDER_APP_IDS:
+        try:
+            rows = await ctx.extensions.call(app_id, "list_connected_sites")
+        except Exception:
+            continue
+        for r in rows or []:
+            sites.append({**r, "provider": app_id})
+    return sites
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # Brand profile
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -424,6 +452,35 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
 # Panels
 # ──────────────────────────────────────────────────────────────────────────
 
+def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str]) -> object | None:
+    """Quick Add: one real button per connected site not yet tracked as a
+    brand here, pre-filling create_brand_profile's site_id/brand_name via
+    ui.Call so a brand can be started in one click straight from whatever
+    is already connected in WordPress Hub (or any future site provider in
+    SITE_PROVIDER_APP_IDS) -- no retyping the domain, no chat message."""
+    candidates = [s for s in connected_sites if s.get("site_id") not in existing_site_ids]
+    if not candidates:
+        return None
+    buttons = [
+        ui.Button(
+            s.get("name") or s["site_id"],
+            variant="secondary", size="sm", icon="Plus",
+            on_click=ui.Call(
+                "create_brand_profile",
+                brand_name=s.get("name") or s["site_id"],
+                site_id=s["site_id"],
+            ),
+        )
+        for s in candidates
+    ]
+    return ui.Card(
+        title="Quick Add — from connected sites",
+        content=ui.Stack(direction="v", gap=2, children=[
+            ui.Stack(direction="h", gap=1, wrap=True, children=buttons),
+        ]),
+    )
+
+
 @ext.panel(
     "brands",
     slot="left",
@@ -437,9 +494,14 @@ async def brands_panel(ctx, **kwargs) -> object:
     """Sidebar list of tracked brand profiles -> opens the detail overlay.
     Always carries its own 'New brand' ui.Form so the very first brand
     (and every one after) can be created directly from the panel --
-    no chat message required."""
+    no chat message required. Also offers Quick Add buttons for any site
+    already connected elsewhere (WordPress Hub today, more providers later
+    via SITE_PROVIDER_APP_IDS)."""
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
+    existing_site_ids = {d.data.get("site_id") for d in docs if d.data.get("site_id")}
+    connected_sites = await fetch_connected_sites(ctx)
+    quick_add = _quick_add_block(connected_sites, existing_site_ids)
 
     new_brand_form = ui.Card(
         title="New brand",
@@ -455,17 +517,16 @@ async def brands_panel(ctx, **kwargs) -> object:
     )
 
     if not docs:
-        return ui.Stack(
-            direction="v",
-            gap=3,
-            children=[
-                ui.Empty(
-                    message="No brands yet — create one below to start a SWOT / gap analysis.",
-                    icon="🎯",
-                ),
-                new_brand_form,
-            ],
-        )
+        empty_children = [
+            ui.Empty(
+                message="No brands yet — create one below to start a SWOT / gap analysis.",
+                icon="🎯",
+            ),
+        ]
+        if quick_add:
+            empty_children.append(quick_add)
+        empty_children.append(new_brand_form)
+        return ui.Stack(direction="v", gap=3, children=empty_children)
 
     items = []
     for d in docs:
@@ -479,10 +540,12 @@ async def brands_panel(ctx, **kwargs) -> object:
             )
         )
 
-    return ui.Stack(
-        direction="v", gap=3,
-        children=[ui.List(items=items, searchable=True), new_brand_form],
-    )
+    children = [ui.List(items=items, searchable=True)]
+    if quick_add:
+        children.append(quick_add)
+    children.append(new_brand_form)
+
+    return ui.Stack(direction="v", gap=3, children=children)
 
 
 @ext.panel(

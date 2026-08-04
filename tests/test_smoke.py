@@ -450,3 +450,65 @@ async def test_gap_tab_without_any_segment_shows_hint_not_a_broken_form():
     actions = _find_forms(node, [])
     assert "run_gap_analysis" not in actions
     assert "No target segments yet" in repr(node)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Quick Add — sites already connected in WordPress Hub (or any future
+# site-provider app registered in SITE_PROVIDER_APP_IDS) surface as one-click
+# "create a brand for this site" buttons, via ctx.extensions.call IPC.
+# ──────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_fetch_connected_sites_calls_every_registered_provider():
+    ctx = MockContext()
+    ctx.extensions.register(
+        "wp-site-connector", "list_connected_sites",
+        lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
+    )
+    sites = await m.fetch_connected_sites(ctx)
+    assert sites == [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md",
+                       "status": "connected", "provider": "wp-site-connector"}]
+
+
+@pytest.mark.asyncio
+async def test_fetch_connected_sites_skips_unreachable_provider_silently():
+    """A provider not installed/reachable must not crash Quick Add -- it's
+    just fewer candidates, never a broken panel."""
+    ctx = MockContext()  # no providers registered at all
+    sites = await m.fetch_connected_sites(ctx)
+    assert sites == []
+
+
+@pytest.mark.asyncio
+async def test_brands_panel_shows_quick_add_for_unclaimed_connected_site():
+    ctx = MockContext()
+    ctx.extensions.register(
+        "wp-site-connector", "list_connected_sites",
+        lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
+    )
+    node = await m.brands_panel(ctx)
+    rendered = repr(node)
+    assert "Quick Add" in rendered
+    assert "G4S Moldova" in rendered
+    assert "create_brand_profile" in rendered
+
+
+@pytest.mark.asyncio
+async def test_brands_panel_quick_add_omits_sites_already_tracked_as_brands():
+    ctx = MockContext()
+    ctx.extensions.register(
+        "wp-site-connector", "list_connected_sites",
+        lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
+    )
+    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S Moldova", site_id="g4s.md"))
+    node = await m.brands_panel(ctx)
+    rendered = repr(node)
+    assert "Quick Add" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_brands_panel_no_quick_add_block_when_no_sites_connected():
+    ctx = MockContext()  # no providers registered
+    node = await m.brands_panel(ctx)
+    rendered = repr(node)
+    assert "Quick Add" not in rendered
