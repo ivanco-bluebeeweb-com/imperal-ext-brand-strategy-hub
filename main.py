@@ -476,6 +476,41 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
     return ActionResult.success(handoff, summary=f"Content strategy handoff ready for site '{params.site_id}'.")
 
 
+_SITES_CACHE_MARKER = "quick_add_sites"  # value of the "kind" field identifying the one cache row
+
+
+async def _cache_connected_sites(ctx, sites: list[dict], problems: list[dict]) -> None:
+    """Persist the last-known-good Quick Add source list to this app's own
+    store. Needed because a real-user chat/tool call to list_connected_sites
+    reaches the target extension with a normal, populated user context, while
+    the SAME ctx.extensions.call made from inside a *panel render* has been
+    observed to reach it with an empty user context (kernel-side — a
+    ContextFactory.create_child gap during panel rendering, not something
+    fixable from an extension's own code). Caching what the working call path
+    already proved lets the panel show real data without depending on the
+    panel-render call path at all.
+
+    Looked up by a "kind" marker via query(where=...), NOT a fixed doc id:
+    store.create always server-assigns its own id (a caller-supplied id is
+    not honoured), so a fixed-id get() would never find the row it wrote.
+    """
+    payload = {"kind": _SITES_CACHE_MARKER, "sites": sites, "problems": problems}
+    page = await ctx.store.query("connected_sites_cache", where={"kind": _SITES_CACHE_MARKER}, limit=1)
+    if page.data:
+        await ctx.store.update("connected_sites_cache", page.data[0].id, payload)
+    else:
+        await ctx.store.create("connected_sites_cache", payload)
+
+
+async def _read_cached_connected_sites(ctx) -> tuple[list[dict], list[dict], bool]:
+    """Read the cached Quick Add source list. Returns (sites, problems, has_cache)."""
+    page = await ctx.store.query("connected_sites_cache", where={"kind": _SITES_CACHE_MARKER}, limit=1)
+    if not page.data:
+        return [], [], False
+    doc = page.data[0]
+    return doc.data.get("sites", []), doc.data.get("problems", []), True
+
+
 @chat.function(
     "list_connected_sites",
     description=(
@@ -489,8 +524,11 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
     data_model=ConnectedSiteList,
 )
 async def list_connected_sites(ctx, params: ListConnectedSitesParams) -> ActionResult:
-    """Read connected sites from every registered site-provider extension."""
+    """Read connected sites from every registered site-provider extension,
+    and cache the result so the panel can show it reliably (see
+    _cache_connected_sites)."""
     sites, problems = await fetch_connected_sites(ctx)
+    await _cache_connected_sites(ctx, sites, problems)
 
     page = await ctx.store.query("brand_profiles", limit=500)
     existing_site_ids = {
@@ -519,12 +557,14 @@ async def list_connected_sites(ctx, params: ListConnectedSitesParams) -> ActionR
                 f"{len(items)} connected site(s) readable. "
                 f"Could not read from — {detail}"
             ),
+            refresh_panels=["brands"],
         )
 
     fresh = sum(1 for i in items if not i.already_tracked)
     return ActionResult.success(
         ConnectedSiteList(items=items),
         summary=f"{len(items)} connected site(s), {fresh} without a brand profile yet.",
+        refresh_panels=["brands"],
     )
 
 
@@ -533,7 +573,7 @@ async def list_connected_sites(ctx, params: ListConnectedSitesParams) -> ActionR
 # ──────────────────────────────────────────────────────────────────────────
 
 def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str],
-                     problems: list[dict] | None = None) -> object:
+                     problems: list[dict] | None = None, has_cache: bool = True) -> object:
     """Quick Add: one real button per connected site not yet tracked as a
     brand here, pre-filling create_brand_profile's site_id/brand_name via
     ui.Call so a brand can be started in one click straight from whatever
@@ -541,17 +581,31 @@ def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str],
     SITE_PROVIDER_APP_IDS) -- no retyping the domain, no chat message.
 
     ALWAYS returns a card, never None: if there is nothing to offer, the card
-    says WHY (no provider reachable / nothing connected / all already added)
-    and carries a Refresh button. A silently missing card is unfixable from
-    the UI, which is exactly the failure mode this replaces.
+    says WHY (no provider reachable / nothing connected / all already added /
+    not loaded yet) and carries a Refresh button that runs the REAL read
+    (list_connected_sites) and re-renders. A silently missing card is
+    unfixable from the UI, which is exactly the failure mode this replaces.
     """
     problems = problems or []
     candidates = [s for s in connected_sites if s.get("site_id") not in existing_site_ids]
 
     refresh = ui.Button(
-        "Refresh", variant="ghost", size="sm", icon="RefreshCw",
-        on_click=ui.Call("__panel__brands"),
+        "Refresh", variant="secondary", size="sm", icon="RefreshCw",
+        on_click=ui.Call("list_connected_sites"),
     )
+
+    if not has_cache and not connected_sites and not problems:
+        return ui.Card(
+            title="Quick Add — from connected sites",
+            content=ui.Stack(direction="v", gap=2, children=[
+                ui.Text(
+                    "Not loaded yet — click Refresh to pull sites connected "
+                    "in WordPress Hub (or any future site provider).",
+                    variant="caption",
+                ),
+                refresh,
+            ]),
+        )
 
     if candidates:
         body: list = [
@@ -619,8 +673,13 @@ async def brands_panel(ctx, **kwargs) -> object:
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
     existing_site_ids = {d.data.get("site_id") for d in docs if d.data.get("site_id")}
-    connected_sites, site_problems = await fetch_connected_sites(ctx)
-    quick_add = _quick_add_block(connected_sites, existing_site_ids, site_problems)
+    # Read from cache, NOT a live ctx.extensions.call here: a panel render
+    # runs in a context where inter-extension IPC has been observed to fail
+    # (empty user context downstream), while the same call from a real
+    # chat/tool invocation (list_connected_sites itself) works and refreshes
+    # this cache. See _cache_connected_sites for the full explanation.
+    connected_sites, site_problems, has_cache = await _read_cached_connected_sites(ctx)
+    quick_add = _quick_add_block(connected_sites, existing_site_ids, site_problems, has_cache)
 
     new_brand_form = ui.Card(
         title="New brand",
