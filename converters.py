@@ -148,11 +148,29 @@ def build_swot(brand: dict, competitors: list[dict]) -> tuple[list[str], list[st
 
     opportunities = []
     threats = []
+    # Word-overlap check against the brand's own strengths, used below to spot
+    # relative weaknesses -- a competitor strength the brand's own profile
+    # text never addresses at all.
+    strengths_text = " ".join(strengths).lower()
     for comp in competitors:
         for w in comp.get("weaknesses", []):
             opportunities.append(f"{comp.get('name', 'Competitor')} weakness to exploit: {w}")
         for s in comp.get("strengths", []):
             threats.append(f"{comp.get('name', 'Competitor')} strength to watch: {s}")
+            # Previously weaknesses only ever came from gaps in the brand's OWN
+            # stated fields (mission/value_proposition/USPs) -- if those were
+            # all filled in, weaknesses was permanently empty no matter how
+            # many competitor advantages existed. Opportunities/Threats were
+            # already derived from competitor data; Weaknesses was the only
+            # SWOT quadrant that never looked outward. Mirroring the
+            # opportunities logic: a tracked competitor's strength that the
+            # brand's own strengths text shares no words with is a real,
+            # evidence-based relative weakness, not an invented one.
+            s_words = {w for w in s.lower().split() if len(w) > 3}
+            if s_words and not (s_words & set(strengths_text.split())):
+                weaknesses.append(
+                    f"Relative to {comp.get('name', 'Competitor')}, unmatched: {s}"
+                )
 
     if not competitors:
         opportunities.append("No competitors tracked yet — add some via add_brand_competitor for a sharper SWOT")
