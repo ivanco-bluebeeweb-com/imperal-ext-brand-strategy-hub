@@ -407,11 +407,10 @@ async def run_swot_analysis(ctx, params: RunSWOTAnalysisParams) -> ActionResult:
     # Supersede the previous current snapshot(s) for this brand -- exactly
     # one SWOT stays "current" at a time, so a reader never has to guess
     # which of several results reflects reality now.
-    prev_page = await ctx.store.query(
-        "swot_results", where={"brand_id": params.brand_id, "is_current": True}, limit=50
-    )
+    prev_page = await ctx.store.query("swot_results", where={"brand_id": params.brand_id}, limit=500)
+    prev_current = [d for d in prev_page.data if d.data.get("is_current", True)]
     superseded_at = _now_iso()
-    for prev in prev_page.data:
+    for prev in prev_current:
         await ctx.store.update("swot_results", prev.id, {"is_current": False, "superseded_at": superseded_at})
 
     doc = await ctx.store.create(
@@ -496,12 +495,11 @@ async def run_gap_analysis(ctx, params: RunGapAnalysisParams) -> ActionResult:
     # Supersede the previous current result for this exact (brand, segment)
     # pair -- same "one current, rest archived" rule as SWOT.
     prev_page = await ctx.store.query(
-        "gap_analysis_results",
-        where={"brand_id": params.brand_id, "segment_id": params.segment_id, "is_current": True},
-        limit=50,
+        "gap_analysis_results", where={"brand_id": params.brand_id, "segment_id": params.segment_id}, limit=500,
     )
+    prev_current = [d for d in prev_page.data if d.data.get("is_current", True)]
     superseded_at = _now_iso()
-    for prev in prev_page.data:
+    for prev in prev_current:
         await ctx.store.update("gap_analysis_results", prev.id, {"is_current": False, "superseded_at": superseded_at})
 
     doc = await ctx.store.create(
@@ -775,10 +773,9 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
             retryable=False, code="EMPTY_BRAND_PROFILE",
         )
 
-    swot_page = await ctx.store.query(
-        "swot_results", where={"brand_id": params.brand_id, "is_current": True}, limit=1
-    )
-    if not swot_page.data:
+    swot_page = await ctx.store.query("swot_results", where={"brand_id": params.brand_id}, limit=500)
+    current_swot = [d for d in swot_page.data if d.data.get("is_current", True)]
+    if not current_swot:
         return ActionResult.error(
             f"Brand profile '{params.brand_id}' has no current SWOT analysis yet. "
             "Run run_swot_analysis first so downstream content strategy is grounded "
@@ -1073,17 +1070,15 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     )
     segments = list(seg_page.data)
 
-    swot_page = await ctx.store.query(
-        "swot_results", where={"brand_id": brand_id, "is_current": True}, order_by="-created_at", limit=1
-    )
-    latest_swot = swot_page.data[0].data if swot_page.data else None
-    latest_swot_id = swot_page.data[0].id if swot_page.data else ""
+    swot_page = await ctx.store.query("swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500)
+    current_swot_docs = [d for d in swot_page.data if d.data.get("is_current", True)]
+    latest_swot = current_swot_docs[0].data if current_swot_docs else None
+    latest_swot_id = current_swot_docs[0].id if current_swot_docs else ""
 
-    gap_page = await ctx.store.query(
-        "gap_analysis_results", where={"brand_id": brand_id, "is_current": True}, order_by="-created_at", limit=1
-    )
-    latest_gap = gap_page.data[0].data if gap_page.data else None
-    latest_gap_id = gap_page.data[0].id if gap_page.data else ""
+    gap_page = await ctx.store.query("gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500)
+    current_gap_docs = [d for d in gap_page.data if d.data.get("is_current", True)]
+    latest_gap = current_gap_docs[0].data if current_gap_docs else None
+    latest_gap_id = current_gap_docs[0].id if current_gap_docs else ""
 
     header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
 
