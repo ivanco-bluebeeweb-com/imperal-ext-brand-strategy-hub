@@ -26,6 +26,7 @@ class BrandProfile(sdl.Entity):
     tone_of_voice: str = ""
     unique_selling_points: list[str] = []
     industry: str = ""
+    content_topics: list[str] = []  # topics/categories THIS brand's content should cover -- distinct from unique_selling_points (differentiators, not topics). Feeds build_content_strategy_handoff.content_categories.
 
 
 class BrandProfileList(sdl.EntityList[BrandProfile]):
@@ -133,6 +134,7 @@ class CreateBrandProfileParams(BaseModel):
     tone_of_voice: str = Field("", description="How the brand sounds, e.g. 'confident, warm, no jargon'")
     unique_selling_points: list[str] = Field(default_factory=list, description="What makes this brand different, one point per item")
     industry: str = Field("", description="Industry/category, e.g. 'private security services'")
+    content_topics: list[str] = Field(default_factory=list, description="Topics/categories this brand's content should cover, e.g. ['ventilation systems', 'heat recovery', 'installation guides'] -- distinct from unique_selling_points. Used by build_content_strategy_handoff to populate content_categories.")
 
 
 class UpdateBrandProfileParams(BaseModel):
@@ -144,6 +146,7 @@ class UpdateBrandProfileParams(BaseModel):
     tone_of_voice: str | None = Field(default=None, description="New tone of voice; omit to keep")
     unique_selling_points: list[str] | None = Field(default=None, description="Replace USPs; omit to keep")
     industry: str | None = Field(default=None, description="New industry; omit to keep")
+    content_topics: list[str] | None = Field(default=None, description="Replace content topics/categories; omit to keep")
 
 
 class ListBrandProfilesParams(BaseModel):

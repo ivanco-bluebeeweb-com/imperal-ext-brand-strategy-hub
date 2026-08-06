@@ -25,6 +25,7 @@ def to_brand_profile(d) -> BrandProfile:
         tone_of_voice=data.get("tone_of_voice", ""),
         unique_selling_points=data.get("unique_selling_points", []),
         industry=data.get("industry", ""),
+        content_topics=data.get("content_topics", []),
     )
 
 
@@ -154,7 +155,8 @@ def build_swot(brand: dict, competitors: list[dict]) -> tuple[list[str], list[st
             threats.append(f"{comp.get('name', 'Competitor')} strength to watch: {s}")
 
     if not competitors:
-        opportunities.append("No competitors tracked yet — add some via create_competitor_profile for a sharper SWOT")
+        opportunities.append("No competitors tracked yet — add some via add_brand_competitor for a sharper SWOT")
+        threats.append("No competitors tracked yet — real market threats cannot be derived without them; add some via add_brand_competitor")
 
     return strengths, weaknesses, opportunities, threats
 
@@ -200,7 +202,8 @@ def to_content_handoff(brand: dict, brand_id: str, site_id: str, domain: str, ta
         f"**Mission:** {brand.get('mission', '(not set)')}\n\n"
         f"**Value proposition:** {brand.get('value_proposition', '(not set)')}\n\n"
         f"**Tone of voice:** {brand.get('tone_of_voice', '(not set)')}\n\n"
-        f"**Unique selling points:** {', '.join(brand.get('unique_selling_points', [])) or '(none)'}\n"
+        f"**Unique selling points:** {', '.join(brand.get('unique_selling_points', [])) or '(none)'}\n\n"
+        f"**Content topics:** {', '.join(brand.get('content_topics', [])) or '(none set)'}\n"
     )
     return BrandContentHandoff(
         id=brand_id,
@@ -210,7 +213,7 @@ def to_content_handoff(brand: dict, brand_id: str, site_id: str, domain: str, ta
         domain=domain or site_id,
         brand_name=brand.get("brand_name", ""),
         business_description=brand.get("value_proposition", "") or brand.get("mission", ""),
-        content_categories=brand.get("unique_selling_points", []),
+        content_categories=brand.get("content_topics", []) or brand.get("unique_selling_points", []),
         cta_default="",
         target_languages=target_languages,
         body=body,

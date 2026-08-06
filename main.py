@@ -179,6 +179,7 @@ async def create_brand_profile(ctx, params: CreateBrandProfileParams) -> ActionR
             "tone_of_voice": params.tone_of_voice,
             "unique_selling_points": params.unique_selling_points,
             "industry": params.industry,
+            "content_topics": params.content_topics,
         },
     )
     return ActionResult.success(
@@ -211,6 +212,8 @@ async def update_brand_profile(ctx, params: UpdateBrandProfileParams) -> ActionR
             updates[field] = value
     if params.unique_selling_points is not None:
         updates["unique_selling_points"] = params.unique_selling_points
+    if params.content_topics is not None:
+        updates["content_topics"] = params.content_topics
 
     if not updates:
         return ActionResult.error("No fields given to update.", retryable=False)
