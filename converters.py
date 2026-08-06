@@ -63,15 +63,20 @@ def to_swot_result(d) -> SWOTResult:
     weaknesses = data.get("weaknesses", [])
     opportunities = data.get("opportunities", [])
     threats = data.get("threats", [])
+    is_current = data.get("is_current", True)
     body = _swot_markdown(strengths, weaknesses, opportunities, threats)
+    if not is_current:
+        body = "_⚠ SUPERSEDED — a newer SWOT exists for this brand._\n\n" + body
     return SWOTResult(
         id=d.id,
-        title=f"SWOT — {data.get('brand_id', d.id)}",
+        title=f"SWOT — {data.get('brand_id', d.id)}" + ("" if is_current else " (superseded)"),
         brand_id=data.get("brand_id", ""),
         strengths=strengths,
         weaknesses=weaknesses,
         opportunities=opportunities,
         threats=threats,
+        is_current=is_current,
+        superseded_at=data.get("superseded_at", ""),
         body=body,
     )
 
@@ -80,14 +85,19 @@ def to_gap_analysis_result(d) -> GapAnalysisResult:
     data = d.data
     gaps = data.get("gaps", [])
     recommendations = data.get("recommendations", [])
+    is_current = data.get("is_current", True)
     body = _gap_markdown(gaps, recommendations)
+    if not is_current:
+        body = "_⚠ SUPERSEDED — a newer gap analysis exists for this segment._\n\n" + body
     return GapAnalysisResult(
         id=d.id,
-        title=f"Gap analysis — {data.get('brand_id', d.id)}",
+        title=f"Gap analysis — {data.get('brand_id', d.id)}" + ("" if is_current else " (superseded)"),
         brand_id=data.get("brand_id", ""),
         segment_id=data.get("segment_id", ""),
         gaps=gaps,
         recommendations=recommendations,
+        is_current=is_current,
+        superseded_at=data.get("superseded_at", ""),
         body=body,
     )
 

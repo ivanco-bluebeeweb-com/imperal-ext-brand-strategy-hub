@@ -1426,7 +1426,7 @@
         "type": "object"
       },
       "return_schema": {
-        "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.",
+        "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.\n\nis_current marks the ONE live snapshot per brand -- running a new SWOT\nautomatically supersedes the previous current one (sets its is_current\nto False and stamps superseded_at) rather than leaving two snapshots\nboth looking equally authoritative.",
         "properties": {
           "body": {
             "anyOf": [
@@ -1577,6 +1577,16 @@
             },
             "title": "Threats",
             "type": "array"
+          },
+          "is_current": {
+            "default": true,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "superseded_at": {
+            "default": "",
+            "title": "Superseded At",
+            "type": "string"
           }
         },
         "required": [
@@ -1613,6 +1623,12 @@
             "description": "Max items to return (1-100)",
             "title": "Limit",
             "type": "integer"
+          },
+          "include_superseded": {
+            "default": false,
+            "description": "False (default) returns only the CURRENT snapshot per brand -- what a reader should actually act on. Set true to also see superseded (outdated) SWOT history.",
+            "title": "Include Superseded",
+            "type": "boolean"
           }
         },
         "title": "ListSWOTResultsParams",
@@ -1621,7 +1637,7 @@
       "return_schema": {
         "$defs": {
           "SWOTResult": {
-            "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.",
+            "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.\n\nis_current marks the ONE live snapshot per brand -- running a new SWOT\nautomatically supersedes the previous current one (sets its is_current\nto False and stamps superseded_at) rather than leaving two snapshots\nboth looking equally authoritative.",
             "properties": {
               "body": {
                 "anyOf": [
@@ -1772,6 +1788,16 @@
                 },
                 "title": "Threats",
                 "type": "array"
+              },
+              "is_current": {
+                "default": true,
+                "title": "Is Current",
+                "type": "boolean"
+              },
+              "superseded_at": {
+                "default": "",
+                "title": "Superseded At",
+                "type": "string"
               }
             },
             "required": [
@@ -1864,7 +1890,7 @@
         "type": "object"
       },
       "return_schema": {
-        "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.",
+        "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.\n\nis_current marks the ONE live analysis per (brand_id, segment_id) pair --\nre-running for the same segment supersedes the previous current result\ninstead of leaving two, so a reader never has to guess which is fresh.",
         "properties": {
           "body": {
             "anyOf": [
@@ -2004,6 +2030,16 @@
             },
             "title": "Recommendations",
             "type": "array"
+          },
+          "is_current": {
+            "default": true,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "superseded_at": {
+            "default": "",
+            "title": "Superseded At",
+            "type": "string"
           }
         },
         "required": [
@@ -2040,6 +2076,12 @@
             "description": "Max items to return (1-100)",
             "title": "Limit",
             "type": "integer"
+          },
+          "include_superseded": {
+            "default": false,
+            "description": "False (default) returns only the CURRENT result per (brand, segment) pair. Set true to also see superseded (outdated) gap-analysis history.",
+            "title": "Include Superseded",
+            "type": "boolean"
           }
         },
         "title": "ListGapAnalysesParams",
@@ -2048,7 +2090,7 @@
       "return_schema": {
         "$defs": {
           "GapAnalysisResult": {
-            "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.",
+            "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.\n\nis_current marks the ONE live analysis per (brand_id, segment_id) pair --\nre-running for the same segment supersedes the previous current result\ninstead of leaving two, so a reader never has to guess which is fresh.",
             "properties": {
               "body": {
                 "anyOf": [
@@ -2188,6 +2230,16 @@
                 },
                 "title": "Recommendations",
                 "type": "array"
+              },
+              "is_current": {
+                "default": true,
+                "title": "Is Current",
+                "type": "boolean"
+              },
+              "superseded_at": {
+                "default": "",
+                "title": "Superseded At",
+                "type": "string"
               }
             },
             "required": [
@@ -2245,6 +2297,886 @@
         "x-sdl": "entity-list"
       },
       "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "delete_brand_competitor",
+      "description": "Permanently delete one tracked competitor. Does not affect past SWOT snapshots already derived from it.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "delete:competitor_profile"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "competitor_id": {
+            "description": "UUID of an existing competitor — from list_brand_competitors, never invented",
+            "title": "Competitor Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "competitor_id"
+        ],
+        "title": "DeleteCompetitorParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a single-record delete.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DeleteResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "deleted",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "delete_target_segment",
+      "description": "Permanently delete one target audience segment. Does not affect past gap-analysis results already derived from it.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "delete:target_segment"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "segment_id": {
+            "description": "UUID of an existing target segment — from list_target_segments, never invented",
+            "title": "Segment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id"
+        ],
+        "title": "DeleteTargetSegmentParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a single-record delete.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DeleteResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "deleted",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "delete_brand_profile",
+      "description": "Permanently delete a brand profile AND cascade-delete everything anchored to it: its tracked competitors, target segments, SWOT snapshots (current + superseded), and gap analyses. Requires confirm_cascade=true. Irreversible.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "delete:brand_profile",
+        "delete:competitor_profile",
+        "delete:target_segment",
+        "delete:swot_result",
+        "delete:gap_analysis_result"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "confirm_cascade": {
+            "default": false,
+            "description": "Must be explicitly true. Deleting a brand profile cascades to ALL of its competitors, target segments, SWOT snapshots, and gap analyses — irreversible.",
+            "title": "Confirm Cascade",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "DeleteBrandProfileParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a single-record delete.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DeleteResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "deleted",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "archive_swot_result",
+      "description": "Mark one SWOT snapshot as superseded (outdated) without deleting it, so its history stays inspectable but it stops showing as current.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:swot_result"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "swot_id": {
+            "description": "UUID of an existing SWOT snapshot — from list_swot_results, never invented",
+            "title": "Swot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "swot_id"
+        ],
+        "title": "ArchiveSWOTResultParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One SWOT analysis snapshot for a brand, derived from its profile and\ntracked competitors. `body` (from sdl.Bodied) renders the full SWOT as\nMarkdown for quick human reading.\n\nis_current marks the ONE live snapshot per brand -- running a new SWOT\nautomatically supersedes the previous current one (sets its is_current\nto False and stamps superseded_at) rather than leaving two snapshots\nboth looking equally authoritative.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "strengths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaknesses",
+            "type": "array"
+          },
+          "opportunities": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Opportunities",
+            "type": "array"
+          },
+          "threats": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Threats",
+            "type": "array"
+          },
+          "is_current": {
+            "default": true,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "superseded_at": {
+            "default": "",
+            "title": "Superseded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SWOTResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "updated",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "archive_gap_analysis",
+      "description": "Mark one gap analysis as superseded (outdated) without deleting it, so its history stays inspectable but it stops showing as current.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:gap_analysis_result"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "gap_analysis_id": {
+            "description": "UUID of an existing gap analysis — from list_gap_analyses, never invented",
+            "title": "Gap Analysis Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gap_analysis_id"
+        ],
+        "title": "ArchiveGapAnalysisParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One brand-vs-audience gap analysis: what a target segment needs that\nthe brand's current positioning does not yet address, plus concrete\n'fill the gap' recommendations.\n\nis_current marks the ONE live analysis per (brand_id, segment_id) pair --\nre-running for the same segment supersedes the previous current result\ninstead of leaving two, so a reader never has to guess which is fresh.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "default": "",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "gaps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "recommendations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "is_current": {
+            "default": true,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "superseded_at": {
+            "default": "",
+            "title": "Superseded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "GapAnalysisResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "updated",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "purge_brand_strategy_data",
+      "description": "Wipe ALL brand strategy WORKING data derived from a brand -- tracked competitors, target segments, SWOT snapshots (current + superseded), and gap analyses. Brand profiles themselves are NEVER touched, mirroring Content Strategy Hub's purge_pipeline_data (which keeps site profiles): a brand profile is the anchor record, equivalent to a connected site, not disposable pipeline output. Requires confirm_wipe=true.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "delete:competitor_profile",
+        "delete:target_segment",
+        "delete:swot_result",
+        "delete:gap_analysis_result"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "confirm_wipe": {
+            "default": false,
+            "description": "Must be explicitly true to run the purge. Safety flag so this can never fire by accident from a misread instruction.",
+            "title": "Confirm Wipe",
+            "type": "boolean"
+          }
+        },
+        "title": "PurgeBrandStrategyDataParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a full brand-strategy data wipe — counts removed per\ncollection. Brand profiles themselves are never touched by this.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "competitors_removed": {
+            "default": 0,
+            "title": "Competitors Removed",
+            "type": "integer"
+          },
+          "segments_removed": {
+            "default": 0,
+            "title": "Segments Removed",
+            "type": "integer"
+          },
+          "swot_results_removed": {
+            "default": 0,
+            "title": "Swot Results Removed",
+            "type": "integer"
+          },
+          "gap_analyses_removed": {
+            "default": 0,
+            "title": "Gap Analyses Removed",
+            "type": "integer"
+          },
+          "kept_brand_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kept Brand Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "PurgeResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand_strategy_purged",
       "background": false,
       "long_running": false,
       "scopes": [],

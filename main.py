@@ -20,6 +20,8 @@ talking to a second, empty copy of this module).
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
@@ -35,6 +37,9 @@ from schemas import (
     GapAnalysisResult, GapAnalysisResultList,
     SWOTResult, SWOTResultList,
     TargetSegment, TargetSegmentList,
+    DeleteResult, DeleteBrandProfileParams, DeleteCompetitorParams,
+    DeleteTargetSegmentParams, ArchiveSWOTResultParams,
+    ArchiveGapAnalysisParams, PurgeBrandStrategyDataParams, PurgeResult,
 )
 from converters import (
     build_gap_analysis, build_swot,
@@ -45,6 +50,10 @@ from converters import (
     to_swot_result as _to_swot_result,
     to_target_segment as _to_target_segment,
 )
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 ext = Extension(
     "brand-strategy-hub",
@@ -149,6 +158,16 @@ async def fetch_connected_sites(ctx) -> tuple[list[dict], list[dict]]:
 )
 async def create_brand_profile(ctx, params: CreateBrandProfileParams) -> ActionResult:
     """Create one brand profile."""
+    if params.site_id:
+        existing_page = await ctx.store.query("brand_profiles", where={"site_id": params.site_id}, limit=1)
+        if existing_page.data:
+            existing = existing_page.data[0]
+            return ActionResult.error(
+                f"A brand profile already exists for site_id '{params.site_id}' "
+                f"(brand '{existing.data.get('brand_name', existing.id)}', id {existing.id}). "
+                "Use update_brand_profile on that one instead of creating a duplicate.",
+                retryable=False, code="DUPLICATE_SITE_ID",
+            )
     doc = await ctx.store.create(
         "brand_profiles",
         {
@@ -235,6 +254,16 @@ async def add_brand_competitor(ctx, params: AddCompetitorParams) -> ActionResult
     if not brand_doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
 
+    dup_page = await ctx.store.query("competitor_profiles", where={"brand_id": params.brand_id}, limit=500)
+    for d in dup_page.data:
+        if d.data.get("name", "").strip().lower() == params.name.strip().lower():
+            return ActionResult.error(
+                f"Competitor '{params.name}' is already tracked for this brand (id {d.id}). "
+                "Update that record instead of adding a duplicate — duplicate competitors "
+                "double-count in SWOT's opportunities/threats.",
+                retryable=False, code="DUPLICATE_COMPETITOR",
+            )
+
     doc = await ctx.store.create(
         "competitor_profiles",
         {
@@ -287,6 +316,15 @@ async def create_target_segment(ctx, params: CreateTargetSegmentParams) -> Actio
     brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not brand_doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    dup_page = await ctx.store.query("target_segments", where={"brand_id": params.brand_id}, limit=500)
+    for d in dup_page.data:
+        if d.data.get("segment_name", "").strip().lower() == params.segment_name.strip().lower():
+            return ActionResult.error(
+                f"Segment '{params.segment_name}' already exists for this brand (id {d.id}). "
+                "Use that segment for gap analysis instead of creating a duplicate.",
+                retryable=False, code="DUPLICATE_SEGMENT",
+            )
 
     doc = await ctx.store.create(
         "target_segments",
@@ -342,15 +380,39 @@ async def list_target_segments(ctx, params: ListTargetSegmentsParams) -> ActionR
     data_model=SWOTResult,
 )
 async def run_swot_analysis(ctx, params: RunSWOTAnalysisParams) -> ActionResult:
-    """Derive and store a SWOT snapshot for a brand."""
+    """Derive and store a SWOT snapshot for a brand, superseding any
+    previous current snapshot so exactly one stays marked current."""
     brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not brand_doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    brand = brand_doc.data
+    if not any([
+        brand.get("mission"), brand.get("vision"), brand.get("value_proposition"),
+        brand.get("tone_of_voice"), brand.get("unique_selling_points"),
+    ]):
+        return ActionResult.error(
+            f"Brand profile '{params.brand_id}' has no mission, vision, value "
+            "proposition, tone of voice, or USPs set — a SWOT built on an "
+            "empty profile is just noise. Fill in the brand profile "
+            "(update_brand_profile) before running SWOT.",
+            retryable=False, code="EMPTY_BRAND_PROFILE",
+        )
 
     comp_page = await ctx.store.query("competitor_profiles", where={"brand_id": params.brand_id}, limit=500)
     competitors = [d.data for d in comp_page.data]
 
     strengths, weaknesses, opportunities, threats = build_swot(brand_doc.data, competitors)
+
+    # Supersede the previous current snapshot(s) for this brand -- exactly
+    # one SWOT stays "current" at a time, so a reader never has to guess
+    # which of several results reflects reality now.
+    prev_page = await ctx.store.query(
+        "swot_results", where={"brand_id": params.brand_id, "is_current": True}, limit=50
+    )
+    superseded_at = _now_iso()
+    for prev in prev_page.data:
+        await ctx.store.update("swot_results", prev.id, {"is_current": False, "superseded_at": superseded_at})
 
     doc = await ctx.store.create(
         "swot_results",
@@ -360,10 +422,15 @@ async def run_swot_analysis(ctx, params: RunSWOTAnalysisParams) -> ActionResult:
             "weaknesses": weaknesses,
             "opportunities": opportunities,
             "threats": threats,
+            "is_current": True,
+            "superseded_at": "",
         },
     )
     return ActionResult.success(
-        _to_swot_result(doc), summary=f"SWOT analysis run for brand {params.brand_id}.",
+        _to_swot_result(doc), summary=(
+            f"SWOT analysis run for brand {params.brand_id}."
+            + (f" Superseded {len(prev_page.data)} previous snapshot(s)." if prev_page.data else "")
+        ),
         refresh_panels=["brand_detail"],
     )
 
@@ -375,14 +442,18 @@ async def run_swot_analysis(ctx, params: RunSWOTAnalysisParams) -> ActionResult:
     data_model=SWOTResultList,
 )
 async def list_swot_results(ctx, params: ListSWOTResultsParams) -> ActionResult:
-    """List SWOT results, optionally filtered by brand."""
+    """List SWOT results, optionally filtered by brand. Defaults to only the
+    CURRENT snapshot per brand -- pass include_superseded=true for history."""
     page = await ctx.store.query("swot_results", order_by="-created_at", limit=500)
     items = list(page.data)
     if params.brand_id:
         items = [d for d in items if d.data.get("brand_id") == params.brand_id]
+    if not params.include_superseded:
+        items = [d for d in items if d.data.get("is_current", True)]
     items = items[: params.limit]
     entities = [_to_swot_result(d) for d in items]
-    return ActionResult.success(SWOTResultList(items=entities, total=len(entities)), summary=f"{len(entities)} SWOT result(s).")
+    current_note = "" if params.include_superseded else " (current only)"
+    return ActionResult.success(SWOTResultList(items=entities, total=len(entities)), summary=f"{len(entities)} SWOT result(s){current_note}.")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -404,15 +475,34 @@ async def list_swot_results(ctx, params: ListSWOTResultsParams) -> ActionResult:
     data_model=GapAnalysisResult,
 )
 async def run_gap_analysis(ctx, params: RunGapAnalysisParams) -> ActionResult:
-    """Derive and store a brand-vs-audience gap analysis."""
+    """Derive and store a brand-vs-audience gap analysis, superseding any
+    previous current result for the same (brand, segment) pair."""
     brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not brand_doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
     segment_doc = await ctx.store.get("target_segments", params.segment_id)
     if not segment_doc:
         return ActionResult.error(f"Target segment '{params.segment_id}' not found.", retryable=False)
+    if segment_doc.data.get("brand_id") != params.brand_id:
+        return ActionResult.error(
+            f"Target segment '{params.segment_id}' belongs to a different brand "
+            f"than '{params.brand_id}' — a gap analysis needs a segment that "
+            "actually belongs to the brand being analysed.",
+            retryable=False, code="SEGMENT_BRAND_MISMATCH",
+        )
 
     gaps, recommendations = build_gap_analysis(brand_doc.data, segment_doc.data)
+
+    # Supersede the previous current result for this exact (brand, segment)
+    # pair -- same "one current, rest archived" rule as SWOT.
+    prev_page = await ctx.store.query(
+        "gap_analysis_results",
+        where={"brand_id": params.brand_id, "segment_id": params.segment_id, "is_current": True},
+        limit=50,
+    )
+    superseded_at = _now_iso()
+    for prev in prev_page.data:
+        await ctx.store.update("gap_analysis_results", prev.id, {"is_current": False, "superseded_at": superseded_at})
 
     doc = await ctx.store.create(
         "gap_analysis_results",
@@ -421,10 +511,12 @@ async def run_gap_analysis(ctx, params: RunGapAnalysisParams) -> ActionResult:
             "segment_id": params.segment_id,
             "gaps": gaps,
             "recommendations": recommendations,
+            "is_current": True,
+            "superseded_at": "",
         },
     )
     return ActionResult.success(
-        _to_gap_analysis_result(doc), summary="Gap analysis run.",
+        _to_gap_analysis_result(doc), summary="Gap analysis run — superseded any prior result for this segment.",
         refresh_panels=["brand_detail"],
     )
 
@@ -436,14 +528,214 @@ async def run_gap_analysis(ctx, params: RunGapAnalysisParams) -> ActionResult:
     data_model=GapAnalysisResultList,
 )
 async def list_gap_analyses(ctx, params: ListGapAnalysesParams) -> ActionResult:
-    """List gap analysis results, optionally filtered by brand."""
+    """List gap analysis results, optionally filtered by brand. Defaults to
+    only the CURRENT result per (brand, segment) pair -- pass
+    include_superseded=true for history."""
     page = await ctx.store.query("gap_analysis_results", order_by="-created_at", limit=500)
     items = list(page.data)
     if params.brand_id:
         items = [d for d in items if d.data.get("brand_id") == params.brand_id]
+    if not params.include_superseded:
+        items = [d for d in items if d.data.get("is_current", True)]
     items = items[: params.limit]
     entities = [_to_gap_analysis_result(d) for d in items]
-    return ActionResult.success(GapAnalysisResultList(items=entities, total=len(entities)), summary=f"{len(entities)} gap analysis result(s).")
+    current_note = "" if params.include_superseded else " (current only)"
+    return ActionResult.success(GapAnalysisResultList(items=entities, total=len(entities)), summary=f"{len(entities)} gap analysis result(s){current_note}.")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Deletion / archival — every collection here anchors off brand_id, so
+# deleting a brand cascades; deleting a competitor/segment is a plain leaf
+# delete; SWOT/gap-analysis snapshots are archived (superseded), not deleted,
+# so the "actual vs outdated" history stays inspectable.
+# ──────────────────────────────────────────────────────────────────────────
+
+@chat.function(
+    "delete_brand_competitor",
+    description="Permanently delete one tracked competitor. Does not affect past SWOT snapshots already derived from it.",
+    action_type="destructive",
+    chain_callable=True,
+    effects=["delete:competitor_profile"],
+    event="deleted",
+    data_model=DeleteResult,
+)
+async def delete_brand_competitor(ctx, params: DeleteCompetitorParams) -> ActionResult:
+    """Delete one competitor profile."""
+    doc = await ctx.store.get("competitor_profiles", params.competitor_id)
+    if not doc:
+        return ActionResult.error(f"Competitor '{params.competitor_id}' not found.", retryable=False)
+    await ctx.store.delete("competitor_profiles", params.competitor_id)
+    return ActionResult.success(
+        DeleteResult(id=params.competitor_id, title="Competitor deleted", deleted=True),
+        summary=f"Competitor '{doc.data.get('name', params.competitor_id)}' deleted.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "delete_target_segment",
+    description="Permanently delete one target audience segment. Does not affect past gap-analysis results already derived from it.",
+    action_type="destructive",
+    chain_callable=True,
+    effects=["delete:target_segment"],
+    event="deleted",
+    data_model=DeleteResult,
+)
+async def delete_target_segment(ctx, params: DeleteTargetSegmentParams) -> ActionResult:
+    """Delete one target segment."""
+    doc = await ctx.store.get("target_segments", params.segment_id)
+    if not doc:
+        return ActionResult.error(f"Target segment '{params.segment_id}' not found.", retryable=False)
+    await ctx.store.delete("target_segments", params.segment_id)
+    return ActionResult.success(
+        DeleteResult(id=params.segment_id, title="Target segment deleted", deleted=True),
+        summary=f"Segment '{doc.data.get('segment_name', params.segment_id)}' deleted.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "delete_brand_profile",
+    description=(
+        "Permanently delete a brand profile AND cascade-delete everything "
+        "anchored to it: its tracked competitors, target segments, SWOT "
+        "snapshots (current + superseded), and gap analyses. Requires "
+        "confirm_cascade=true. Irreversible."
+    ),
+    action_type="destructive",
+    chain_callable=True,
+    effects=["delete:brand_profile", "delete:competitor_profile", "delete:target_segment", "delete:swot_result", "delete:gap_analysis_result"],
+    event="deleted",
+    data_model=DeleteResult,
+)
+async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionResult:
+    """Delete a brand profile and cascade-delete its dependents."""
+    doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+    if not params.confirm_cascade:
+        return ActionResult.error(
+            "Deleting a brand profile cascades to ALL of its competitors, "
+            "target segments, SWOT snapshots, and gap analyses. Pass "
+            "confirm_cascade=true to proceed.",
+            retryable=False, code="CONFIRM_CASCADE_REQUIRED",
+        )
+
+    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results"):
+        page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=500)
+        for d in page.data:
+            await ctx.store.delete(collection, d.id)
+
+    await ctx.store.delete("brand_profiles", params.brand_id)
+    return ActionResult.success(
+        DeleteResult(id=params.brand_id, title="Brand profile deleted", deleted=True),
+        summary=f"Brand profile '{doc.data.get('brand_name', params.brand_id)}' and all its dependents deleted.",
+        refresh_panels=["brands", "brand_detail"],
+    )
+
+
+@chat.function(
+    "archive_swot_result",
+    description="Mark one SWOT snapshot as superseded (outdated) without deleting it, so its history stays inspectable but it stops showing as current.",
+    action_type="write",
+    chain_callable=True,
+    effects=["update:swot_result"],
+    event="updated",
+    data_model=SWOTResult,
+)
+async def archive_swot_result(ctx, params: ArchiveSWOTResultParams) -> ActionResult:
+    """Manually mark one SWOT snapshot as superseded."""
+    doc = await ctx.store.get("swot_results", params.swot_id)
+    if not doc:
+        return ActionResult.error(f"SWOT result '{params.swot_id}' not found.", retryable=False)
+    updated = await ctx.store.update(
+        "swot_results", params.swot_id, {"is_current": False, "superseded_at": _now_iso()}
+    )
+    return ActionResult.success(
+        _to_swot_result(updated), summary="SWOT snapshot marked as superseded.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "archive_gap_analysis",
+    description="Mark one gap analysis as superseded (outdated) without deleting it, so its history stays inspectable but it stops showing as current.",
+    action_type="write",
+    chain_callable=True,
+    effects=["update:gap_analysis_result"],
+    event="updated",
+    data_model=GapAnalysisResult,
+)
+async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionResult:
+    """Manually mark one gap analysis as superseded."""
+    doc = await ctx.store.get("gap_analysis_results", params.gap_analysis_id)
+    if not doc:
+        return ActionResult.error(f"Gap analysis '{params.gap_analysis_id}' not found.", retryable=False)
+    updated = await ctx.store.update(
+        "gap_analysis_results", params.gap_analysis_id, {"is_current": False, "superseded_at": _now_iso()}
+    )
+    return ActionResult.success(
+        _to_gap_analysis_result(updated), summary="Gap analysis marked as superseded.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "purge_brand_strategy_data",
+    description=(
+        "Wipe ALL brand strategy WORKING data derived from a brand -- "
+        "tracked competitors, target segments, SWOT snapshots (current + "
+        "superseded), and gap analyses. Brand profiles themselves are NEVER "
+        "touched, mirroring Content Strategy Hub's purge_pipeline_data "
+        "(which keeps site profiles): a brand profile is the anchor "
+        "record, equivalent to a connected site, not disposable pipeline "
+        "output. Requires confirm_wipe=true."
+    ),
+    action_type="destructive",
+    chain_callable=True,
+    effects=["delete:competitor_profile", "delete:target_segment", "delete:swot_result", "delete:gap_analysis_result"],
+    event="brand_strategy_purged",
+    data_model=PurgeResult,
+)
+async def purge_brand_strategy_data(ctx, params: PurgeBrandStrategyDataParams) -> ActionResult:
+    """Delete every competitor/segment/SWOT/gap-analysis record, keeping brand profiles."""
+    if not params.confirm_wipe:
+        return ActionResult.error(
+            "This permanently deletes ALL tracked competitors, target "
+            "segments, SWOT snapshots, and gap analyses for every brand. "
+            "Brand profiles themselves are kept. Pass confirm_wipe=true to proceed.",
+            retryable=False, code="CONFIRM_WIPE_REQUIRED",
+        )
+
+    counts = {}
+    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results"):
+        page = await ctx.store.query(collection, limit=1000)
+        counts[collection] = len(page.data)
+        for d in page.data:
+            await ctx.store.delete(collection, d.id)
+
+    brand_page = await ctx.store.query("brand_profiles", limit=1000)
+    kept_brand_ids = [d.id for d in brand_page.data]
+
+    return ActionResult.success(
+        PurgeResult(
+            id="purge",
+            title="Brand strategy data purge",
+            competitors_removed=counts.get("competitor_profiles", 0),
+            segments_removed=counts.get("target_segments", 0),
+            swot_results_removed=counts.get("swot_results", 0),
+            gap_analyses_removed=counts.get("gap_analysis_results", 0),
+            kept_brand_ids=kept_brand_ids,
+        ),
+        summary=(
+            f"Purged {counts.get('competitor_profiles', 0)} competitor(s), "
+            f"{counts.get('target_segments', 0)} segment(s), "
+            f"{counts.get('swot_results', 0)} SWOT result(s), "
+            f"{counts.get('gap_analysis_results', 0)} gap analysis(es). "
+            f"Kept {len(kept_brand_ids)} brand profile(s)."
+        ),
+        refresh_panels=["brands", "brand_detail"],
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -469,6 +761,31 @@ async def build_content_strategy_handoff(ctx, params: BuildContentStrategyHandof
     brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not brand_doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    brand = brand_doc.data
+    if not any([
+        brand.get("mission"), brand.get("value_proposition"),
+        brand.get("tone_of_voice"), brand.get("unique_selling_points"),
+    ]):
+        return ActionResult.error(
+            f"Brand profile '{params.brand_id}' has no mission, value proposition, "
+            "tone of voice, or USPs set. Handing this off to Content Strategy Hub now "
+            "would create a site profile with no real positioning -- fill in the "
+            "brand profile (update_brand_profile) first.",
+            retryable=False, code="EMPTY_BRAND_PROFILE",
+        )
+
+    swot_page = await ctx.store.query(
+        "swot_results", where={"brand_id": params.brand_id, "is_current": True}, limit=1
+    )
+    if not swot_page.data:
+        return ActionResult.error(
+            f"Brand profile '{params.brand_id}' has no current SWOT analysis yet. "
+            "Run run_swot_analysis first so downstream content strategy is grounded "
+            "in an actual strengths/weaknesses/opportunities/threats read, not just "
+            "raw profile fields.",
+            retryable=False, code="SWOT_REQUIRED",
+        )
 
     handoff = _to_content_handoff(
         brand_doc.data, params.brand_id, params.site_id, params.domain, params.target_languages
@@ -757,14 +1074,16 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     segments = list(seg_page.data)
 
     swot_page = await ctx.store.query(
-        "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=1
+        "swot_results", where={"brand_id": brand_id, "is_current": True}, order_by="-created_at", limit=1
     )
     latest_swot = swot_page.data[0].data if swot_page.data else None
+    latest_swot_id = swot_page.data[0].id if swot_page.data else ""
 
     gap_page = await ctx.store.query(
-        "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=1
+        "gap_analysis_results", where={"brand_id": brand_id, "is_current": True}, order_by="-created_at", limit=1
     )
     latest_gap = gap_page.data[0].data if gap_page.data else None
+    latest_gap_id = gap_page.data[0].id if gap_page.data else ""
 
     header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
 
@@ -853,9 +1172,14 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         on_click=ui.Call("run_swot_analysis", brand_id=brand_id),
     )
     if latest_swot:
+        archive_swot_button = ui.Button(
+            "Mark as outdated", variant="secondary", icon="Archive",
+            on_click=ui.Call("archive_swot_result", swot_id=latest_swot_id),
+        )
         swot_tab = ui.Stack(
             direction="v", gap=3,
             children=[
+                ui.Badge(label="Current", color="green"),
                 ui.Grid(
                     columns=2, gap=3,
                     children=[
@@ -865,7 +1189,8 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                         ui.Card(title="Threats", content=_swot_list(latest_swot.get("threats", []))),
                     ],
                 ),
-                ui.Card(title="Run again", content=run_swot_button),
+                ui.Card(title="Run again (auto-supersedes this one)", content=run_swot_button),
+                ui.Card(title="Or mark this one outdated by hand", content=archive_swot_button),
             ],
         )
     else:
@@ -899,12 +1224,18 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         )
     )
     if latest_gap:
+        archive_gap_button = ui.Button(
+            "Mark as outdated", variant="secondary", icon="Archive",
+            on_click=ui.Call("archive_gap_analysis", gap_analysis_id=latest_gap_id),
+        )
         gap_tab = ui.Stack(
             direction="v", gap=3,
             children=[
+                ui.Badge(label="Current", color="green"),
                 ui.Card(title="Gaps between brand and audience", content=_swot_list(latest_gap.get("gaps", []))),
                 ui.Card(title="Recommendations to fill the gap", content=_swot_list(latest_gap.get("recommendations", []))),
                 ui.Card(title="Run again for another segment", content=gap_form),
+                ui.Card(title="Or mark this one outdated by hand", content=archive_gap_button),
             ],
         )
     else:
@@ -924,6 +1255,11 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                 title=c.get("name", ""),
                 subtitle=c.get("url", ""),
                 meta=f"{len(c.get('strengths', []))} strengths · {len(c.get('weaknesses', []))} weaknesses",
+                actions=[{
+                    "icon": "Trash2",
+                    "on_click": ui.Call("delete_brand_competitor", competitor_id=c.get("id", "")),
+                    "confirm": f"Delete competitor '{c.get('name', '')}'? This cannot be undone.",
+                }],
             )
             for c in competitors
         ]
@@ -956,6 +1292,11 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                 title=d.data.get("segment_name", "") or d.id,
                 subtitle=d.data.get("demographics", ""),
                 meta=f"{len(d.data.get('pain_points', []))} pain points · {len(d.data.get('needs', []))} needs",
+                actions=[{
+                    "icon": "Trash2",
+                    "on_click": ui.Call("delete_target_segment", segment_id=d.id),
+                    "confirm": f"Delete segment '{d.data.get('segment_name', d.id)}'? This cannot be undone.",
+                }],
             )
             for d in segments
         ]

@@ -13,11 +13,14 @@ from imperal_sdk.testing import MockContext
 
 import main as m
 from schemas import (
-    AddCompetitorParams, BuildContentStrategyHandoffParams,
+    AddCompetitorParams, ArchiveGapAnalysisParams, ArchiveSWOTResultParams,
+    BuildContentStrategyHandoffParams,
     CreateBrandProfileParams, CreateTargetSegmentParams,
+    DeleteBrandProfileParams, DeleteCompetitorParams, DeleteTargetSegmentParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListConnectedSitesParams,
-    ListSWOTResultsParams, ListTargetSegmentsParams, RunGapAnalysisParams,
+    ListSWOTResultsParams, ListTargetSegmentsParams, PurgeBrandStrategyDataParams,
+    RunGapAnalysisParams,
     RunSWOTAnalysisParams, UpdateBrandProfileParams,
 )
 
@@ -200,6 +203,9 @@ async def test_build_content_strategy_handoff_shapes_payload():
             unique_selling_points=["licensed guards", "24/7 response"],
         )
     )
+    # Handoff now gates on a current SWOT existing -- run one first so
+    # downstream content strategy is grounded, not just raw profile fields.
+    await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
     result = await m.build_content_strategy_handoff(
         ctx, BuildContentStrategyHandoffParams(
             brand_id=brand.data.id, site_id="g4s.md", target_languages=["ru", "ro"],
@@ -211,6 +217,30 @@ async def test_build_content_strategy_handoff_shapes_payload():
     assert result.data.brand_name == "G4S Moldova"
     assert result.data.target_languages == ["ru", "ro"]
     assert "licensed guards" in result.data.content_categories
+
+
+@pytest.mark.asyncio
+async def test_build_content_strategy_handoff_without_swot_errors():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(
+            brand_name="G4S Moldova", value_proposition="Trusted 24/7 security",
+        )
+    )
+    result = await m.build_content_strategy_handoff(
+        ctx, BuildContentStrategyHandoffParams(brand_id=brand.data.id, site_id="g4s.md")
+    )
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_build_content_strategy_handoff_empty_profile_errors():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Empty Co"))
+    result = await m.build_content_strategy_handoff(
+        ctx, BuildContentStrategyHandoffParams(brand_id=brand.data.id, site_id="empty.md")
+    )
+    assert result.status == "error"
 
 
 @pytest.mark.asyncio
@@ -615,3 +645,215 @@ async def test_list_connected_sites_surfaces_provider_failure_in_summary():
     assert result.data.items == []
     assert "Could not read from" in result.summary
     assert "wp-site-connector" in result.summary
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# "Current vs superseded" SWOT / gap-analysis mechanism
+# ──────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_rerunning_swot_supersedes_the_previous_one():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(brand_name="G4S", value_proposition="Trusted 24/7 security")
+    )
+    first = await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    assert first.data.is_current is True
+
+    await m.add_brand_competitor(
+        ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo", weaknesses=["slow response"])
+    )
+    second = await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    assert second.data.is_current is True
+    assert second.data.id != first.data.id
+
+    # Default list -- only the current one shows.
+    current_only = await m.list_swot_results(ctx, ListSWOTResultsParams(brand_id=brand.data.id))
+    assert len(current_only.data.items) == 1
+    assert current_only.data.items[0].id == second.data.id
+
+    # With history requested, both show and the old one is flagged.
+    with_history = await m.list_swot_results(
+        ctx, ListSWOTResultsParams(brand_id=brand.data.id, include_superseded=True)
+    )
+    assert len(with_history.data.items) == 2
+    by_id = {i.id: i for i in with_history.data.items}
+    assert by_id[first.data.id].is_current is False
+    assert by_id[first.data.id].superseded_at != ""
+    assert by_id[second.data.id].is_current is True
+
+
+@pytest.mark.asyncio
+async def test_rerunning_gap_analysis_supersedes_only_the_same_segment():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
+    seg_a = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="A"))
+    seg_b = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="B"))
+
+    gap_a1 = await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg_a.data.id))
+    gap_b1 = await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg_b.data.id))
+    gap_a2 = await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg_a.data.id))
+
+    listed = await m.list_gap_analyses(
+        ctx, ListGapAnalysesParams(brand_id=brand.data.id, include_superseded=True)
+    )
+    by_id = {i.id: i for i in listed.data.items}
+    assert by_id[gap_a1.data.id].is_current is False  # superseded by gap_a2
+    assert by_id[gap_a2.data.id].is_current is True
+    assert by_id[gap_b1.data.id].is_current is True  # untouched -- different segment
+
+    current_only = await m.list_gap_analyses(ctx, ListGapAnalysesParams(brand_id=brand.data.id))
+    assert len(current_only.data.items) == 2
+
+
+@pytest.mark.asyncio
+async def test_run_gap_analysis_rejects_segment_from_a_different_brand():
+    ctx = MockContext()
+    brand_a = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="A"))
+    brand_b = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="B"))
+    seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand_a.data.id, segment_name="Seg"))
+    result = await m.run_gap_analysis(
+        ctx, RunGapAnalysisParams(brand_id=brand_b.data.id, segment_id=seg.data.id)
+    )
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_archive_swot_result_marks_superseded_without_new_run():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", value_proposition="X"))
+    swot = await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    result = await m.archive_swot_result(ctx, ArchiveSWOTResultParams(swot_id=swot.data.id))
+    assert result.status == "success"
+    assert result.data.is_current is False
+
+    current_only = await m.list_swot_results(ctx, ListSWOTResultsParams(brand_id=brand.data.id))
+    assert len(current_only.data.items) == 0
+
+
+@pytest.mark.asyncio
+async def test_archive_gap_analysis_marks_superseded():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
+    seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Seg"))
+    gap = await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg.data.id))
+    result = await m.archive_gap_analysis(ctx, ArchiveGapAnalysisParams(gap_analysis_id=gap.data.id))
+    assert result.status == "success"
+    assert result.data.is_current is False
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Gates: sequencing / duplicate prevention
+# ──────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_run_swot_analysis_on_empty_profile_errors():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Empty Co"))
+    result = await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_create_brand_profile_rejects_duplicate_site_id():
+    ctx = MockContext()
+    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", site_id="g4s.md"))
+    dup = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S Again", site_id="g4s.md"))
+    assert dup.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_add_brand_competitor_rejects_case_insensitive_duplicate():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
+    await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo"))
+    dup = await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="securECO"))
+    assert dup.status == "error"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Deletion / purge
+# ──────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_delete_brand_competitor_removes_it():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
+    comp = await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo"))
+    result = await m.delete_brand_competitor(ctx, DeleteCompetitorParams(competitor_id=comp.data.id))
+    assert result.status == "success"
+    listed = await m.list_brand_competitors(ctx, ListCompetitorsParams(brand_id=brand.data.id))
+    assert len(listed.data.items) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_target_segment_removes_it():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
+    seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Seg"))
+    result = await m.delete_target_segment(ctx, DeleteTargetSegmentParams(segment_id=seg.data.id))
+    assert result.status == "success"
+    listed = await m.list_target_segments(ctx, ListTargetSegmentsParams(brand_id=brand.data.id))
+    assert len(listed.data.items) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_brand_profile_requires_confirm_cascade():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
+    result = await m.delete_brand_profile(ctx, DeleteBrandProfileParams(brand_id=brand.data.id))
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_delete_brand_profile_cascades_to_every_dependent():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", value_proposition="X"))
+    await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo"))
+    seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Seg"))
+    await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg.data.id))
+
+    result = await m.delete_brand_profile(
+        ctx, DeleteBrandProfileParams(brand_id=brand.data.id, confirm_cascade=True)
+    )
+    assert result.status == "success"
+
+    assert (await m.list_brand_profiles(ctx, ListBrandProfilesParams())).data.items == []
+    assert (await m.list_brand_competitors(ctx, ListCompetitorsParams(brand_id=brand.data.id))).data.items == []
+    assert (await m.list_target_segments(ctx, ListTargetSegmentsParams(brand_id=brand.data.id))).data.items == []
+    assert (await m.list_swot_results(ctx, ListSWOTResultsParams(brand_id=brand.data.id, include_superseded=True))).data.items == []
+    assert (await m.list_gap_analyses(ctx, ListGapAnalysesParams(brand_id=brand.data.id, include_superseded=True))).data.items == []
+
+
+@pytest.mark.asyncio
+async def test_purge_brand_strategy_data_requires_confirm_wipe():
+    ctx = MockContext()
+    result = await m.purge_brand_strategy_data(ctx, PurgeBrandStrategyDataParams())
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_purge_brand_strategy_data_keeps_brand_profiles():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", value_proposition="X"))
+    seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Seg"))
+    await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo"))
+    await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg.data.id))
+
+    result = await m.purge_brand_strategy_data(ctx, PurgeBrandStrategyDataParams(confirm_wipe=True))
+    assert result.status == "success"
+    assert result.data.competitors_removed == 1
+    assert result.data.segments_removed == 1
+    assert result.data.swot_results_removed == 1
+    assert result.data.gap_analyses_removed == 1
+    assert brand.data.id in result.data.kept_brand_ids
+
+    # Brand profile itself survives the purge.
+    profiles = await m.list_brand_profiles(ctx, ListBrandProfilesParams())
+    assert len(profiles.data.items) == 1
+    assert profiles.data.items[0].id == brand.data.id
+    # Everything derived from it is gone.
+    assert (await m.list_brand_competitors(ctx, ListCompetitorsParams())).data.items == []
+    assert (await m.list_target_segments(ctx, ListTargetSegmentsParams())).data.items == []

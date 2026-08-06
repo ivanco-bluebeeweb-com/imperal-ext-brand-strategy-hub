@@ -64,12 +64,19 @@ class TargetSegmentList(sdl.EntityList[TargetSegment]):
 class SWOTResult(sdl.Entity, sdl.Bodied):
     """One SWOT analysis snapshot for a brand, derived from its profile and
     tracked competitors. `body` (from sdl.Bodied) renders the full SWOT as
-    Markdown for quick human reading."""
+    Markdown for quick human reading.
+
+    is_current marks the ONE live snapshot per brand -- running a new SWOT
+    automatically supersedes the previous current one (sets its is_current
+    to False and stamps superseded_at) rather than leaving two snapshots
+    both looking equally authoritative."""
     brand_id: str = ""
     strengths: list[str] = []
     weaknesses: list[str] = []
     opportunities: list[str] = []
     threats: list[str] = []
+    is_current: bool = True
+    superseded_at: str = ""
 
 
 class SWOTResultList(sdl.EntityList[SWOTResult]):
@@ -79,11 +86,17 @@ class SWOTResultList(sdl.EntityList[SWOTResult]):
 class GapAnalysisResult(sdl.Entity, sdl.Bodied):
     """One brand-vs-audience gap analysis: what a target segment needs that
     the brand's current positioning does not yet address, plus concrete
-    'fill the gap' recommendations."""
+    'fill the gap' recommendations.
+
+    is_current marks the ONE live analysis per (brand_id, segment_id) pair --
+    re-running for the same segment supersedes the previous current result
+    instead of leaving two, so a reader never has to guess which is fresh."""
     brand_id: str = ""
     segment_id: str = ""
     gaps: list[str] = []
     recommendations: list[str] = []
+    is_current: bool = True
+    superseded_at: str = ""
 
 
 class GapAnalysisResultList(sdl.EntityList[GapAnalysisResult]):
@@ -173,6 +186,14 @@ class RunSWOTAnalysisParams(BaseModel):
 class ListSWOTResultsParams(BaseModel):
     brand_id: str = Field("", description="Optional brand filter. Empty = all.")
     limit: int = Field(20, description="Max items to return (1-100)")
+    include_superseded: bool = Field(
+        False,
+        description=(
+            "False (default) returns only the CURRENT snapshot per brand -- "
+            "what a reader should actually act on. Set true to also see "
+            "superseded (outdated) SWOT history."
+        ),
+    )
 
 
 class RunGapAnalysisParams(BaseModel):
@@ -183,6 +204,14 @@ class RunGapAnalysisParams(BaseModel):
 class ListGapAnalysesParams(BaseModel):
     brand_id: str = Field("", description="Optional brand filter. Empty = all.")
     limit: int = Field(20, description="Max items to return (1-100)")
+    include_superseded: bool = Field(
+        False,
+        description=(
+            "False (default) returns only the CURRENT result per (brand, "
+            "segment) pair. Set true to also see superseded (outdated) "
+            "gap-analysis history."
+        ),
+    )
 
 
 class BuildContentStrategyHandoffParams(BaseModel):
@@ -190,6 +219,65 @@ class BuildContentStrategyHandoffParams(BaseModel):
     site_id: str = Field(description="Site id to use downstream, e.g. 'g4s.md' — matches Content Strategy Hub's site_id")
     domain: str = Field("", description="Domain for the site; defaults to site_id if omitted")
     target_languages: list[str] = Field(default_factory=list, description="Target languages for content, e.g. ['ru','ro']")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Deletion / archival — brand profiles are the anchor for every other
+# collection, so removing one always cascades to what it anchors rather
+# than leaving orphaned competitors/segments/SWOTs/gap analyses behind.
+# ──────────────────────────────────────────────────────────────────────────
+
+class DeleteResult(sdl.Entity):
+    """Outcome of a single-record delete."""
+    deleted: bool = False
+
+
+class DeleteBrandProfileParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+    confirm_cascade: bool = Field(
+        False,
+        description=(
+            "Must be explicitly true. Deleting a brand profile cascades to ALL "
+            "of its competitors, target segments, SWOT snapshots, and gap "
+            "analyses — irreversible."
+        ),
+    )
+
+
+class DeleteCompetitorParams(BaseModel):
+    competitor_id: str = Field(description="UUID of an existing competitor — from list_brand_competitors, never invented")
+
+
+class DeleteTargetSegmentParams(BaseModel):
+    segment_id: str = Field(description="UUID of an existing target segment — from list_target_segments, never invented")
+
+
+class ArchiveSWOTResultParams(BaseModel):
+    swot_id: str = Field(description="UUID of an existing SWOT snapshot — from list_swot_results, never invented")
+
+
+class ArchiveGapAnalysisParams(BaseModel):
+    gap_analysis_id: str = Field(description="UUID of an existing gap analysis — from list_gap_analyses, never invented")
+
+
+class PurgeBrandStrategyDataParams(BaseModel):
+    confirm_wipe: bool = Field(
+        False,
+        description=(
+            "Must be explicitly true to run the purge. Safety flag so this can "
+            "never fire by accident from a misread instruction."
+        ),
+    )
+
+
+class PurgeResult(sdl.Entity):
+    """Outcome of a full brand-strategy data wipe — counts removed per
+    collection. Brand profiles themselves are never touched by this."""
+    competitors_removed: int = 0
+    segments_removed: int = 0
+    swot_results_removed: int = 0
+    gap_analyses_removed: int = 0
+    kept_brand_ids: list[str] = Field(default_factory=list)
 
 
 # ──────────────────────────────────────────────────────────────────────────
