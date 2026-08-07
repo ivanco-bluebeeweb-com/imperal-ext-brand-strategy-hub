@@ -108,11 +108,15 @@ async def test_vbs_approval_makes_one_revision_current_and_preserves_audit():
     approved = await m.activate_visual_brand_system(
         ctx,
         ActivateVisualBrandSystemParams(
-            vbs_id=first.data["vbs_id"], expected_revision=1, approval_note="Initial baseline approved"
+            vbs_id=first.data["vbs_id"],
+            expected_revision=1,
+            expected_workspace_version=2,
+            approval_note="Initial baseline approved",
         ),
     )
     assert approved.status == "success"
     assert approved.data["status"] == "approved_current"
+    assert approved.data["workspace_version"] == 3
 
     revisions = await m.list_visual_brand_systems(ctx, ListVisualBrandSystemsParams(brand_id=brand_id))
     assert revisions.status == "success"
@@ -125,6 +129,35 @@ async def test_vbs_approval_makes_one_revision_current_and_preserves_audit():
     assert audit.status == "success"
     event_types = {event.event_type for event in audit.data.items}
     assert {"workspace_initialized", "vbs_draft_created", "vbs_approved_current"} <= event_types
+
+
+@pytest.mark.asyncio
+async def test_vbs_approval_rejects_a_stale_workspace_snapshot():
+    ctx = MockContext()
+    brand_id = await _brand(ctx)
+    await _workspace(ctx, brand_id)
+    first = await m.create_visual_brand_system(
+        ctx,
+        CreateVisualBrandSystemParams(
+            brand_id=brand_id,
+            expected_workspace_version=1,
+            visual_intent="Grounded visual proof",
+        ),
+    )
+
+    stale = await m.activate_visual_brand_system(
+        ctx,
+        ActivateVisualBrandSystemParams(
+            vbs_id=first.data["vbs_id"],
+            expected_revision=1,
+            expected_workspace_version=1,
+        ),
+    )
+
+    assert stale.status == "error"
+    assert stale.error_code == "VBS_STALE_WORKSPACE"
+    revisions = await m.list_visual_brand_systems(ctx, ListVisualBrandSystemsParams(brand_id=brand_id))
+    assert revisions.data.items[0].status == "draft"
 
 
 @pytest.mark.asyncio
@@ -141,5 +174,7 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     rendered = repr(initialized)
     assert "Create next VBS draft" in rendered
     assert "create_visual_brand_system" in rendered
+    assert "expected_workspace_version" in rendered
+    assert "Audit trail" in rendered
     assert "People/media" in rendered
     assert "Blocked pending privacy/storage spikes" in rendered

@@ -573,6 +573,12 @@
             "title": "Expected Revision",
             "type": "integer"
           },
+          "expected_workspace_version": {
+            "description": "Workspace version currently shown to the reviewer; blocks stale approval writes",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          },
           "approval_note": {
             "default": "",
             "description": "Reason for approving this VBS revision",
@@ -582,7 +588,8 @@
         },
         "required": [
           "vbs_id",
-          "expected_revision"
+          "expected_revision",
+          "expected_workspace_version"
         ],
         "title": "ActivateVisualBrandSystemParams",
         "type": "object"

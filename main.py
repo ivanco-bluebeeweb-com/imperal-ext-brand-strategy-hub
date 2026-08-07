@@ -106,6 +106,29 @@ async def _require_vbs_workspace_owner(ctx, brand_id: str):
     return workspace, None
 
 
+async def _advance_vbs_workspace(ctx, workspace, expected_version: int):
+    """Advance the workspace version only when the caller still holds its snapshot.
+
+    Store updates have no conditional-write primitive, so re-read immediately
+    before each state mutation. This makes stale UI submissions fail closed;
+    the later storage-concurrency spike will replace this with a native CAS
+    primitive if the platform exposes one.
+    """
+    latest = await ctx.store.get(VBS_WORKSPACES, workspace.id)
+    if not latest or latest.data.get("version") != expected_version:
+        return None, ActionResult.error(
+            "The VBS workspace changed since you opened it. Refresh and review before saving.",
+            retryable=True,
+            code="VBS_STALE_WORKSPACE",
+        )
+    updated = await ctx.store.update(
+        VBS_WORKSPACES,
+        latest.id,
+        {**latest.data, "version": expected_version + 1, "updated_at": _now_iso()},
+    )
+    return updated, None
+
+
 async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str) -> None:
     """Write an append-only application audit event; no UI route may edit it."""
     actor_id, tenant_id = _actor(ctx)
@@ -303,6 +326,11 @@ async def create_visual_brand_system(ctx, params: CreateVisualBrandSystemParams)
             retryable=True,
             code="VBS_STALE_WORKSPACE",
         )
+    advanced_workspace, error = await _advance_vbs_workspace(
+        ctx, workspace, params.expected_workspace_version
+    )
+    if error:
+        return error
 
     existing_page = await ctx.store.query(
         VBS_SYSTEMS, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200
@@ -327,9 +355,6 @@ async def create_visual_brand_system(ctx, params: CreateVisualBrandSystemParams)
             "created_at": _now_iso(),
         },
     )
-    await ctx.store.update(
-        VBS_WORKSPACES, workspace.id, {**workspace.data, "version": workspace.data["version"] + 1, "updated_at": _now_iso()}
-    )
     await _append_vbs_audit(
         ctx,
         brand_id=params.brand_id,
@@ -343,7 +368,7 @@ async def create_visual_brand_system(ctx, params: CreateVisualBrandSystemParams)
             "brand_id": params.brand_id,
             "revision": revision,
             "status": "draft",
-            "workspace_version": workspace.data["version"] + 1,
+            "workspace_version": advanced_workspace.data["version"],
         },
         f"Created VBS revision {revision} as a draft.",
         refresh_panels=["brand_detail"],
@@ -392,6 +417,17 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
             retryable=True,
             code="VBS_STALE_REVISION",
         )
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error(
+            "The VBS workspace changed since you opened it. Refresh and review before approving.",
+            retryable=True,
+            code="VBS_STALE_WORKSPACE",
+        )
+    advanced_workspace, error = await _advance_vbs_workspace(
+        ctx, workspace, params.expected_workspace_version
+    )
+    if error:
+        return error
 
     revisions = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-created_at", limit=200)
     current = [
@@ -412,7 +448,13 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
         ctx, brand_id=brand_id, vbs_id=candidate.id, event_type="vbs_approved_current", details=params.approval_note.strip() or "Approved as current VBS."
     )
     return ActionResult.success(
-        {"vbs_id": candidate.id, "brand_id": brand_id, "revision": params.expected_revision, "status": "approved_current"},
+        {
+            "vbs_id": candidate.id,
+            "brand_id": brand_id,
+            "revision": params.expected_revision,
+            "status": "approved_current",
+            "workspace_version": advanced_workspace.data["version"],
+        },
         f"VBS revision {params.expected_revision} is now current.",
         refresh_panels=["brand_detail"],
     )
@@ -1540,7 +1582,11 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                     ui.Form(
                         action="activate_visual_brand_system",
                         submit_label="Approve as current",
-                        defaults={"vbs_id": d.id, "expected_revision": d.data.get("revision", 1)},
+                        defaults={
+                            "vbs_id": d.id,
+                            "expected_revision": d.data.get("revision", 1),
+                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                        },
                         children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
                     ) if d.data.get("status") in {"draft", "in_review"} else None
                 ),

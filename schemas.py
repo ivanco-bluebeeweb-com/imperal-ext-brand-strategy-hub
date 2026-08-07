@@ -238,6 +238,10 @@ class ListVisualBrandSystemsParams(BaseModel):
 class ActivateVisualBrandSystemParams(BaseModel):
     vbs_id: str = Field(description="UUID of a VBS draft or in-review revision — never invented")
     expected_revision: int = Field(ge=1, description="Revision currently shown to the reviewer; blocks stale activation")
+    expected_workspace_version: int = Field(
+        ge=1,
+        description="Workspace version currently shown to the reviewer; blocks stale approval writes",
+    )
     approval_note: str = Field("", description="Reason for approving this VBS revision")
 
 
