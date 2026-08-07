@@ -284,8 +284,11 @@ def _audit_integrity_result(workspace, events, sealed, chained, valid, message, 
 
 async def _verify_vbs_audit_integrity(ctx, workspace) -> AuditIntegrity:
     """Verify record seals plus the v2 ordered chain against its workspace anchor."""
-    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="occurred_at", limit=500)
-    events = [item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]]
+    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, limit=500)
+    events = sorted(
+        (item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]),
+        key=lambda item: str(item.data.get("occurred_at", "")),
+    )
     sealed = 0
     chained = 0
     previous_hash = ""
@@ -353,8 +356,20 @@ async def _verify_vbs_approval_evidence_basis(ctx, workspace, vbs) -> ApprovalEv
                 message="The approved VBS no longer points to its exact sealed approval audit event.",
             )
     else:
-        page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="-occurred_at", limit=500)
-        approval_event = next((item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("vbs_id") == vbs.id and item.data.get("event_type") == "vbs_approved_current"), None)
+        page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, limit=500)
+        approval_event = next(
+            (
+                item for item in sorted(
+                    page.data,
+                    key=lambda item: str(item.data.get("occurred_at", "")),
+                    reverse=True,
+                )
+                if item.data.get("tenant_id") == workspace.data["tenant_id"]
+                and item.data.get("vbs_id") == vbs.id
+                and item.data.get("event_type") == "vbs_approved_current"
+            ),
+            None,
+        )
     metadata = approval_event.data.get("immutable_metadata", {}) if approval_event else {}
     if approval_event and approval_event.data.get("integrity_version") == 3:
         expected = {
