@@ -175,6 +175,9 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "Create next VBS draft" in rendered
     assert "create_visual_brand_system" in rendered
     assert "expected_workspace_version" in rendered
+    assert "Register evidence reference" in rendered
+    assert "register_visual_evidence" in rendered
+    assert "never fetches, downloads or processes the source" in rendered
     assert "Audit trail" in rendered
     assert "People/media" in rendered
     assert "Blocked pending privacy/storage spikes" in rendered

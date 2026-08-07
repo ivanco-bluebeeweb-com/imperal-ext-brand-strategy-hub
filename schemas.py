@@ -80,6 +80,25 @@ class AuditEventList(sdl.EntityList[AuditEvent]):
     pass
 
 
+class VisualEvidence(sdl.Entity):
+    """A private, non-fetched source reference supporting a VBS decision.
+
+    P0 stores a validated HTTPS reference only. It never downloads the URL,
+    processes files, identifies people or treats a source as approved truth.
+    """
+    brand_id: str = ""
+    source_url: str = ""
+    source_title: str = ""
+    observation: str = ""
+    status: str = "discovered"
+    created_by: str = ""
+    tenant_id: str = ""
+
+
+class VisualEvidenceList(sdl.EntityList[VisualEvidence]):
+    pass
+
+
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
     brand_id: str = ""
@@ -248,6 +267,30 @@ class ActivateVisualBrandSystemParams(BaseModel):
 class ListVisualBrandAuditEventsParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — never invented")
     limit: int = Field(50, description="Max audit events to return (1-100)")
+
+
+class RegisterVisualEvidenceParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    expected_workspace_version: int = Field(
+        ge=1,
+        description="Workspace version currently shown in the UI; blocks stale evidence writes",
+    )
+    source_url: str = Field(
+        min_length=1,
+        max_length=2048,
+        description="Public HTTPS reference URL. Stored only; P0 does not fetch or download it.",
+    )
+    source_title: str = Field("", max_length=300, description="Optional human-readable source title")
+    observation: str = Field(
+        min_length=1,
+        max_length=4000,
+        description="What this source appears to support; recorded as unreviewed evidence",
+    )
+
+
+class ListVisualEvidenceParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    limit: int = Field(50, description="Max evidence records to return (1-100)")
 
 
 class AddCompetitorParams(BaseModel):

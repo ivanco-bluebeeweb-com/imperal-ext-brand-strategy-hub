@@ -21,6 +21,8 @@ talking to a second, empty copy of this module).
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
+import ipaddress
 
 from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
@@ -31,11 +33,12 @@ from schemas import (
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
-    ListVisualBrandSystemsParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
+    ListVisualBrandSystemsParams, ListVisualEvidenceParams,
+    RegisterVisualEvidenceParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     UpdateBrandProfileParams,
     AuditEvent, AuditEventList, BrandContentHandoff,
     BrandProfile, BrandProfileList, VisualBrandSystem, VisualBrandSystemList,
-    VisualBrandWorkspace,
+    VisualBrandWorkspace, VisualEvidence, VisualEvidenceList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
     CompetitorProfile, CompetitorProfileList,
     GapAnalysisResult, GapAnalysisResultList,
@@ -63,6 +66,7 @@ def _now_iso() -> str:
 VBS_WORKSPACES = "vbs_workspaces"
 VBS_SYSTEMS = "visual_brand_systems"
 VBS_AUDIT_EVENTS = "visual_brand_audit_events"
+VBS_EVIDENCE = "visual_evidence"
 
 
 def _actor(ctx) -> tuple[str, str]:
@@ -127,6 +131,42 @@ async def _advance_vbs_workspace(ctx, workspace, expected_version: int):
         {**latest.data, "version": expected_version + 1, "updated_at": _now_iso()},
     )
     return updated, None
+
+
+def _validate_public_https_reference(raw_url: str) -> tuple[str | None, str | None]:
+    """Accept only a canonical public HTTPS reference; never resolve or fetch it.
+
+    DNS hostnames are deliberately retained because resolving them here can
+    create its own network side effect and TOCTOU window. A later fetcher must
+    resolve and re-check each destination immediately before connecting.
+    """
+    value = raw_url.strip()
+    if not value or any(char.isspace() for char in value):
+        return None, "Provide a single HTTPS URL without whitespace."
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None, "Provide a valid HTTPS URL."
+    if parsed.scheme.lower() != "https" or not parsed.netloc:
+        return None, "Only HTTPS reference URLs are allowed."
+    if parsed.username or parsed.password:
+        return None, "Reference URLs cannot contain embedded credentials."
+    try:
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return None, "Reference URL has an invalid host or port."
+    if not host or host.lower() == "localhost" or port not in (None, 443):
+        return None, "Reference URL must use a public host and standard HTTPS port."
+    try:
+        address = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        address = None
+    if address and (not address.is_global):
+        return None, "Reference URL cannot target a private, loopback, or reserved IP address."
+    if parsed.fragment:
+        return None, "Reference URLs cannot include fragments."
+    return urlunsplit(("https", parsed.netloc.lower(), parsed.path or "/", parsed.query, "")), None
 
 
 async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str) -> None:
@@ -472,6 +512,86 @@ async def list_visual_brand_audit_events(ctx, params: ListVisualBrandAuditEvents
         for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]
     ]
     return ActionResult.success(AuditEventList(items=items), f"Found {len(items)} VBS audit event(s).")
+
+
+@chat.function(
+    "register_visual_evidence",
+    description=(
+        "Register a private, unreviewed HTTPS reference for a VBS decision. "
+        "P0 stores the reference only and never fetches the URL."
+    ),
+    action_type="write",
+    effects=["create:visual_evidence"],
+    event="brand-strategy-hub.register_visual_evidence",
+    data_model=VisualEvidence,
+)
+async def register_visual_evidence(ctx, params: RegisterVisualEvidenceParams) -> ActionResult[VisualEvidence]:
+    """Register a non-fetched evidence reference within the caller's VBS workspace."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    canonical_url, validation_error = _validate_public_https_reference(params.source_url)
+    if validation_error:
+        return ActionResult.error(validation_error, retryable=False, code="VBS_EVIDENCE_URL_REJECTED")
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error(
+            "The VBS workspace changed since you opened it. Refresh and review before saving evidence.",
+            retryable=True,
+            code="VBS_STALE_WORKSPACE",
+        )
+    advanced_workspace, error = await _advance_vbs_workspace(
+        ctx, workspace, params.expected_workspace_version
+    )
+    if error:
+        return error
+    actor_id, tenant_id = _actor(ctx)
+    evidence = await ctx.store.create(
+        VBS_EVIDENCE,
+        {
+            "brand_id": params.brand_id,
+            "source_url": canonical_url,
+            "source_title": params.source_title.strip(),
+            "observation": params.observation.strip(),
+            "status": "discovered",
+            "created_by": actor_id,
+            "tenant_id": tenant_id,
+            "created_at": _now_iso(),
+        },
+    )
+    await _append_vbs_audit(
+        ctx,
+        brand_id=params.brand_id,
+        vbs_id="",
+        event_type="evidence_registered",
+        details=f"Registered unreviewed reference: {canonical_url}",
+    )
+    return ActionResult.success(
+        {
+            "id": evidence.id,
+            "brand_id": params.brand_id,
+            "source_url": canonical_url,
+            "status": "discovered",
+            "workspace_version": advanced_workspace.data["version"],
+        },
+        "Unreviewed evidence reference registered. The URL was not fetched.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function("list_visual_evidence", description="List private VBS evidence references for one initialized brand.")
+async def list_visual_evidence(ctx, params: ListVisualEvidenceParams) -> ActionResult[VisualEvidenceList]:
+    """List only evidence records owned by the caller's tenant and workspace."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    page = await ctx.store.query(
+        VBS_EVIDENCE, where={"brand_id": params.brand_id}, order_by="-created_at", limit=params.limit
+    )
+    items = [
+        VisualEvidence(id=d.id, title=d.data.get("source_title") or d.data.get("source_url", d.id), **d.data)
+        for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]
+    ]
+    return ActionResult.success(VisualEvidenceList(items=items), f"Found {len(items)} VBS evidence reference(s).")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1410,9 +1530,11 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     )
     vbs_page = None
     vbs_audit_page = None
+    vbs_evidence_page = None
     if vbs_workspace_owned:
         vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
         vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
+        vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
 
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
@@ -1567,6 +1689,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     else:
         vbs_revisions = list(vbs_page.data) if vbs_page else []
         vbs_audit_events = list(vbs_audit_page.data) if vbs_audit_page else []
+        vbs_evidence = list(vbs_evidence_page.data) if vbs_evidence_page else []
         current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
         revision_rows = [
             ui.Card(
@@ -1622,6 +1745,40 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             ui.TextArea(param_name="change_note", placeholder="Why this revision is needed (optional)", rows=2),
                         ],
                     ),
+                ),
+                ui.Card(
+                    title="Register evidence reference",
+                    subtitle="P0 stores a public HTTPS reference only. It never fetches, downloads or processes the source.",
+                    content=ui.Form(
+                        action="register_visual_evidence",
+                        submit_label="Register unreviewed reference",
+                        defaults={
+                            "brand_id": brand_id,
+                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                        },
+                        children=[
+                            ui.Input(param_name="source_url", placeholder="https://public-source.example/research"),
+                            ui.Input(param_name="source_title", placeholder="Source title (optional)"),
+                            ui.TextArea(param_name="observation", placeholder="What does this source appear to support? This remains unreviewed.", rows=3),
+                        ],
+                    ),
+                ),
+                ui.Card(
+                    title=f"Evidence references ({len(vbs_evidence)})",
+                    subtitle="All are private, unreviewed references — not verified claims or downloadable files.",
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Card(
+                                title=evidence.data.get("source_title") or evidence.data.get("source_url", "Reference"),
+                                subtitle=evidence.data.get("source_url", ""),
+                                content=ui.KeyValue(columns=1, items=[
+                                    {"key": "Status", "value": evidence.data.get("status", "discovered")},
+                                    {"key": "Observation", "value": evidence.data.get("observation", "—")},
+                                ]),
+                            ) for evidence in vbs_evidence
+                        ],
+                    ) if vbs_evidence else ui.Empty(message="No evidence references yet. Add only public HTTPS sources you want to review later.", icon="Link"),
                 ),
                 ui.Card(
                     title=f"Revision history ({len(vbs_revisions)})",

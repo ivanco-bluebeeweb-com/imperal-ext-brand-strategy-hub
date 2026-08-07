@@ -921,6 +921,352 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "register_visual_evidence",
+      "description": "Register a private, unreviewed HTTPS reference for a VBS decision. P0 stores the reference only and never fetches the URL.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:visual_evidence"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version currently shown in the UI; blocks stale evidence writes",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          },
+          "source_url": {
+            "description": "Public HTTPS reference URL. Stored only; P0 does not fetch or download it.",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          },
+          "source_title": {
+            "default": "",
+            "description": "Optional human-readable source title",
+            "maxLength": 300,
+            "title": "Source Title",
+            "type": "string"
+          },
+          "observation": {
+            "description": "What this source appears to support; recorded as unreviewed evidence",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "expected_workspace_version",
+          "source_url",
+          "observation"
+        ],
+        "title": "RegisterVisualEvidenceParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "A private, non-fetched source reference supporting a VBS decision.\n\nP0 stores a validated HTTPS reference only. It never downloads the URL,\nprocesses files, identifies people or treats a source as approved truth.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "discovered",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "source_url": {
+            "default": "",
+            "title": "Source Url",
+            "type": "string"
+          },
+          "source_title": {
+            "default": "",
+            "title": "Source Title",
+            "type": "string"
+          },
+          "observation": {
+            "default": "",
+            "title": "Observation",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualEvidence",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.register_visual_evidence",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_visual_evidence",
+      "description": "List private VBS evidence references for one initialized brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max evidence records to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListVisualEvidenceParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "VisualEvidence": {
+            "description": "A private, non-fetched source reference supporting a VBS decision.\n\nP0 stores a validated HTTPS reference only. It never downloads the URL,\nprocesses files, identifies people or treats a source as approved truth.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "default": "discovered",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "source_url": {
+                "default": "",
+                "title": "Source Url",
+                "type": "string"
+              },
+              "source_title": {
+                "default": "",
+                "title": "Source Title",
+                "type": "string"
+              },
+              "observation": {
+                "default": "",
+                "title": "Observation",
+                "type": "string"
+              },
+              "created_by": {
+                "default": "",
+                "title": "Created By",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "VisualEvidence",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/VisualEvidence"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "VisualEvidenceList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "create_brand_profile",
       "description": "Create a new brand profile — mission, vision, value proposition, tone of voice, and unique selling points. The anchor for SWOT, competitor tracking, and target segments for this brand.",
       "action_type": "write",
