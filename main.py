@@ -775,6 +775,21 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
     if error:
         return error
 
+    evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="created_at", limit=200)
+    evidence_snapshot = [
+        {
+            "evidence_id": evidence.id,
+            "status": evidence.data.get("status", ""),
+            "workspace_version": int(evidence.data.get("workspace_version", 0)),
+            "source_url": evidence.data.get("source_url", ""),
+            "source_title": evidence.data.get("source_title", ""),
+            "observation": evidence.data.get("observation", ""),
+        }
+        for evidence in evidence_page.data
+        if evidence.data.get("tenant_id") == workspace.data["tenant_id"]
+        and evidence.data.get("status") == "reviewed_valid"
+    ]
+    evidence_snapshot_hash = _audit_event_hash({"evidence_basis": evidence_snapshot})
     revisions = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-created_at", limit=200)
     current = [
         d for d in revisions.data
@@ -788,10 +803,19 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
     await ctx.store.update(
         VBS_SYSTEMS,
         candidate.id,
-        {**candidate.data, "status": "approved_current", "approved_at": _now_iso(), "approval_note": params.approval_note.strip()},
+        {
+            **candidate.data,
+            "status": "approved_current",
+            "approved_at": _now_iso(),
+            "approval_note": params.approval_note.strip(),
+            "approval_evidence_snapshot": evidence_snapshot,
+            "approval_evidence_snapshot_hash": evidence_snapshot_hash,
+            "approval_evidence_workspace_version": advanced_workspace.data["version"],
+        },
     )
+    basis_note = f" Evidence basis: {len(evidence_snapshot)} reviewed-valid reference(s), fingerprint {evidence_snapshot_hash[:12]}."
     await _append_vbs_audit(
-        ctx, brand_id=brand_id, vbs_id=candidate.id, event_type="vbs_approved_current", details=params.approval_note.strip() or "Approved as current VBS."
+        ctx, brand_id=brand_id, vbs_id=candidate.id, event_type="vbs_approved_current", details=(params.approval_note.strip() or "Approved as current VBS.") + basis_note
     )
     return ActionResult.success(
         {
@@ -2344,6 +2368,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                     {"key": "Core rules", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
                     {"key": "Avoid", "value": "; ".join(d.data.get("prohibited_patterns", [])) or "—"},
                     {"key": "Change note", "value": d.data.get("change_note") or "—"},
+                    {"key": "Evidence basis", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reviewed-valid reference(s) · {d.data.get('approval_evidence_snapshot_hash', '')[:12]}…") if d.data.get("status") == "approved_current" else "Captured when approved"},
                 ]),
                 footer=(
                     ui.Form(

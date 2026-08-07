@@ -973,6 +973,25 @@
             "default": "",
             "title": "Supersedes Vbs Id",
             "type": "string"
+          },
+          "approval_evidence_snapshot": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Approval Evidence Snapshot",
+            "type": "array"
+          },
+          "approval_evidence_snapshot_hash": {
+            "default": "",
+            "title": "Approval Evidence Snapshot Hash",
+            "type": "string"
+          },
+          "approval_evidence_workspace_version": {
+            "default": 0,
+            "title": "Approval Evidence Workspace Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -1137,6 +1156,25 @@
                 "default": "",
                 "title": "Supersedes Vbs Id",
                 "type": "string"
+              },
+              "approval_evidence_snapshot": {
+                "default": [],
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Approval Evidence Snapshot",
+                "type": "array"
+              },
+              "approval_evidence_snapshot_hash": {
+                "default": "",
+                "title": "Approval Evidence Snapshot Hash",
+                "type": "string"
+              },
+              "approval_evidence_workspace_version": {
+                "default": 0,
+                "title": "Approval Evidence Workspace Version",
+                "type": "integer"
               }
             },
             "required": [
@@ -1361,6 +1399,25 @@
             "default": "",
             "title": "Supersedes Vbs Id",
             "type": "string"
+          },
+          "approval_evidence_snapshot": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Approval Evidence Snapshot",
+            "type": "array"
+          },
+          "approval_evidence_snapshot_hash": {
+            "default": "",
+            "title": "Approval Evidence Snapshot Hash",
+            "type": "string"
+          },
+          "approval_evidence_workspace_version": {
+            "default": 0,
+            "title": "Approval Evidence Workspace Version",
+            "type": "integer"
           }
         },
         "required": [

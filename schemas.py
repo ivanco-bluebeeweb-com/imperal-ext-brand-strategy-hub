@@ -79,6 +79,9 @@ class VisualBrandSystem(sdl.Entity):
     created_by: str = ""
     tenant_id: str = ""
     supersedes_vbs_id: str = ""
+    approval_evidence_snapshot: list[dict] = []
+    approval_evidence_snapshot_hash: str = ""
+    approval_evidence_workspace_version: int = 0
 
 
 class VisualBrandSystemList(sdl.EntityList[VisualBrandSystem]):
