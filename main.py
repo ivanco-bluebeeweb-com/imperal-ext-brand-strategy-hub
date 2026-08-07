@@ -2888,6 +2888,39 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                     ) if vbs_profiles else ui.Empty(message="No Visual Profile drafts yet.", icon="Layers"),
                 ),
                 ui.Card(
+                    title="Approved baseline handoffs",
+                    subtitle=(
+                        "Read-only payloads for downstream planning. They create no assets and do not invoke image generation."
+                        if current_profile and current_vbs_basis and current_vbs_basis.valid
+                        else "Approve a current Visual Profile from a VBS with a verified evidence basis to unlock downstream handoffs."
+                    ),
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Form(
+                                action="build_approved_visual_profile_handoff",
+                                submit_label="Build Content Strategy handoff",
+                                defaults={"brand_id": brand_id},
+                                children=[],
+                            ),
+                            ui.Form(
+                                action="build_approved_visual_media_handoff",
+                                submit_label="Build Media Studio guidance",
+                                defaults={"brand_id": brand_id},
+                                children=[],
+                            ),
+                            ui.Text(
+                                "Media policy: use third-party providers; use Magnific only after other providers technically fail.",
+                                variant="caption",
+                            ),
+                        ],
+                    ) if current_profile and current_vbs_basis and current_vbs_basis.valid else ui.Alert(
+                        title="Approved Visual Profile required",
+                        message="Handoffs remain unavailable until the current profile and its VBS evidence basis are approved and verified.",
+                        type="info",
+                    ),
+                ),
+                ui.Card(
                     title=f"Revision history ({len(vbs_revisions)})",
                     content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No VBS revisions yet — create the first draft above.", icon="Palette"),
                 ),

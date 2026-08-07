@@ -93,6 +93,15 @@ async def test_approved_visual_profile_handoff_exports_only_current_nonpersonal_
     assert "creates no assets" in media_handoff.data.generation_boundary
     assert "Magnific only after other providers technically fail" in media_handoff.data.generation_boundary
 
+    panel = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
+    rendered = repr(panel)
+    assert "Approved baseline handoffs" in rendered
+    assert "Build Content Strategy handoff" in rendered
+    assert "build_approved_visual_profile_handoff" in rendered
+    assert "Build Media Studio guidance" in rendered
+    assert "build_approved_visual_media_handoff" in rendered
+    assert "Magnific only after other providers technically fail" in rendered
+
 
 @pytest.mark.asyncio
 async def test_visual_profile_handoff_requires_approved_profile_and_is_tenant_local():
