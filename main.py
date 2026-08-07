@@ -2386,7 +2386,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             )
             if vbs_workspace_owned:
                 vbs_load_stage = "VBS revisions"
-                vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+                vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, limit=50)
+                vbs_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
                 vbs_load_stage = "audit events"
                 vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
                 vbs_load_stage = "evidence"
