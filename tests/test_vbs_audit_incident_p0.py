@@ -13,6 +13,7 @@ from schemas import (
     AcknowledgeVisualBrandAuditIncidentParams,
     CreateBrandProfileParams,
     InitializeVisualBrandWorkspaceParams,
+    ListVisualBrandAuditIncidentsParams,
     SetBrandMembershipParams,
 )
 
@@ -68,6 +69,13 @@ async def test_owner_acknowledgement_is_idempotent_and_does_not_clear_integrity_
     )
     assert blocked.status == "error"
     assert blocked.error_code == "VBS_AUDIT_INTEGRITY_FAILED"
+
+    listed = await m.list_visual_brand_audit_incidents(
+        owner, ListVisualBrandAuditIncidentsParams(brand_id=brand_id)
+    )
+    assert listed.status == "success"
+    assert len(listed.data.items) == 1
+    assert listed.data.items[0].invalid_event_id == invalid_event_id
 
 
 @pytest.mark.asyncio

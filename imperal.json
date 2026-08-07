@@ -1836,6 +1836,199 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "list_visual_brand_audit_incidents",
+      "description": "List recorded VBS audit-integrity incident acknowledgements for one private workspace.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum incident acknowledgements to return",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListVisualBrandAuditIncidentsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "AuditIntegrityIncident": {
+            "description": "Owner acknowledgement of a detected mismatch; it never clears the safety gate.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "invalid_event_id": {
+                "default": "",
+                "title": "Invalid Event Id",
+                "type": "string"
+              },
+              "acknowledged_by": {
+                "default": "",
+                "title": "Acknowledged By",
+                "type": "string"
+              },
+              "acknowledgement_note": {
+                "default": "",
+                "title": "Acknowledgement Note",
+                "type": "string"
+              },
+              "workspace_version": {
+                "default": 0,
+                "title": "Workspace Version",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "AuditIntegrityIncident",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/AuditIntegrityIncident"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AuditIntegrityIncidentList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "create_visual_profile",
       "description": "Create a versioned non-personal Visual Profile draft from the current approved VBS and selected private evidence.",
       "action_type": "write",

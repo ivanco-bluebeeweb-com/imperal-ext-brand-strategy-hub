@@ -36,11 +36,12 @@ from schemas import (
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
     VerifyVisualBrandAuditIntegrityParams, AcknowledgeVisualBrandAuditIncidentParams,
+    ListVisualBrandAuditIncidentsParams,
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
-    AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, BrandContentHandoff,
+    AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
     BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
@@ -849,6 +850,29 @@ async def acknowledge_visual_brand_audit_incident(ctx, params: AcknowledgeVisual
         "Audit-integrity incident acknowledged. Critical changes remain paused until the mismatch is resolved outside this P0 workflow.",
         refresh_panels=["brand_detail"],
     )
+
+
+@chat.function(
+    "list_visual_brand_audit_incidents",
+    description="List recorded VBS audit-integrity incident acknowledgements for one private workspace.",
+)
+async def list_visual_brand_audit_incidents(ctx, params: ListVisualBrandAuditIncidentsParams) -> ActionResult[AuditIntegrityIncidentList]:
+    """Read private incident history without changing audit records or the safety gate."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "read")
+    if error:
+        return error
+    page = await ctx.store.query(
+        VBS_AUDIT_INCIDENTS,
+        where={"brand_id": params.brand_id},
+        order_by="-created_at",
+        limit=params.limit,
+    )
+    items = [
+        AuditIntegrityIncident(id=item.id, title="Acknowledged audit integrity incident", **item.data)
+        for item in page.data
+        if item.data.get("tenant_id") == workspace.data["tenant_id"]
+    ]
+    return ActionResult.success(AuditIntegrityIncidentList(items=items), f"Found {len(items)} VBS audit-integrity incident acknowledgement(s).")
 
 
 @chat.function(
@@ -2080,12 +2104,14 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     vbs_evidence_page = None
     vbs_profile_page = None
     vbs_membership_page = None
+    vbs_incident_page = None
     if vbs_workspace_owned:
         vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
         vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
         vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
         vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
         vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
+        vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
 
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
@@ -2263,6 +2289,10 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         vbs_evidence = list(vbs_evidence_page.data) if vbs_evidence_page else []
         vbs_profiles = list(vbs_profile_page.data) if vbs_profile_page else []
         vbs_memberships = list(vbs_membership_page.data) if vbs_membership_page else []
+        vbs_incidents = [
+            item for item in (vbs_incident_page.data if vbs_incident_page else [])
+            if item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
+        ]
         vbs_integrity = await _verify_vbs_audit_integrity(ctx, vbs_workspace)
         vbs_integrity_failed = not vbs_integrity.valid
         vbs_role = vbs_membership.get("role", "viewer")
@@ -2320,6 +2350,20 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                         children=[ui.TextArea(param_name="acknowledgement_note", placeholder="What was reviewed? This does not clear the block.", rows=2)],
                     ),
                 ) if vbs_integrity_failed and vbs_membership.get("role") == "owner" else None,
+                ui.Card(
+                    title=f"Integrity incident history ({len(vbs_incidents)})",
+                    subtitle="Owner acknowledgements are retained for review and never clear the safety block.",
+                    content=ui.Stack(
+                        direction="v", gap=1,
+                        children=[
+                            ui.KeyValue(columns=1, items=[
+                                {"key": "Invalid audit event", "value": incident.data.get("invalid_event_id", "—")},
+                                {"key": "Acknowledged by", "value": incident.data.get("acknowledged_by", "—")},
+                                {"key": "Note", "value": incident.data.get("acknowledgement_note", "—")},
+                            ]) for incident in vbs_incidents
+                        ] or [ui.Text("No integrity incidents have been acknowledged.")],
+                    ),
+                ),
                 ui.Card(
                     title="Workspace state",
                     content=ui.KeyValue(columns=2, items=[

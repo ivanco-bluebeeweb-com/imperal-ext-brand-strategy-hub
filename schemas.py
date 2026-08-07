@@ -117,6 +117,10 @@ class AuditIntegrityIncident(sdl.Entity):
     workspace_version: int = 0
 
 
+class AuditIntegrityIncidentList(sdl.EntityList[AuditIntegrityIncident]):
+    pass
+
+
 class VisualEvidence(sdl.Entity):
     """A private, non-fetched source reference supporting a VBS decision.
 
@@ -357,6 +361,11 @@ class AcknowledgeVisualBrandAuditIncidentParams(BaseModel):
     brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
     expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the owner; blocks stale acknowledgement")
     acknowledgement_note: str = Field(min_length=3, max_length=1000, description="Owner note confirming the incident was reviewed; does not clear the block")
+
+
+class ListVisualBrandAuditIncidentsParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    limit: int = Field(50, ge=1, le=100, description="Maximum incident acknowledgements to return")
 
 
 class RegisterVisualEvidenceParams(BaseModel):
