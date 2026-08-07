@@ -992,6 +992,16 @@
             "default": 0,
             "title": "Approval Evidence Workspace Version",
             "type": "integer"
+          },
+          "approval_audit_event_id": {
+            "default": "",
+            "title": "Approval Audit Event Id",
+            "type": "string"
+          },
+          "approval_audit_chain_sequence": {
+            "default": 0,
+            "title": "Approval Audit Chain Sequence",
+            "type": "integer"
           }
         },
         "required": [
@@ -1174,6 +1184,16 @@
               "approval_evidence_workspace_version": {
                 "default": 0,
                 "title": "Approval Evidence Workspace Version",
+                "type": "integer"
+              },
+              "approval_audit_event_id": {
+                "default": "",
+                "title": "Approval Audit Event Id",
+                "type": "string"
+              },
+              "approval_audit_chain_sequence": {
+                "default": 0,
+                "title": "Approval Audit Chain Sequence",
                 "type": "integer"
               }
             },
@@ -1417,6 +1437,16 @@
           "approval_evidence_workspace_version": {
             "default": 0,
             "title": "Approval Evidence Workspace Version",
+            "type": "integer"
+          },
+          "approval_audit_event_id": {
+            "default": "",
+            "title": "Approval Audit Event Id",
+            "type": "string"
+          },
+          "approval_audit_chain_sequence": {
+            "default": 0,
+            "title": "Approval Audit Chain Sequence",
             "type": "integer"
           }
         },

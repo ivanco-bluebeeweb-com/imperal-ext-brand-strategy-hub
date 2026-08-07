@@ -82,6 +82,8 @@ class VisualBrandSystem(sdl.Entity):
     approval_evidence_snapshot: list[dict] = []
     approval_evidence_snapshot_hash: str = ""
     approval_evidence_workspace_version: int = 0
+    approval_audit_event_id: str = ""
+    approval_audit_chain_sequence: int = 0
 
 
 class VisualBrandSystemList(sdl.EntityList[VisualBrandSystem]):

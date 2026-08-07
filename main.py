@@ -261,13 +261,14 @@ async def _append_vbs_audit(
     integrity_version = 3 if immutable_metadata else 2
     hash_payload = payload if integrity_version == 3 else {key: value for key, value in payload.items() if key != "immutable_metadata"}
     integrity_hash = _audit_event_hash(hash_payload)
-    await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": integrity_hash, "integrity_version": integrity_version})
+    event = await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": integrity_hash, "integrity_version": integrity_version})
     await ctx.store.update(VBS_WORKSPACES, workspace.id, {
         **workspace.data,
         "audit_chain_head": integrity_hash,
         "audit_chain_sequence": sequence,
         "audit_chain_started_at": workspace.data.get("audit_chain_started_at") or occurred_at,
     })
+    return event
 
 
 def _audit_integrity_result(workspace, events, sealed, chained, valid, message, invalid_event_id="") -> AuditIntegrity:
@@ -340,8 +341,20 @@ async def _verify_vbs_approval_evidence_basis(ctx, workspace, vbs) -> ApprovalEv
             snapshot_hash=stored_hash, evidence_count=len(snapshot), valid=False,
             message="The approval evidence basis no longer matches its immutable snapshot hash.",
         )
-    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="-occurred_at", limit=500)
-    approval_event = next((item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("vbs_id") == vbs.id and item.data.get("event_type") == "vbs_approved_current"), None)
+    direct_event_id = vbs.data.get("approval_audit_event_id", "")
+    direct_sequence = int(vbs.data.get("approval_audit_chain_sequence", 0))
+    if direct_event_id:
+        approval_event = await ctx.store.get(VBS_AUDIT_EVENTS, direct_event_id)
+        if not approval_event or approval_event.data.get("brand_id") != workspace.data["brand_id"] or approval_event.data.get("tenant_id") != workspace.data["tenant_id"] or approval_event.data.get("vbs_id") != vbs.id or approval_event.data.get("event_type") != "vbs_approved_current" or approval_event.data.get("chain_sequence") != direct_sequence:
+            return ApprovalEvidenceBasisIntegrity(
+                id=f"approval-evidence-basis:{vbs.id}", title="VBS approval evidence basis",
+                brand_id=vbs.data.get("brand_id", ""), vbs_id=vbs.id,
+                snapshot_hash=stored_hash, evidence_count=len(snapshot), valid=False,
+                message="The approved VBS no longer points to its exact sealed approval audit event.",
+            )
+    else:
+        page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="-occurred_at", limit=500)
+        approval_event = next((item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("vbs_id") == vbs.id and item.data.get("event_type") == "vbs_approved_current"), None)
     metadata = approval_event.data.get("immutable_metadata", {}) if approval_event else {}
     if approval_event and approval_event.data.get("integrity_version") == 3:
         expected = {
@@ -879,7 +892,7 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
         },
     )
     basis_note = f" Evidence basis: {len(evidence_snapshot)} reviewed-valid reference(s), fingerprint {evidence_snapshot_hash[:12]}."
-    await _append_vbs_audit(
+    approval_event = await _append_vbs_audit(
         ctx,
         brand_id=brand_id,
         vbs_id=candidate.id,
@@ -892,6 +905,12 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
             "workspace_version": advanced_workspace.data["version"],
         },
     )
+    approved_vbs = await ctx.store.get(VBS_SYSTEMS, candidate.id)
+    await ctx.store.update(VBS_SYSTEMS, candidate.id, {
+        **approved_vbs.data,
+        "approval_audit_event_id": approval_event.id,
+        "approval_audit_chain_sequence": approval_event.data["chain_sequence"],
+    })
     return ActionResult.success(
         {
             "vbs_id": candidate.id,

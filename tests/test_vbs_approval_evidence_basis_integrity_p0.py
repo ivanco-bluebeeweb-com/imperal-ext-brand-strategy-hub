@@ -66,8 +66,21 @@ async def test_tampered_approved_evidence_basis_is_reported_and_blocks_profile_d
     )
     assert approved.status == "success"
 
+    vbs = await ctx.store.get(m.VBS_SYSTEMS, draft.data["vbs_id"])
+    assert vbs.data["approval_audit_event_id"]
+    assert vbs.data["approval_audit_chain_sequence"] > 0
+
+    original_vbs_data = dict(vbs.data)
+    await ctx.store.update(m.VBS_SYSTEMS, vbs.id, {**vbs.data, "approval_audit_event_id": "missing-event"})
+    broken_link = await m.verify_visual_brand_approval_evidence_basis(
+        ctx, VerifyVisualBrandApprovalEvidenceBasisParams(brand_id=brand_id, vbs_id=vbs.id)
+    )
+    assert broken_link.status == "success"
+    assert broken_link.data.valid is False
+    await ctx.store.update(m.VBS_SYSTEMS, vbs.id, original_vbs_data)
+
     approval_events = await ctx.store.query(m.VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, limit=50)
-    approval_event = next(item for item in approval_events.data if item.data.get("event_type") == "vbs_approved_current")
+    approval_event = next(item for item in approval_events.data if item.id == original_vbs_data["approval_audit_event_id"])
     await ctx.store.update(
         m.VBS_AUDIT_EVENTS,
         approval_event.id,
