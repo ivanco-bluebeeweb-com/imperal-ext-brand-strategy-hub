@@ -2366,26 +2366,39 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     vbs_profile_page = None
     vbs_membership_page = None
     vbs_incident_page = None
+    vbs_load_error = ""
+    vbs_load_stage = ""
     if requested_tab == "visual_system":
-        vbs_workspace = await _workspace_for_brand(ctx, brand_id)
-        actor_id, tenant_id = _actor(ctx)
-        vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
-        vbs_workspace_owned = bool(vbs_membership)
-        vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
-        vbs_legacy_owner_can_migrate = bool(
-            vbs_workspace
-            and not vbs_membership
-            and vbs_workspace.data.get("access_model_version", 1) < 2
-            and vbs_workspace.data.get("tenant_id") == tenant_id
-            and vbs_workspace.data.get("owner_id") == actor_id
-        )
-        if vbs_workspace_owned:
-            vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
-            vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
-            vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
-            vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
-            vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
-            vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+        try:
+            vbs_load_stage = "workspace"
+            vbs_workspace = await _workspace_for_brand(ctx, brand_id)
+            actor_id, tenant_id = _actor(ctx)
+            vbs_load_stage = "membership"
+            vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
+            vbs_workspace_owned = bool(vbs_membership)
+            vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
+            vbs_legacy_owner_can_migrate = bool(
+                vbs_workspace
+                and not vbs_membership
+                and vbs_workspace.data.get("access_model_version", 1) < 2
+                and vbs_workspace.data.get("tenant_id") == tenant_id
+                and vbs_workspace.data.get("owner_id") == actor_id
+            )
+            if vbs_workspace_owned:
+                vbs_load_stage = "VBS revisions"
+                vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+                vbs_load_stage = "audit events"
+                vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
+                vbs_load_stage = "evidence"
+                vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+                vbs_load_stage = "Visual Profiles"
+                vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+                vbs_load_stage = "memberships"
+                vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
+                vbs_load_stage = "integrity incidents"
+                vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+        except Exception as exc:  # keep VBS storage failures inside the VBS tab
+            vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
@@ -2492,7 +2505,16 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     # No people, consent, external evidence or media actions are exposed
     # here. This spike validates the safe manual control path for a brand-
     # scoped, versioned non-personal strategic record first.
-    if not vbs_workspace:
+    if vbs_load_error:
+        vbs_tab = ui.Alert(
+            title="Visual System data could not load",
+            message=(
+                "The rest of this brand remains available. Please record this reference "
+                f"for support: brand={brand_id}; view=visual_system; stage={vbs_load_error}."
+            ),
+            type="warning",
+        )
+    elif not vbs_workspace:
         vbs_tab = ui.Stack(
             direction="v", gap=3,
             children=[
