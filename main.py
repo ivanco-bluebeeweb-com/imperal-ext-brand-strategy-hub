@@ -99,6 +99,24 @@ ROLE_PERMISSIONS = {
     "viewer": {"read"},
 }
 
+# Human-readable labels for internal status enum values shown in the panel.
+# The underlying data/API values never change (audit trail + compatibility);
+# this is a display-only mapping applied at render time.
+STATUS_LABELS = {
+    "draft": "Draft",
+    "approved_current": "Approved · active now",
+    "superseded": "Superseded (replaced by a newer approval)",
+    "discovered": "Not yet reviewed",
+    "reviewed_valid": "Reviewed — valid",
+    "hypothesis": "Reviewed — marked as hypothesis",
+    "rejected": "Rejected",
+    "archived": "Archived",
+}
+
+
+def _status_label(value: str) -> str:
+    return STATUS_LABELS.get(value, value)
+
 
 async def _membership_for_actor(ctx, workspace):
     """Resolve an active tenant-local membership; ordinary ACL never trusts legacy owner fields."""
@@ -2642,17 +2660,27 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 else None
             )
             profile_approval_context[profile.id] = (bound_vbs, bound_basis)
+        _vbs_max_revision = max((d.data.get("revision", 0) for d in vbs_revisions), default=0)
         revision_rows = [
             ui.Card(
-                title=f"Revision {d.data.get('revision', '?')} · {d.data.get('status', 'draft')}",
+                title=f"Revision {d.data.get('revision', '?')} · {_status_label(d.data.get('status', 'draft'))}",
                 subtitle=d.data.get("visual_intent", "No visual intent recorded"),
-                content=ui.KeyValue(columns=1, items=[
-                    {"key": "Realism", "value": d.data.get("realism_level") or "—"},
-                    {"key": "Core rules", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
-                    {"key": "Avoid", "value": "; ".join(d.data.get("prohibited_patterns", [])) or "—"},
-                    {"key": "Change note", "value": d.data.get("change_note") or "—"},
-                    {"key": "Evidence basis", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reviewed-valid reference(s) · {d.data.get('approval_evidence_snapshot_hash', '')[:12]}… · {'verified' if vbs_basis_by_id[d.id].valid else 'MISMATCH'}") if d.data.get("status") == "approved_current" else "Captured when approved"},
-                ]),
+                content=ui.Stack(
+                    direction="v", gap=2,
+                    children=(
+                        [ui.Badge(label="Old draft — a newer revision exists", color="gray")]
+                        if d.data.get("status") == "draft" and d.data.get("revision", 0) < _vbs_max_revision
+                        else []
+                    ) + [
+                        ui.KeyValue(columns=1, items=[
+                            {"key": "Realism", "value": d.data.get("realism_level") or "—"},
+                            {"key": "Core rules", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
+                            {"key": "Avoid", "value": "; ".join(d.data.get("prohibited_patterns", [])) or "—"},
+                            {"key": "Change note", "value": d.data.get("change_note") or "—"},
+                            {"key": "Evidence basis", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reviewed-valid reference(s) · {d.data.get('approval_evidence_snapshot_hash', '')[:12]}… · {'verified' if vbs_basis_by_id[d.id].valid else 'MISMATCH'}") if d.data.get("status") == "approved_current" else "Captured when approved"},
+                        ]),
+                    ],
+                ),
                 footer=(
                     ui.Form(
                         action="activate_visual_brand_system",
@@ -2667,18 +2695,42 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ),
             ) for d in vbs_revisions
         ]
+        # Level 0 UX fix (Ana persona feedback, note fc16af01): one plain-language
+        # status line up top instead of making the user piece it together from
+        # three separate cards further down the page.
+        if current_profile and current_vbs:
+            vbs_summary_banner = ui.Alert(
+                title="Brand visual rules are approved and active",
+                message=(
+                    f"Visual Brand System revision {current_vbs.data.get('revision', '?')} and "
+                    f"Visual Profile revision {current_profile.data.get('revision', '?')} are approved. "
+                    "Content Strategy and Media Studio can already use this baseline."
+                ),
+                type="success",
+            )
+        elif current_vbs:
+            vbs_summary_banner = ui.Alert(
+                title="Visual rules approved — profile not finished yet",
+                message=(
+                    f"Visual Brand System revision {current_vbs.data.get('revision', '?')} is approved, "
+                    "but no Visual Profile has been approved yet. Downstream handoffs stay blocked until one is."
+                ),
+                type="info",
+            )
+        else:
+            vbs_summary_banner = ui.Alert(
+                title="No approved visual rules yet",
+                message="Create and approve a Visual Brand System (VBS) draft below to give this brand a visual baseline.",
+                type="info",
+            )
         vbs_tab = ui.Stack(
             direction="v", gap=3,
             children=[
                 ui.Alert(
                     title="Critical changes paused — audit integrity check failed",
-                    message="The VBS audit seal, ordered hash chain, or workspace anchor no longer matches. Draft approvals, evidence decisions and access changes are blocked until this is investigated. Use the read-only audit verification below; it does not alter records.",
+                    message="The VBS audit seal, ordered hash chain, or workspace anchor no longer matches. Draft approvals, evidence decisions and access changes are blocked until this is investigated. Use the read-only audit verification further down; it does not alter records.",
                     type="error",
-                ) if vbs_integrity_failed else ui.Alert(
-                    title="Audit integrity status",
-                    message=vbs_integrity.message,
-                    type="success",
-                ),
+                ) if vbs_integrity_failed else vbs_summary_banner,
                 ui.Card(
                     title="Acknowledge integrity incident",
                     subtitle="Records that an owner reviewed the mismatch. It never changes audit history or removes the critical-change block.",
@@ -2705,12 +2757,24 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                             ]) for incident in vbs_incidents
                         ] or [ui.Text("No integrity incidents have been acknowledged.")],
                     ),
-                ),
+                ) if vbs_incidents else ui.Text("", variant="caption"),
                 ui.Card(
                     title="Workspace state",
                     content=ui.KeyValue(columns=2, items=[
-                        {"key": "Workspace version", "value": str(vbs_workspace.data.get("version", 1))},
-                        {"key": "Current revision", "value": str(current_vbs.data.get("revision")) if current_vbs else "Not approved"},
+                        {
+                            "key": "Workspace version",
+                            "value": ui.Tooltip(
+                                content="Internal change counter — goes up on every save, approval or access change here. Not the revision number.",
+                                children=ui.Text(str(vbs_workspace.data.get("version", 1))),
+                            ),
+                        },
+                        {
+                            "key": "Current revision",
+                            "value": ui.Tooltip(
+                                content="Which numbered VBS draft is the one currently approved and in use.",
+                                children=ui.Text(str(current_vbs.data.get("revision")) if current_vbs else "Not approved"),
+                            ),
+                        },
                         {"key": "Scope", "value": "P0: non-personal visual rules only"},
                         {"key": "People/media", "value": "Blocked pending privacy/storage spikes"},
                     ]),
@@ -2765,7 +2829,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ),
                 ui.Card(
                     title="Create next VBS draft",
-                    subtitle="Saving creates a new revision; it does not overwrite history.",
+                    subtitle="VBS = Visual Brand System, this brand's approved visual rules. Saving creates a new revision; it does not overwrite history.",
                     content=ui.Form(
                         action="create_visual_brand_system",
                         submit_label="Save draft revision",
@@ -2798,6 +2862,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         },
                         children=[
                             ui.Input(param_name="source_url", placeholder="https://public-source.example/research"),
+                            ui.Text("Tip: a link to a photo, logo file, or competitor page works well as visual evidence.", variant="caption"),
                             ui.Input(param_name="source_title", placeholder="Source title (optional)"),
                             ui.TextArea(param_name="observation", placeholder="What does this source appear to support? This remains unreviewed.", rows=3),
                         ],
@@ -2817,7 +2882,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 title=evidence.data.get("source_title") or evidence.data.get("source_url", "Reference"),
                                 subtitle=evidence.data.get("source_url", ""),
                                 content=ui.KeyValue(columns=1, items=[
-                                    {"key": "Status", "value": evidence.data.get("status", "discovered")},
+                                    {"key": "Status", "value": _status_label(evidence.data.get("status", "discovered"))},
                                     {"key": "Observation", "value": evidence.data.get("observation", "—")},
                                     {"key": "Review note", "value": evidence.data.get("review_note", "—")},
                                 ]),
@@ -2900,13 +2965,13 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         direction="v", gap=2,
                         children=[
                             ui.Card(
-                                title=f"Profile revision {profile.data.get('revision', '?')} · {profile.data.get('status', 'draft')}",
+                                title=f"Profile revision {profile.data.get('revision', '?')} · {_status_label(profile.data.get('status', 'draft'))}",
                                 subtitle=profile.data.get("profile_summary", ""),
                                 content=ui.KeyValue(columns=1, items=[
                                     {"key": "VBS baseline", "value": f"Revision {profile.data.get('vbs_revision', '?')}"},
                                     {"key": "Evidence", "value": str(len(profile.data.get('evidence_ids', [])))},
                                     {"key": "Snapshot hash", "value": profile.data.get("snapshot_hash", "—")},
-                                    {"key": "Approval context", "value": (f"Approved VBS r{profile_approval_context[profile.id][0].data.get('revision', '?')} · {profile_approval_context[profile.id][1].evidence_count} basis reference(s) · verified") if profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else ("VBS evidence-basis mismatch — approval blocked" if profile_approval_context[profile.id][0] else "Baseline is no longer current")},
+                                    {"key": "Bound to", "value": (f"Approved VBS r{profile_approval_context[profile.id][0].data.get('revision', '?')}") if profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else ("VBS evidence-basis mismatch — approval blocked" if profile_approval_context[profile.id][0] else "Baseline is no longer current")},
                                 ]),
                                 footer=(
                                     ui.Form(
@@ -2971,33 +3036,46 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                     title=f"Revision history ({len(vbs_revisions)})",
                     content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No VBS revisions yet — create the first draft above.", icon="Palette"),
                 ),
-                ui.Card(
-                    title="Audit-chain status",
-                    subtitle="Read-only workspace anchor for chained audit events. A mismatch blocks critical changes.",
-                    content=ui.KeyValue(columns=3, items=[
-                        {"key": "Chain sequence", "value": str(vbs_integrity.chain_sequence)},
-                        {"key": "Chained events", "value": str(vbs_integrity.chained_events)},
-                        {"key": "Anchor fingerprint", "value": (vbs_integrity.chain_head[:12] + "…") if vbs_integrity.chain_head else "Not started"},
-                    ]),
-                ),
-                ui.Card(
-                    title=f"Audit trail ({len(vbs_audit_events)})",
-                    subtitle="Append-only P0 record of workspace, draft and approval actions. Sealed entries can be verified without changing them.",
-                    footer=ui.Form(
-                        action="verify_visual_brand_audit_integrity",
-                        submit_label="Verify sealed audit integrity",
-                        defaults={"brand_id": brand_id},
-                        children=[],
-                    ),
-                    content=ui.Stack(
-                        direction="v", gap=1,
-                        children=[
-                            ui.Text(
-                                f"{event.data.get('occurred_at', '')} · {event.data.get('event_type', 'event')} · {event.data.get('details', '')}",
-                                variant="caption",
-                            ) for event in vbs_audit_events
-                        ],
-                    ) if vbs_audit_events else ui.Empty(message="No VBS audit events yet.", icon="History"),
+                ui.Accordion(
+                    sections=[
+                        {
+                            "id": "vbs-technical-details",
+                            "title": "Technical details: audit chain & integrity log",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
+                                    ui.Card(
+                                        title="Audit-chain status",
+                                        subtitle="Read-only workspace anchor for chained audit events. A mismatch blocks critical changes.",
+                                        content=ui.KeyValue(columns=3, items=[
+                                            {"key": "Chain sequence", "value": str(vbs_integrity.chain_sequence)},
+                                            {"key": "Chained events", "value": str(vbs_integrity.chained_events)},
+                                            {"key": "Anchor fingerprint", "value": (vbs_integrity.chain_head[:12] + "…") if vbs_integrity.chain_head else "Not started"},
+                                        ]),
+                                    ),
+                                    ui.Card(
+                                        title=f"Audit trail ({len(vbs_audit_events)})",
+                                        subtitle="Append-only P0 record of workspace, draft and approval actions. Sealed entries can be verified without changing them.",
+                                        footer=ui.Form(
+                                            action="verify_visual_brand_audit_integrity",
+                                            submit_label="Verify sealed audit integrity",
+                                            defaults={"brand_id": brand_id},
+                                            children=[],
+                                        ),
+                                        content=ui.Stack(
+                                            direction="v", gap=1,
+                                            children=[
+                                                ui.Text(
+                                                    f"{event.data.get('occurred_at', '')} · {event.data.get('event_type', 'event')} · {event.data.get('details', '')}",
+                                                    variant="caption",
+                                                ) for event in vbs_audit_events
+                                            ],
+                                        ) if vbs_audit_events else ui.Empty(message="No VBS audit events yet.", icon="History"),
+                                    ),
+                                ],
+                            ),
+                        },
+                    ],
                 ),
             ],
         )
