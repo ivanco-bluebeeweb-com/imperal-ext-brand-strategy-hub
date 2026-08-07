@@ -2760,21 +2760,10 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ) if vbs_incidents else ui.Text("", variant="caption"),
                 ui.Card(
                     title="Workspace state",
+                    subtitle="Workspace version is an internal change counter (goes up on every save/approval/access change) — it is not the revision number below.",
                     content=ui.KeyValue(columns=2, items=[
-                        {
-                            "key": "Workspace version",
-                            "value": ui.Tooltip(
-                                content="Internal change counter — goes up on every save, approval or access change here. Not the revision number.",
-                                children=ui.Text(str(vbs_workspace.data.get("version", 1))),
-                            ),
-                        },
-                        {
-                            "key": "Current revision",
-                            "value": ui.Tooltip(
-                                content="Which numbered VBS draft is the one currently approved and in use.",
-                                children=ui.Text(str(current_vbs.data.get("revision")) if current_vbs else "Not approved"),
-                            ),
-                        },
+                        {"key": "Workspace version", "value": str(vbs_workspace.data.get("version", 1))},
+                        {"key": "Current revision", "value": str(current_vbs.data.get("revision")) if current_vbs else "Not approved"},
                         {"key": "Scope", "value": "P0: non-personal visual rules only"},
                         {"key": "People/media", "value": "Blocked pending privacy/storage spikes"},
                     ]),
