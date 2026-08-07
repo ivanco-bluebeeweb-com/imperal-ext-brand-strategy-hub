@@ -125,6 +125,11 @@
             "default": 1,
             "title": "Version",
             "type": "integer"
+          },
+          "access_model_version": {
+            "default": 1,
+            "title": "Access Model Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -136,6 +141,141 @@
         "x-sdl": "entity"
       },
       "event": "brand-strategy-hub.initialize_visual_brand_workspace",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "migrate_visual_brand_access",
+      "description": "Explicitly migrate one legacy VBS workspace from its founding owner field to the P0 membership access model.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:brand_membership",
+        "update:vbs_workspace"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of a legacy initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Legacy workspace version shown to its founding owner; blocks stale migration",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id",
+          "expected_workspace_version"
+        ],
+        "title": "MigrateVisualBrandAccessParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Private ownership boundary and optimistic-concurrency counter for one brand.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "ready",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "default": "",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          },
+          "access_model_version": {
+            "default": 1,
+            "title": "Access Model Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualBrandWorkspace",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.migrate_visual_brand_access",
       "background": false,
       "long_running": false,
       "scopes": [],

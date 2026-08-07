@@ -39,6 +39,7 @@ class VisualBrandWorkspace(sdl.Entity):
     owner_id: str = ""
     tenant_id: str = ""
     version: int = 1
+    access_model_version: int = 1
     status: str = "ready"
 
 
@@ -268,6 +269,11 @@ class InitializeVisualBrandWorkspaceParams(BaseModel):
             "brand to the current tenant and workspace owner."
         ),
     )
+
+
+class MigrateVisualBrandAccessParams(BaseModel):
+    brand_id: str = Field(description="UUID of a legacy initialized VBS workspace — never invented")
+    expected_workspace_version: int = Field(ge=1, description="Legacy workspace version shown to its founding owner; blocks stale migration")
 
 
 class ListBrandMembershipsParams(BaseModel):

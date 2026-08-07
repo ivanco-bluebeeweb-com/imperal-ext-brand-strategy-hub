@@ -31,7 +31,7 @@ from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 from schemas import (
     AddCompetitorParams, ActivateVisualBrandSystemParams, ActivateVisualProfileParams,
     BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
-    InitializeVisualBrandWorkspaceParams,
+    InitializeVisualBrandWorkspaceParams, MigrateVisualBrandAccessParams,
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
@@ -98,12 +98,10 @@ ROLE_PERMISSIONS = {
 
 
 async def _membership_for_actor(ctx, workspace):
-    """Resolve the caller's active tenant-local membership, preserving legacy owner access."""
+    """Resolve an active tenant-local membership; ordinary ACL never trusts legacy owner fields."""
     actor_id, tenant_id = _actor(ctx)
     if not actor_id or not tenant_id or workspace.data.get("tenant_id") != tenant_id:
         return None
-    if workspace.data.get("owner_id") == actor_id:
-        return {"user_id": actor_id, "role": "owner", "status": "active", "legacy_owner": True}
     page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": workspace.data["brand_id"]}, limit=200)
     return next((item.data for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == actor_id and item.data.get("status") == "active"), None)
 
@@ -137,9 +135,6 @@ async def _active_memberships(ctx, workspace):
     """Return every active membership for one tenant-local workspace, including its legacy owner."""
     page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": workspace.data["brand_id"]}, limit=200)
     records = [item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "active"]
-    owner_id = workspace.data.get("owner_id")
-    if owner_id and not any(item.data.get("user_id") == owner_id for item in records):
-        return [{"id": "legacy-owner", "data": {"brand_id": workspace.data["brand_id"], "tenant_id": workspace.data["tenant_id"], "user_id": owner_id, "role": "owner", "status": "active", "legacy_owner": True}}] + [{"id": item.id, "data": item.data} for item in records]
     return [{"id": item.id, "data": item.data} for item in records]
 
 
@@ -387,6 +382,7 @@ async def initialize_visual_brand_workspace(ctx, params: InitializeVisualBrandWo
             "tenant_id": tenant_id,
             "owner_id": actor_id,
             "version": 1,
+            "access_model_version": 2,
             "status": "ready",
             "created_at": _now_iso(),
         },
@@ -413,6 +409,73 @@ async def initialize_visual_brand_workspace(ctx, params: InitializeVisualBrandWo
     return ActionResult.success(
         {"workspace_id": workspace.id, "brand_id": params.brand_id, "version": 1},
         "VBS workspace initialized. You can now create its first draft.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "migrate_visual_brand_access",
+    description="Explicitly migrate one legacy VBS workspace from its founding owner field to the P0 membership access model.",
+    action_type="write",
+    effects=["create:brand_membership", "update:vbs_workspace"],
+    event="brand-strategy-hub.migrate_visual_brand_access",
+    data_model=VisualBrandWorkspace,
+)
+async def migrate_visual_brand_access(ctx, params: MigrateVisualBrandAccessParams) -> ActionResult[VisualBrandWorkspace]:
+    """Perform the one-time, owner-confirmed legacy ACL migration without touching VBS content."""
+    workspace = await _workspace_for_brand(ctx, params.brand_id)
+    if not workspace:
+        return ActionResult.error("The VBS workspace is not initialized for this brand.", retryable=False, code="VBS_WORKSPACE_NOT_INITIALIZED")
+    actor_id, tenant_id = _actor(ctx)
+    if (
+        not actor_id
+        or not tenant_id
+        or workspace.data.get("tenant_id") != tenant_id
+        or workspace.data.get("owner_id") != actor_id
+    ):
+        return ActionResult.error("Only this legacy workspace's founding owner in its tenant may migrate access.", retryable=False, code="VBS_ACCESS_DENIED")
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before migrating access.", retryable=True, code="VBS_STALE_WORKSPACE")
+    page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": params.brand_id}, limit=200)
+    owner_membership = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == actor_id and item.data.get("status") == "active"), None)
+    if workspace.data.get("access_model_version", 1) >= 2 and owner_membership:
+        return ActionResult.success(
+            VisualBrandWorkspace(id=workspace.id, title=params.brand_id, **workspace.data),
+            "VBS access already uses the membership model.",
+            refresh_panels=["brand_detail"],
+        )
+    advanced, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
+    if error:
+        return error
+    if not owner_membership:
+        await ctx.store.create(
+            VBS_MEMBERSHIPS,
+            {
+                "brand_id": params.brand_id,
+                "tenant_id": tenant_id,
+                "user_id": actor_id,
+                "role": "owner",
+                "status": "active",
+                "workspace_version": advanced.data["version"],
+                "created_by": actor_id,
+                "created_at": _now_iso(),
+            },
+        )
+    migrated = await ctx.store.update(
+        VBS_WORKSPACES,
+        advanced.id,
+        {**advanced.data, "access_model_version": 2, "access_model_migrated_at": _now_iso()},
+    )
+    await _append_vbs_audit(
+        ctx,
+        brand_id=params.brand_id,
+        vbs_id="",
+        event_type="membership_model_migrated",
+        details="Migrated the legacy founding-owner access record to one active owner membership.",
+    )
+    return ActionResult.success(
+        VisualBrandWorkspace(id=migrated.id, title=params.brand_id, **migrated.data),
+        "VBS access migrated to the membership model.",
         refresh_panels=["brand_detail"],
     )
 
@@ -1873,6 +1936,13 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
     vbs_workspace_owned = bool(vbs_membership)
     vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
+    vbs_legacy_owner_can_migrate = bool(
+        vbs_workspace
+        and not vbs_membership
+        and vbs_workspace.data.get("access_model_version", 1) < 2
+        and vbs_workspace.data.get("tenant_id") == tenant_id
+        and vbs_workspace.data.get("owner_id") == actor_id
+    )
     vbs_page = None
     vbs_audit_page = None
     vbs_evidence_page = None
@@ -2026,6 +2096,26 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             ),
                         ],
                     ),
+                ),
+            ],
+        )
+    elif vbs_legacy_owner_can_migrate:
+        vbs_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Alert(
+                    title="Access model migration required",
+                    message="This legacy VBS workspace still uses its founding-owner record. Migrate it explicitly to enable the private membership model; no VBS, evidence or Profile content will change.",
+                    type="info",
+                ),
+                ui.Form(
+                    action="migrate_visual_brand_access",
+                    submit_label="Migrate workspace access",
+                    defaults={
+                        "brand_id": brand_id,
+                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                    },
+                    children=[],
                 ),
             ],
         )
