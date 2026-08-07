@@ -2332,14 +2332,7 @@ async def brands_panel(ctx, **kwargs) -> object:
     return ui.Stack(direction="v", gap=3, children=children)
 
 
-@ext.panel(
-    "brand_detail",
-    slot="center",
-    title="Brand Detail",
-    icon="🎯",
-    center_overlay=True,
-)
-async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:
+async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:
     """Detail overlay for one brand: action bar up top, then a tab switcher
     for Profile / SWOT / Gap Analysis / Competitors / Segments. Tabs are
     plain Buttons that re-call this same panel with a `tab` param (not
@@ -3139,6 +3132,26 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         direction="v", gap=3,
         children=[header, ui.Divider(), tab_switcher, active_content],
     )
+
+
+@ext.panel(
+    "brand_detail",
+    slot="center",
+    title="Brand Detail",
+    icon="🎯",
+    center_overlay=True,
+)
+async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:
+    """Render brand detail without leaving the panel in an infinite loading state."""
+    try:
+        return await _render_brand_detail_panel(ctx, brand_id=brand_id, tab=tab, **kwargs)
+    except Exception as exc:  # panel errors must be visible rather than a blank loading overlay
+        return ui.Error(
+            message=(
+                "Brand detail could not load. Please record this reference for support: "
+                f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}."
+            )
+        )
 
 
 def _swot_list(items: list) -> object:
