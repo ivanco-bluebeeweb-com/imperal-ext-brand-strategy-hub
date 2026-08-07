@@ -91,6 +91,13 @@ async def test_roles_are_enforced_server_side_and_membership_is_tenant_local():
     assert cross_tenant.status == "error"
     assert cross_tenant.error_code == "VBS_ACCESS_DENIED"
 
+    viewer_panel = await m.brand_detail_panel(viewer, brand_id=brand_id, tab="visual_system")
+    rendered_viewer = repr(viewer_panel)
+    assert "Editor access required" in rendered_viewer
+    assert "Save review decision" not in rendered_viewer
+    assert "Approve as current" not in rendered_viewer
+    assert "Save profile draft" not in rendered_viewer
+
 
 @pytest.mark.asyncio
 async def test_only_owner_manages_memberships_and_founding_owner_is_protected():

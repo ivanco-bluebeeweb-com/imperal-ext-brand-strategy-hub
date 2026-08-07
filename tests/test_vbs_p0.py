@@ -196,7 +196,7 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "Private workspace access" in rendered
     assert "set_brand_membership" in rendered
     assert "Known Imperal user ID" in rendered
-    assert "Approved VBS required" in rendered
+    assert "Editor access and approved VBS required" in rendered
     assert "Audit trail" in rendered
     assert "People/media" in rendered
     assert "Blocked pending privacy/storage spikes" in rendered

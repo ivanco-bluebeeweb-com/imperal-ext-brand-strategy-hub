@@ -2623,6 +2623,10 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             ui.TagInput(param_name="prohibited_patterns", placeholder="Add a prohibited pattern and press Enter"),
                             ui.TextArea(param_name="change_note", placeholder="Why this revision is needed (optional)", rows=2),
                         ],
+                    ) if vbs_can_edit else ui.Alert(
+                        title="Editor access required",
+                        message="Only workspace editors and owners can create VBS drafts.",
+                        type="info",
                     ),
                 ),
                 ui.Card(
@@ -2640,6 +2644,10 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             ui.Input(param_name="source_title", placeholder="Source title (optional)"),
                             ui.TextArea(param_name="observation", placeholder="What does this source appear to support? This remains unreviewed.", rows=3),
                         ],
+                    ) if vbs_can_edit else ui.Alert(
+                        title="Editor access required",
+                        message="Only workspace editors and owners can register evidence references.",
+                        type="info",
                     ),
                 ),
                 ui.Card(
@@ -2677,7 +2685,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                         ),
                                         ui.TextArea(param_name="review_note", placeholder="Required: explain the decision", rows=2),
                                     ],
-                                ) if evidence.data.get("status", "discovered") != "archived" else None,
+                                ) if vbs_can_review and evidence.data.get("status", "discovered") != "archived" else None,
                             ) for evidence in vbs_evidence
                         ],
                     ) if vbs_evidence else ui.Empty(message="No evidence references yet. Add only public HTTPS sources you want to review later.", icon="Link"),
@@ -2701,9 +2709,9 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             ui.TextArea(param_name="art_direction", placeholder="Non-personal art direction (optional)", rows=2),
                             ui.TextArea(param_name="change_note", placeholder="Why this profile revision is needed (optional)", rows=2),
                         ],
-                    ) if current_vbs else ui.Alert(
-                        title="Approved VBS required",
-                        message="Visual Profiles can only be created from the current approved VBS baseline.",
+                    ) if current_vbs and vbs_can_edit else ui.Alert(
+                        title="Editor access and approved VBS required",
+                        message="Visual Profiles can only be created by workspace editors or owners from the current approved VBS baseline.",
                         type="info",
                     ),
                 ),
@@ -2733,7 +2741,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                         "expected_workspace_version": vbs_workspace.data.get("version", 1),
                                     },
                                     children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
-                                ) if profile.data.get("status") in {"draft", "in_review"} else None,
+                                ) if vbs_can_review and profile.data.get("status") in {"draft", "in_review"} else None,
                             ) for profile in vbs_profiles
                         ],
                     ) if vbs_profiles else ui.Empty(message="No Visual Profile drafts yet.", icon="Layers"),
