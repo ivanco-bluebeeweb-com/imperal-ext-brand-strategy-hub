@@ -2348,35 +2348,44 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
 
     data = brand_doc.data
     brand_name = data.get("brand_name", "") or brand_id
+    requested_tab = tab if tab in {"profile", "visual_system", "swot", "gap", "competitors", "segments"} else "profile"
 
     # P0 manual UI spike: this is intentionally a local projection only.
     # It must not call downstream apps while rendering because renderer-time
     # IPC may lose authenticated user context.
-    vbs_workspace = await _workspace_for_brand(ctx, brand_id)
-    actor_id, tenant_id = _actor(ctx)
-    vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
-    vbs_workspace_owned = bool(vbs_membership)
-    vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
-    vbs_legacy_owner_can_migrate = bool(
-        vbs_workspace
-        and not vbs_membership
-        and vbs_workspace.data.get("access_model_version", 1) < 2
-        and vbs_workspace.data.get("tenant_id") == tenant_id
-        and vbs_workspace.data.get("owner_id") == actor_id
-    )
+    # VBS records are loaded only for the Visual System tab. Profile and the
+    # strategy tabs must remain usable if private VBS storage is unavailable.
+    vbs_workspace = None
+    vbs_membership = None
+    vbs_workspace_owned = False
+    vbs_can_manage_access = False
+    vbs_legacy_owner_can_migrate = False
     vbs_page = None
     vbs_audit_page = None
     vbs_evidence_page = None
     vbs_profile_page = None
     vbs_membership_page = None
     vbs_incident_page = None
-    if vbs_workspace_owned:
-        vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
-        vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
-        vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
-        vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
-        vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
-        vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+    if requested_tab == "visual_system":
+        vbs_workspace = await _workspace_for_brand(ctx, brand_id)
+        actor_id, tenant_id = _actor(ctx)
+        vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
+        vbs_workspace_owned = bool(vbs_membership)
+        vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
+        vbs_legacy_owner_can_migrate = bool(
+            vbs_workspace
+            and not vbs_membership
+            and vbs_workspace.data.get("access_model_version", 1) < 2
+            and vbs_workspace.data.get("tenant_id") == tenant_id
+            and vbs_workspace.data.get("owner_id") == actor_id
+        )
+        if vbs_workspace_owned:
+            vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+            vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
+            vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+            vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+            vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
+            vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
 
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
@@ -3112,7 +3121,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         ("competitors", f"Competitors ({len(competitors)})", competitors_tab),
         ("segments", f"Segments ({len(segments)})", segments_tab),
     ]
-    active_tab = tab if tab in {t[0] for t in tab_defs} else "profile"
+    active_tab = requested_tab
 
     tab_switcher = ui.Row(
         gap=2,
