@@ -2491,6 +2491,18 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         ]
         profile_evidence_suggestions = [evidence.id for evidence in reviewed_valid_evidence]
         current_vbs_basis = vbs_basis_by_id.get(current_vbs.id) if current_vbs else None
+        profile_vbs_by_id = {
+            vbs.id: vbs for vbs in vbs_revisions
+        }
+        profile_approval_context = {}
+        for profile in vbs_profiles:
+            bound_vbs = profile_vbs_by_id.get(profile.data.get("vbs_id", ""))
+            bound_basis = (
+                await _verify_vbs_approval_evidence_basis(ctx, vbs_workspace, bound_vbs)
+                if bound_vbs and bound_vbs.data.get("status") == "approved_current"
+                else None
+            )
+            profile_approval_context[profile.id] = (bound_vbs, bound_basis)
         revision_rows = [
             ui.Card(
                 title=f"Revision {d.data.get('revision', '?')} · {d.data.get('status', 'draft')}",
@@ -2755,18 +2767,30 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                     {"key": "VBS baseline", "value": f"Revision {profile.data.get('vbs_revision', '?')}"},
                                     {"key": "Evidence", "value": str(len(profile.data.get('evidence_ids', [])))},
                                     {"key": "Snapshot hash", "value": profile.data.get("snapshot_hash", "—")},
-                                    {"key": "Approval context", "value": (f"Approved VBS r{current_vbs.data.get('revision', '?')} · {current_vbs_basis.evidence_count} basis reference(s) · {'verified' if current_vbs_basis and current_vbs_basis.valid else 'MISMATCH'}") if profile.data.get('vbs_id') == (current_vbs.id if current_vbs else '') else "Baseline is no longer current"},
+                                    {"key": "Approval context", "value": (f"Approved VBS r{profile_approval_context[profile.id][0].data.get('revision', '?')} · {profile_approval_context[profile.id][1].evidence_count} basis reference(s) · verified") if profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else ("VBS evidence-basis mismatch — approval blocked" if profile_approval_context[profile.id][0] else "Baseline is no longer current")},
                                 ]),
-                                footer=ui.Form(
-                                    action="activate_visual_profile",
-                                    submit_label="Approve as current profile",
-                                    defaults={
-                                        "profile_id": profile.id,
-                                        "expected_revision": profile.data.get("revision", 1),
-                                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
-                                    },
-                                    children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
-                                ) if vbs_can_review and profile.data.get("status") in {"draft", "in_review"} else None,
+                                footer=(
+                                    ui.Form(
+                                        action="activate_visual_profile",
+                                        submit_label="Approve as current profile",
+                                        defaults={
+                                            "profile_id": profile.id,
+                                            "expected_revision": profile.data.get("revision", 1),
+                                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                                        },
+                                        children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
+                                    ) if vbs_can_review else ui.Alert(
+                                        title="Reviewer access required",
+                                        message="Only workspace reviewers and owners can approve a Visual Profile.",
+                                        type="info",
+                                    )
+                                ) if profile.data.get("status") in {"draft", "in_review"} and profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else (
+                                    ui.Alert(
+                                        title="Profile approval blocked",
+                                        message="This draft is not bound to a current approved VBS with a verified evidence basis. Create a fresh profile snapshot after resolving the baseline.",
+                                        type="warning",
+                                    ) if profile.data.get("status") in {"draft", "in_review"} else None
+                                ),
                             ) for profile in vbs_profiles
                         ],
                     ) if vbs_profiles else ui.Empty(message="No Visual Profile drafts yet.", icon="Layers"),

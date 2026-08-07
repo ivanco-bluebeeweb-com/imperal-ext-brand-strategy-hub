@@ -197,3 +197,31 @@ async def test_profile_approval_rejects_a_draft_bound_to_a_superseded_vbs():
     assert rejected.error_code == "VISUAL_PROFILE_BASELINE_STALE"
     listed = await m.list_visual_profiles(ctx, ListVisualProfilesParams(brand_id=brand_id))
     assert listed.data.items[0].status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_profile_draft_ui_blocks_approval_when_its_vbs_basis_is_tampered():
+    ctx = MockContext(user_id="owner", tenant_id="tenant-a")
+    brand_id, version = await _brand_workspace_and_current_vbs(ctx)
+    profile = await m.create_visual_profile(
+        ctx,
+        CreateVisualProfileParams(
+            brand_id=brand_id,
+            expected_workspace_version=version,
+            profile_summary="Draft whose approval context must remain verifiable.",
+        ),
+    )
+    assert profile.status == "success"
+    vbs_page = await ctx.store.query(m.VBS_SYSTEMS, where={"brand_id": brand_id}, limit=10)
+    approved_vbs = next(item for item in vbs_page.data if item.data.get("status") == "approved_current")
+    await ctx.store.update(
+        m.VBS_SYSTEMS,
+        approved_vbs.id,
+        {**approved_vbs.data, "approval_evidence_snapshot_hash": "0" * 64},
+    )
+
+    panel = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
+    rendered = repr(panel)
+    assert "VBS evidence-basis mismatch — approval blocked" in rendered
+    assert "Profile approval blocked" in rendered
+    assert "Approve as current profile" not in rendered

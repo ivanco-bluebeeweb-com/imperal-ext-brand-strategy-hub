@@ -13,6 +13,7 @@ from schemas import (
     ActivateVisualBrandSystemParams,
     CreateBrandProfileParams,
     CreateVisualBrandSystemParams,
+    CreateVisualProfileParams,
     InitializeVisualBrandWorkspaceParams,
     ListBrandMembershipsParams,
     ListVisualBrandSystemsParams,
@@ -72,6 +73,26 @@ async def test_roles_are_enforced_server_side_and_membership_is_tenant_local():
         ),
     )
     assert approved.status == "success"
+
+    profile = await m.create_visual_profile(
+        editor,
+        CreateVisualProfileParams(
+            brand_id=brand_id,
+            expected_workspace_version=approved.data["workspace_version"],
+            profile_summary="Role-aware profile approval UI test.",
+        ),
+    )
+    assert profile.status == "success"
+    reviewer_panel = await m.brand_detail_panel(reviewer, brand_id=brand_id, tab="visual_system")
+    rendered_reviewer = repr(reviewer_panel)
+    assert "Approve as current profile" in rendered_reviewer
+    assert profile.data["profile_id"] in rendered_reviewer
+    assert "Approved VBS r1" in rendered_reviewer
+
+    editor_panel = await m.brand_detail_panel(editor, brand_id=brand_id, tab="visual_system")
+    rendered_editor = repr(editor_panel)
+    assert "Reviewer access required" in rendered_editor
+    assert "Approve as current profile" not in rendered_editor
 
     viewer_read = await m.list_visual_brand_systems(viewer, ListVisualBrandSystemsParams(brand_id=brand_id))
     assert viewer_read.status == "success"
