@@ -945,10 +945,12 @@ async def list_visual_brand_audit_events(ctx, params: ListVisualBrandAuditEvents
     workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
     if error:
         return error
-    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": params.brand_id}, order_by="-occurred_at", limit=params.limit)
+    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": params.brand_id}, limit=max(params.limit, 500))
+    matching = [d for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]]
+    matching.sort(key=lambda item: str(item.data.get("occurred_at", "")), reverse=True)
     items = [
         AuditEvent(id=d.id, title=d.data.get("event_type", "audit event"), **d.data)
-        for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]
+        for d in matching[: params.limit]
     ]
     return ActionResult.success(AuditEventList(items=items), f"Found {len(items)} VBS audit event(s).")
 
