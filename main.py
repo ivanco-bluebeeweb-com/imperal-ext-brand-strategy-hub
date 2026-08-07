@@ -30,7 +30,7 @@ from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
     AddCompetitorParams, ActivateVisualBrandSystemParams, ActivateVisualProfileParams,
-    BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
+    BuildApprovedVisualProfileHandoffParams, BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
     InitializeVisualBrandWorkspaceParams, MigrateVisualBrandAccessParams,
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
@@ -41,7 +41,7 @@ from schemas import (
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
-    ApprovalEvidenceBasisIntegrity, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
+    ApprovalEvidenceBasisIntegrity, ApprovedVisualProfileHandoff, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
     BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
@@ -1187,6 +1187,53 @@ async def resolve_current_visual_profile(ctx, params: ResolveCurrentVisualProfil
     if not vbs or vbs.data.get("tenant_id") != workspace.data["tenant_id"] or vbs.data.get("status") != "approved_current":
         return ActionResult.error("The current Visual Profile is not bound to an approved current VBS. Resolution is blocked.", retryable=False, code="VISUAL_PROFILE_BASELINE_STALE")
     return ActionResult.success(VisualProfile(id=current.id, title=f"Visual Profile revision {current.data.get('revision', 1)}", **current.data), "Resolved approved Visual Profile baseline.")
+
+
+@chat.function(
+    "build_approved_visual_profile_handoff",
+    description=(
+        "Build a read-only, non-personal approved Visual Profile baseline for downstream content planning. "
+        "It never creates, uploads, fetches, or generates media."
+    ),
+    action_type="read",
+    data_model=ApprovedVisualProfileHandoff,
+)
+async def build_approved_visual_profile_handoff(ctx, params: BuildApprovedVisualProfileHandoffParams) -> ActionResult[ApprovedVisualProfileHandoff]:
+    """Export only an integrity-verified approved visual baseline for downstream use."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "read")
+    if error:
+        return error
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
+    profiles = await ctx.store.query(VBS_PROFILES, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    profile = next((item for item in profiles.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
+    if not profile:
+        return ActionResult.error("An approved current Visual Profile is required before handoff.", retryable=False, code="VISUAL_PROFILE_CURRENT_REQUIRED")
+    vbs = await ctx.store.get(VBS_SYSTEMS, profile.data.get("vbs_id", ""))
+    if not vbs or vbs.data.get("tenant_id") != workspace.data["tenant_id"] or vbs.data.get("status") != "approved_current":
+        return ActionResult.error("The approved Visual Profile is not bound to an approved current VBS. Handoff is blocked.", retryable=False, code="VISUAL_PROFILE_BASELINE_STALE")
+    basis_error = await _require_vbs_approval_evidence_basis(ctx, workspace, vbs)
+    if basis_error:
+        return basis_error
+    handoff = ApprovedVisualProfileHandoff(
+        id=profile.id,
+        title=f"Approved Visual Profile revision {profile.data.get('revision', 1)}",
+        brand_id=params.brand_id,
+        profile_id=profile.id,
+        profile_revision=profile.data.get("revision", 0),
+        vbs_id=vbs.id,
+        vbs_revision=vbs.data.get("revision", 0),
+        visual_intent=vbs.data.get("visual_intent", ""),
+        realism_level=vbs.data.get("realism_level", ""),
+        core_rules=vbs.data.get("core_rules", []),
+        prohibited_patterns=vbs.data.get("prohibited_patterns", []),
+        profile_summary=profile.data.get("profile_summary", ""),
+        art_direction=profile.data.get("art_direction", ""),
+        evidence_count=len(profile.data.get("evidence_ids", [])),
+        snapshot_hash=profile.data.get("snapshot_hash", ""),
+    )
+    return ActionResult.success(handoff, "Approved non-personal Visual Profile handoff is ready for downstream content planning.")
 
 
 @chat.function(

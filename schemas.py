@@ -183,6 +183,23 @@ class VisualProfileList(sdl.EntityList[VisualProfile]):
     pass
 
 
+class ApprovedVisualProfileHandoff(sdl.Entity):
+    """Read-only non-personal visual baseline for downstream content planning."""
+    brand_id: str = ""
+    profile_id: str = ""
+    profile_revision: int = 0
+    vbs_id: str = ""
+    vbs_revision: int = 0
+    visual_intent: str = ""
+    realism_level: str = ""
+    core_rules: list[str] = []
+    prohibited_patterns: list[str] = []
+    profile_summary: str = ""
+    art_direction: str = ""
+    evidence_count: int = 0
+    snapshot_hash: str = ""
+
+
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
     brand_id: str = ""
@@ -425,6 +442,10 @@ class ReviewVisualEvidenceParams(BaseModel):
     expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the reviewer; blocks stale writes")
     decision: str = Field(description="One of: reviewed_valid, hypothesis, rejected, archived")
     review_note: str = Field(min_length=1, max_length=2000, description="Why this evidence received the review decision")
+
+
+class BuildApprovedVisualProfileHandoffParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
 
 
 class CreateVisualProfileParams(BaseModel):

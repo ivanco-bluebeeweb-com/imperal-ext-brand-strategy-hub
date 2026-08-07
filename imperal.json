@@ -3058,6 +3058,184 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "build_approved_visual_profile_handoff",
+      "description": "Build a read-only, non-personal approved Visual Profile baseline for downstream content planning. It never creates, uploads, fetches, or generates media.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "BuildApprovedVisualProfileHandoffParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Read-only non-personal visual baseline for downstream content planning.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "default": "",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_revision": {
+            "default": 0,
+            "title": "Profile Revision",
+            "type": "integer"
+          },
+          "vbs_id": {
+            "default": "",
+            "title": "Vbs Id",
+            "type": "string"
+          },
+          "vbs_revision": {
+            "default": 0,
+            "title": "Vbs Revision",
+            "type": "integer"
+          },
+          "visual_intent": {
+            "default": "",
+            "title": "Visual Intent",
+            "type": "string"
+          },
+          "realism_level": {
+            "default": "",
+            "title": "Realism Level",
+            "type": "string"
+          },
+          "core_rules": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Core Rules",
+            "type": "array"
+          },
+          "prohibited_patterns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Patterns",
+            "type": "array"
+          },
+          "profile_summary": {
+            "default": "",
+            "title": "Profile Summary",
+            "type": "string"
+          },
+          "art_direction": {
+            "default": "",
+            "title": "Art Direction",
+            "type": "string"
+          },
+          "evidence_count": {
+            "default": 0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "snapshot_hash": {
+            "default": "",
+            "title": "Snapshot Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ApprovedVisualProfileHandoff",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "register_visual_evidence",
       "description": "Register a private, unreviewed HTTPS reference for a VBS decision. P0 stores the reference only and never fetches the URL.",
       "action_type": "write",
