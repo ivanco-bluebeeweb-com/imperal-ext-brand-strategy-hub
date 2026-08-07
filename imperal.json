@@ -142,6 +142,484 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "list_brand_memberships",
+      "description": "List active private VBS brand memberships for an initialized workspace.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListBrandMembershipsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "BrandMembership": {
+            "description": "One active tenant-local role assignment for a private VBS workspace.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "default": "active",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "user_id": {
+                "default": "",
+                "title": "User Id",
+                "type": "string"
+              },
+              "role": {
+                "default": "viewer",
+                "title": "Role",
+                "type": "string"
+              },
+              "workspace_version": {
+                "default": 0,
+                "title": "Workspace Version",
+                "type": "integer"
+              },
+              "created_by": {
+                "default": "",
+                "title": "Created By",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "BrandMembership",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/BrandMembership"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BrandMembershipList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "set_brand_membership",
+      "description": "Add or update a tenant-local VBS brand role for a known Imperal user ID.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create_or_update:brand_membership"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "Known Imperal user ID in this tenant; email lookup is not available in P0",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          },
+          "role": {
+            "description": "One of: owner, editor, reviewer, viewer",
+            "title": "Role",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version shown to the owner; blocks stale access changes",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id",
+          "user_id",
+          "role",
+          "expected_workspace_version"
+        ],
+        "title": "SetBrandMembershipParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One active tenant-local role assignment for a private VBS workspace.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "user_id": {
+            "default": "",
+            "title": "User Id",
+            "type": "string"
+          },
+          "role": {
+            "default": "viewer",
+            "title": "Role",
+            "type": "string"
+          },
+          "workspace_version": {
+            "default": 0,
+            "title": "Workspace Version",
+            "type": "integer"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "BrandMembership",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.set_brand_membership",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "revoke_brand_membership",
+      "description": "Revoke an active tenant-local VBS brand membership while preserving the final owner.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:brand_membership"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "Known active member Imperal user ID",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version shown to the owner; blocks stale access changes",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id",
+          "user_id",
+          "expected_workspace_version"
+        ],
+        "title": "RevokeBrandMembershipParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One active tenant-local role assignment for a private VBS workspace.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "user_id": {
+            "default": "",
+            "title": "User Id",
+            "type": "string"
+          },
+          "role": {
+            "default": "viewer",
+            "title": "Role",
+            "type": "string"
+          },
+          "workspace_version": {
+            "default": 0,
+            "title": "Workspace Version",
+            "type": "integer"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "BrandMembership",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.revoke_brand_membership",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "create_visual_brand_system",
       "description": "Create the next draft revision of a brand's Visual Brand System. This P0 function accepts non-personal strategic rules only.",
       "action_type": "write",

@@ -37,9 +37,10 @@ from schemas import (
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
+    ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
     AuditEvent, AuditEventList, BrandContentHandoff,
-    BrandProfile, BrandProfileList, VisualBrandSystem, VisualBrandSystemList,
+    BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
     CompetitorProfile, CompetitorProfileList,
@@ -70,6 +71,7 @@ VBS_SYSTEMS = "visual_brand_systems"
 VBS_AUDIT_EVENTS = "visual_brand_audit_events"
 VBS_EVIDENCE = "visual_evidence"
 VBS_PROFILES = "visual_profiles"
+VBS_MEMBERSHIPS = "vbs_brand_memberships"
 
 
 def _actor(ctx) -> tuple[str, str]:
@@ -87,30 +89,58 @@ async def _workspace_for_brand(ctx, brand_id: str):
     return page.data[0] if page.data else None
 
 
-async def _require_vbs_workspace_owner(ctx, brand_id: str):
-    """Enforce tenant + owner isolation for every P0 VBS mutation/read.
+ROLE_PERMISSIONS = {
+    "owner": {"read", "edit", "review", "manage_access"},
+    "editor": {"read", "edit"},
+    "reviewer": {"read", "review"},
+    "viewer": {"read"},
+}
 
-    Legacy brand profiles are intentionally inaccessible to VBS functions
-    until their current owner explicitly initializes the VBS workspace. This
-    avoids silently assigning historical brand data to whichever tenant reads
-    it first.
-    """
+
+async def _membership_for_actor(ctx, workspace):
+    """Resolve the caller's active tenant-local membership, preserving legacy owner access."""
+    actor_id, tenant_id = _actor(ctx)
+    if not actor_id or not tenant_id or workspace.data.get("tenant_id") != tenant_id:
+        return None
+    if workspace.data.get("owner_id") == actor_id:
+        return {"user_id": actor_id, "role": "owner", "status": "active", "legacy_owner": True}
+    page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": workspace.data["brand_id"]}, limit=200)
+    return next((item.data for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == actor_id and item.data.get("status") == "active"), None)
+
+
+async def _require_vbs_access(ctx, brand_id: str, permission: str = "read"):
+    """Enforce private tenant membership and one server-side role permission per VBS action."""
     workspace = await _workspace_for_brand(ctx, brand_id)
     if not workspace:
-        return None, ActionResult.error(
+        return None, None, ActionResult.error(
             "The VBS workspace is not initialized for this brand. Initialize it explicitly first.",
             retryable=False,
             code="VBS_WORKSPACE_NOT_INITIALIZED",
         )
-    actor_id, tenant_id = _actor(ctx)
-    data = workspace.data
-    if not actor_id or not tenant_id or data.get("tenant_id") != tenant_id or data.get("owner_id") != actor_id:
-        return None, ActionResult.error(
-            "You do not have access to this brand's VBS workspace.",
+    membership = await _membership_for_actor(ctx, workspace)
+    if not membership or permission not in ROLE_PERMISSIONS.get(membership.get("role", ""), set()):
+        return None, None, ActionResult.error(
+            "You do not have the required access to this brand's VBS workspace.",
             retryable=False,
             code="VBS_ACCESS_DENIED",
         )
-    return workspace, None
+    return workspace, membership, None
+
+
+async def _require_vbs_workspace_owner(ctx, brand_id: str):
+    """Compatibility wrapper for remaining P0 reads; new actions use explicit permissions."""
+    workspace, _membership, error = await _require_vbs_access(ctx, brand_id, "read")
+    return workspace, error
+
+
+async def _active_memberships(ctx, workspace):
+    """Return every active membership for one tenant-local workspace, including its legacy owner."""
+    page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": workspace.data["brand_id"]}, limit=200)
+    records = [item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "active"]
+    owner_id = workspace.data.get("owner_id")
+    if owner_id and not any(item.data.get("user_id") == owner_id for item in records):
+        return [{"id": "legacy-owner", "data": {"brand_id": workspace.data["brand_id"], "tenant_id": workspace.data["tenant_id"], "user_id": owner_id, "role": "owner", "status": "active", "legacy_owner": True}}] + [{"id": item.id, "data": item.data} for item in records]
+    return [{"id": item.id, "data": item.data} for item in records]
 
 
 async def _advance_vbs_workspace(ctx, workspace, expected_version: int):
@@ -361,6 +391,18 @@ async def initialize_visual_brand_workspace(ctx, params: InitializeVisualBrandWo
             "created_at": _now_iso(),
         },
     )
+    await ctx.store.create(
+        VBS_MEMBERSHIPS,
+        {
+            "brand_id": params.brand_id,
+            "tenant_id": tenant_id,
+            "user_id": actor_id,
+            "role": "owner",
+            "status": "active",
+            "created_by": actor_id,
+            "created_at": _now_iso(),
+        },
+    )
     await _append_vbs_audit(
         ctx,
         brand_id=params.brand_id,
@@ -373,6 +415,81 @@ async def initialize_visual_brand_workspace(ctx, params: InitializeVisualBrandWo
         "VBS workspace initialized. You can now create its first draft.",
         refresh_panels=["brand_detail"],
     )
+
+
+@chat.function("list_brand_memberships", description="List active private VBS brand memberships for an initialized workspace.")
+async def list_brand_memberships(ctx, params: ListBrandMembershipsParams) -> ActionResult[BrandMembershipList]:
+    """List tenant-local roles without exposing memberships from another workspace."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "read")
+    if error:
+        return error
+    records = await _active_memberships(ctx, workspace)
+    items = [BrandMembership(id=item["id"], title=item["data"]["user_id"], **item["data"]) for item in records]
+    return ActionResult.success(BrandMembershipList(items=items), f"Found {len(items)} active brand membership(s).")
+
+
+@chat.function(
+    "set_brand_membership",
+    description="Add or update a tenant-local VBS brand role for a known Imperal user ID.",
+    action_type="write",
+    effects=["create_or_update:brand_membership"],
+    event="brand-strategy-hub.set_brand_membership",
+    data_model=BrandMembership,
+)
+async def set_brand_membership(ctx, params: SetBrandMembershipParams) -> ActionResult[BrandMembership]:
+    """Grant or change a role, guarded by owner permission and a workspace version."""
+    if params.role not in ROLE_PERMISSIONS:
+        return ActionResult.error("Role must be owner, editor, reviewer, or viewer.", retryable=False, code="VBS_ROLE_INVALID")
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "manage_access")
+    if error:
+        return error
+    if params.user_id == workspace.data.get("owner_id") and params.role != "owner":
+        return ActionResult.error("The workspace's founding owner remains an owner in P0.", retryable=False, code="VBS_LAST_OWNER_PROTECTED")
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before changing access.", retryable=True, code="VBS_STALE_WORKSPACE")
+    actor_id, tenant_id = _actor(ctx)
+    page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": params.brand_id}, limit=200)
+    existing = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == params.user_id), None)
+    advanced, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
+    if error:
+        return error
+    data = {"brand_id": params.brand_id, "tenant_id": tenant_id, "user_id": params.user_id, "role": params.role, "status": "active", "workspace_version": advanced.data["version"], "created_by": actor_id, "updated_at": _now_iso()}
+    record = await ctx.store.update(VBS_MEMBERSHIPS, existing.id, {**existing.data, **data}) if existing else await ctx.store.create(VBS_MEMBERSHIPS, {**data, "created_at": _now_iso()})
+    await _append_vbs_audit(ctx, brand_id=params.brand_id, vbs_id="", event_type="membership_set", details=f"Set {params.user_id} role to {params.role}.")
+    return ActionResult.success(BrandMembership(id=record.id, title=params.user_id, **record.data), "Brand membership saved.", refresh_panels=["brand_detail"])
+
+
+@chat.function(
+    "revoke_brand_membership",
+    description="Revoke an active tenant-local VBS brand membership while preserving the final owner.",
+    action_type="write",
+    effects=["update:brand_membership"],
+    event="brand-strategy-hub.revoke_brand_membership",
+    data_model=BrandMembership,
+)
+async def revoke_brand_membership(ctx, params: RevokeBrandMembershipParams) -> ActionResult[BrandMembership]:
+    """Revoke access fail-closed; the legacy workspace owner cannot be removed in P0."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "manage_access")
+    if error:
+        return error
+    if params.user_id == workspace.data.get("owner_id"):
+        return ActionResult.error("The workspace's founding owner cannot be revoked in P0.", retryable=False, code="VBS_LAST_OWNER_PROTECTED")
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before changing access.", retryable=True, code="VBS_STALE_WORKSPACE")
+    actor_id, tenant_id = _actor(ctx)
+    page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": params.brand_id}, limit=200)
+    record = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == params.user_id and item.data.get("status") == "active"), None)
+    if not record:
+        return ActionResult.error("Active brand membership not found.", retryable=False, code="VBS_MEMBERSHIP_NOT_FOUND")
+    active_owners = [item for item in await _active_memberships(ctx, workspace) if item["data"].get("role") == "owner"]
+    if record.data.get("role") == "owner" and len(active_owners) <= 1:
+        return ActionResult.error("At least one active owner must remain.", retryable=False, code="VBS_LAST_OWNER_PROTECTED")
+    advanced, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
+    if error:
+        return error
+    updated = await ctx.store.update(VBS_MEMBERSHIPS, record.id, {**record.data, "status": "revoked", "workspace_version": advanced.data["version"], "revoked_by": actor_id, "revoked_at": _now_iso()})
+    await _append_vbs_audit(ctx, brand_id=params.brand_id, vbs_id="", event_type="membership_revoked", details=f"Revoked {params.user_id} access.")
+    return ActionResult.success(BrandMembership(id=updated.id, title=params.user_id, **updated.data), "Brand membership revoked.", refresh_panels=["brand_detail"])
 
 
 @chat.function(
@@ -388,7 +505,7 @@ async def initialize_visual_brand_workspace(ctx, params: InitializeVisualBrandWo
 )
 async def create_visual_brand_system(ctx, params: CreateVisualBrandSystemParams) -> ActionResult[VisualBrandSystem]:
     """Create the next private VBS draft revision with stale-write protection."""
-    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "edit")
     if error:
         return error
     if workspace.data.get("version") != params.expected_workspace_version:
@@ -477,7 +594,7 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
     if not candidate:
         return ActionResult.error("VBS revision not found.", retryable=False, code="VBS_NOT_FOUND")
     brand_id = candidate.data.get("brand_id", "")
-    workspace, error = await _require_vbs_workspace_owner(ctx, brand_id)
+    workspace, _membership, error = await _require_vbs_access(ctx, brand_id, "review")
     if error:
         return error
     if candidate.data.get("tenant_id") != workspace.data.get("tenant_id"):
@@ -555,7 +672,7 @@ async def list_visual_brand_audit_events(ctx, params: ListVisualBrandAuditEvents
 )
 async def create_visual_profile(ctx, params: CreateVisualProfileParams) -> ActionResult[VisualProfile]:
     """Create a draft profile bound deterministically to the approved VBS baseline."""
-    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "edit")
     if error:
         return error
     if workspace.data.get("version") != params.expected_workspace_version:
@@ -618,7 +735,7 @@ async def activate_visual_profile(ctx, params: ActivateVisualProfileParams) -> A
     if not candidate:
         return ActionResult.error("Visual Profile revision not found.", retryable=False, code="VISUAL_PROFILE_NOT_FOUND")
     brand_id = candidate.data.get("brand_id", "")
-    workspace, error = await _require_vbs_workspace_owner(ctx, brand_id)
+    workspace, _membership, error = await _require_vbs_access(ctx, brand_id, "review")
     if error:
         return error
     if candidate.data.get("tenant_id") != workspace.data["tenant_id"]:
@@ -689,7 +806,7 @@ async def resolve_current_visual_profile(ctx, params: ResolveCurrentVisualProfil
 )
 async def register_visual_evidence(ctx, params: RegisterVisualEvidenceParams) -> ActionResult[VisualEvidence]:
     """Register a non-fetched evidence reference within the caller's VBS workspace."""
-    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "edit")
     if error:
         return error
     canonical_url, validation_error = _validate_public_https_reference(params.source_url)
@@ -755,7 +872,7 @@ async def review_visual_evidence(ctx, params: ReviewVisualEvidenceParams) -> Act
     if not evidence:
         return ActionResult.error("Evidence reference not found.", retryable=False, code="VBS_EVIDENCE_NOT_FOUND")
     brand_id = evidence.data.get("brand_id", "")
-    workspace, error = await _require_vbs_workspace_owner(ctx, brand_id)
+    workspace, _membership, error = await _require_vbs_access(ctx, brand_id, "review")
     if error:
         return error
     if evidence.data.get("tenant_id") != workspace.data["tenant_id"]:
@@ -1753,20 +1870,20 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     # IPC may lose authenticated user context.
     vbs_workspace = await _workspace_for_brand(ctx, brand_id)
     actor_id, tenant_id = _actor(ctx)
-    vbs_workspace_owned = bool(
-        vbs_workspace
-        and vbs_workspace.data.get("tenant_id") == tenant_id
-        and vbs_workspace.data.get("owner_id") == actor_id
-    )
+    vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
+    vbs_workspace_owned = bool(vbs_membership)
+    vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
     vbs_page = None
     vbs_audit_page = None
     vbs_evidence_page = None
     vbs_profile_page = None
+    vbs_membership_page = None
     if vbs_workspace_owned:
         vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
         vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
         vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
         vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+        vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
 
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
@@ -1923,6 +2040,10 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         vbs_audit_events = list(vbs_audit_page.data) if vbs_audit_page else []
         vbs_evidence = list(vbs_evidence_page.data) if vbs_evidence_page else []
         vbs_profiles = list(vbs_profile_page.data) if vbs_profile_page else []
+        vbs_memberships = list(vbs_membership_page.data) if vbs_membership_page else []
+        vbs_role = vbs_membership.get("role", "viewer")
+        vbs_can_edit = "edit" in ROLE_PERMISSIONS.get(vbs_role, set())
+        vbs_can_review = "review" in ROLE_PERMISSIONS.get(vbs_role, set())
         current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
         current_profile = next((d for d in vbs_profiles if d.data.get("status") == "approved_current"), None)
         revision_rows = [
@@ -1945,7 +2066,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
-                    ) if d.data.get("status") in {"draft", "in_review"} else None
+                    ) if vbs_can_review and d.data.get("status") in {"draft", "in_review"} else None
                 ),
             ) for d in vbs_revisions
         ]
@@ -1960,6 +2081,54 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                         {"key": "Scope", "value": "P0: non-personal visual rules only"},
                         {"key": "People/media", "value": "Blocked pending privacy/storage spikes"},
                     ]),
+                ),
+                ui.Card(
+                    title="Private workspace access",
+                    subtitle="P0 uses known Imperal user IDs only. Roles are enforced server-side; no email lookup or cross-tenant invitations.",
+                    content=ui.Form(
+                        action="set_brand_membership",
+                        submit_label="Save member role",
+                        defaults={
+                            "brand_id": brand_id,
+                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                        },
+                        children=[
+                            ui.Input(param_name="user_id", placeholder="Known Imperal user ID"),
+                            ui.Select(
+                                param_name="role",
+                                options=[
+                                    {"value": "owner", "label": "Owner — manage access, edit, review"},
+                                    {"value": "editor", "label": "Editor — create drafts and evidence"},
+                                    {"value": "reviewer", "label": "Reviewer — approve and review evidence"},
+                                    {"value": "viewer", "label": "Viewer — read-only"},
+                                ],
+                                placeholder="Choose role",
+                            ),
+                        ],
+                    ) if vbs_can_manage_access else ui.Alert(
+                        title="Read-only access",
+                        message="Only a workspace owner can manage private brand memberships.",
+                        type="info",
+                    ),
+                    footer=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Card(
+                                title=f"{item.data.get('user_id', 'Unknown member')} · {item.data.get('role', 'viewer')}",
+                                subtitle="Active private workspace membership",
+                                footer=ui.Form(
+                                    action="revoke_brand_membership",
+                                    submit_label="Revoke access",
+                                    defaults={
+                                        "brand_id": brand_id,
+                                        "user_id": item.data.get("user_id", ""),
+                                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                                    },
+                                    children=[],
+                                ) if vbs_can_manage_access and item.data.get("user_id") != vbs_workspace.data.get("owner_id") else None,
+                            ) for item in vbs_memberships
+                        ] or [ui.Text("No explicit member records yet; the founding owner retains access.")],
+                    ),
                 ),
                 ui.Card(
                     title="Create next VBS draft",

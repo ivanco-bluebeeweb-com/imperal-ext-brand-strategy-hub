@@ -42,6 +42,21 @@ class VisualBrandWorkspace(sdl.Entity):
     status: str = "ready"
 
 
+class BrandMembership(sdl.Entity):
+    """One active tenant-local role assignment for a private VBS workspace."""
+    brand_id: str = ""
+    tenant_id: str = ""
+    user_id: str = ""
+    role: str = "viewer"
+    status: str = "active"
+    workspace_version: int = 0
+    created_by: str = ""
+
+
+class BrandMembershipList(sdl.EntityList[BrandMembership]):
+    pass
+
+
 class VisualBrandSystem(sdl.Entity):
     """One versioned Visual Brand System draft or approved revision.
 
@@ -253,6 +268,23 @@ class InitializeVisualBrandWorkspaceParams(BaseModel):
             "brand to the current tenant and workspace owner."
         ),
     )
+
+
+class ListBrandMembershipsParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+
+
+class SetBrandMembershipParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    user_id: str = Field(min_length=1, max_length=200, description="Known Imperal user ID in this tenant; email lookup is not available in P0")
+    role: str = Field(description="One of: owner, editor, reviewer, viewer")
+    expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the owner; blocks stale access changes")
+
+
+class RevokeBrandMembershipParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    user_id: str = Field(min_length=1, max_length=200, description="Known active member Imperal user ID")
+    expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the owner; blocks stale access changes")
 
 
 class CreateVisualBrandSystemParams(BaseModel):
