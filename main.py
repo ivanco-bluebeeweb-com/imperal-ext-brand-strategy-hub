@@ -2616,7 +2616,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
-                    ) if vbs_can_review and d.data.get("status") in {"draft", "in_review"} else None
+                    ) if vbs_can_review and d.data.get("status") in {"draft", "in_review"} else ui.Text("", variant="caption")
                 ),
             ) for d in vbs_revisions
         ]
@@ -2711,7 +2711,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                         "expected_workspace_version": vbs_workspace.data.get("version", 1),
                                     },
                                     children=[],
-                                ) if vbs_can_manage_access and item.data.get("user_id") != vbs_workspace.data.get("owner_id") else None,
+                                ) if vbs_can_manage_access and item.data.get("user_id") != vbs_workspace.data.get("owner_id") else ui.Text("", variant="caption"),
                             ) for item in vbs_memberships
                         ] or [ui.Text("No explicit member records yet; the founding owner retains access.")],
                     ),
@@ -2795,7 +2795,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                         ),
                                         ui.TextArea(param_name="review_note", placeholder="Required: explain the decision", rows=2),
                                     ],
-                                ) if vbs_can_review and evidence.data.get("status", "discovered") != "archived" else None,
+                                ) if vbs_can_review and evidence.data.get("status", "discovered") != "archived" else ui.Text("", variant="caption"),
                             ) for evidence in vbs_evidence
                         ],
                     ) if vbs_evidence else ui.Empty(message="No evidence references yet. Add only public HTTPS sources you want to review later.", icon="Link"),
@@ -2881,7 +2881,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                         title="Profile approval blocked",
                                         message="This draft is not bound to a current approved VBS with a verified evidence basis. Create a fresh profile snapshot after resolving the baseline.",
                                         type="warning",
-                                    ) if profile.data.get("status") in {"draft", "in_review"} else None
+                                    ) if profile.data.get("status") in {"draft", "in_review"} else ui.Text("", variant="caption")
                                 ),
                             ) for profile in vbs_profiles
                         ],
