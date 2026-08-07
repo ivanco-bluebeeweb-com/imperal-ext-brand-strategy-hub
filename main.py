@@ -2485,6 +2485,12 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
             d.id: await _verify_vbs_approval_evidence_basis(ctx, vbs_workspace, d)
             for d in vbs_revisions if d.data.get("status") == "approved_current"
         }
+        reviewed_valid_evidence = [
+            evidence for evidence in vbs_evidence
+            if evidence.data.get("status") == "reviewed_valid"
+        ]
+        profile_evidence_suggestions = [evidence.id for evidence in reviewed_valid_evidence]
+        current_vbs_basis = vbs_basis_by_id.get(current_vbs.id) if current_vbs else None
         revision_rows = [
             ui.Card(
                 title=f"Revision {d.data.get('revision', '?')} · {d.data.get('status', 'draft')}",
@@ -2704,7 +2710,25 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
-                            ui.TagInput(param_name="evidence_ids", placeholder="Optional evidence ID and Enter"),
+                            ui.KeyValue(columns=2, items=[
+                                {"key": "Approved VBS", "value": f"Revision {current_vbs.data.get('revision', '?')}"},
+                                {"key": "Basis", "value": (f"{current_vbs_basis.evidence_count} reviewed-valid reference(s) · verified" if current_vbs_basis and current_vbs_basis.valid else "Integrity mismatch — creation is blocked")},
+                            ]),
+                            ui.TagInput(
+                                param_name="evidence_ids",
+                                suggestions=profile_evidence_suggestions,
+                                placeholder="Choose reviewed-valid evidence ID",
+                            ),
+                            ui.Text("Only reviewed-valid references from this private workspace are offered. You may leave this empty.", variant="caption"),
+                            ui.Stack(
+                                direction="v", gap=1,
+                                children=[
+                                    ui.Text(
+                                        f"{evidence.id} · {evidence.data.get('source_title') or evidence.data.get('source_url')}",
+                                        variant="caption",
+                                    ) for evidence in reviewed_valid_evidence
+                                ],
+                            ) if reviewed_valid_evidence else ui.Text("No reviewed-valid evidence is available yet.", variant="caption"),
                             ui.TextArea(param_name="profile_summary", placeholder="Non-personal visual profile summary", rows=3),
                             ui.TextArea(param_name="art_direction", placeholder="Non-personal art direction (optional)", rows=2),
                             ui.TextArea(param_name="change_note", placeholder="Why this profile revision is needed (optional)", rows=2),
@@ -2731,6 +2755,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                     {"key": "VBS baseline", "value": f"Revision {profile.data.get('vbs_revision', '?')}"},
                                     {"key": "Evidence", "value": str(len(profile.data.get('evidence_ids', [])))},
                                     {"key": "Snapshot hash", "value": profile.data.get("snapshot_hash", "—")},
+                                    {"key": "Approval context", "value": (f"Approved VBS r{current_vbs.data.get('revision', '?')} · {current_vbs_basis.evidence_count} basis reference(s) · {'verified' if current_vbs_basis and current_vbs_basis.valid else 'MISMATCH'}") if profile.data.get('vbs_id') == (current_vbs.id if current_vbs else '') else "Baseline is no longer current"},
                                 ]),
                                 footer=ui.Form(
                                     action="activate_visual_profile",

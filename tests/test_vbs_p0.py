@@ -17,6 +17,7 @@ from schemas import (
     ListVisualBrandAuditEventsParams,
     ListVisualBrandSystemsParams,
     RegisterVisualEvidenceParams,
+    ReviewVisualEvidenceParams,
 )
 
 
@@ -201,25 +202,43 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "People/media" in rendered
     assert "Blocked pending privacy/storage spikes" in rendered
 
-    created = await m.create_visual_brand_system(
+    reviewed = await m.review_visual_evidence(
+        ctx,
+        ReviewVisualEvidenceParams(
+            evidence_id=evidence.data["id"],
+            expected_status="discovered",
+            expected_workspace_version=evidence.data["workspace_version"],
+            decision="reviewed_valid",
+            review_note="Reviewed for profile UI selection.",
+        ),
+    )
+    draft = await m.create_visual_brand_system(
         ctx,
         CreateVisualBrandSystemParams(
             brand_id=brand_id,
-            expected_workspace_version=evidence.data["workspace_version"],
-            visual_intent="Grounded operations",
+            expected_workspace_version=reviewed.data.workspace_version,
+            visual_intent="Clear and grounded proof.",
         ),
     )
     approved = await m.activate_visual_brand_system(
         ctx,
         ActivateVisualBrandSystemParams(
-            vbs_id=created.data["vbs_id"],
+            vbs_id=draft.data["vbs_id"],
             expected_revision=1,
-            expected_workspace_version=created.data["workspace_version"],
+            expected_workspace_version=draft.data["workspace_version"],
         ),
     )
     assert approved.status == "success"
+
     with_current_vbs = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered_current = repr(with_current_vbs)
+    assert "Approved VBS" in rendered_current
+    assert "Revision 1" in rendered_current
+    assert "reviewed-valid reference(s) · verified" in rendered_current
+    assert "Choose reviewed-valid evidence ID" in rendered_current
+    assert evidence.data["id"] in rendered_current
+    assert "Only reviewed-valid references from this private workspace are offered" in rendered_current
+
     assert "create_visual_profile" in rendered_current
     assert "Save profile draft" in rendered_current
     assert "expected_workspace_version" in rendered_current
