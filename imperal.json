@@ -3236,6 +3236,156 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "build_approved_visual_media_handoff",
+      "description": "Build read-only approved VBS/Profile guidance for a future Media Studio brief. It does not create assets or invoke image generation. Third-party providers are required by default; Magnific is reserved solely for a documented technical-failure fallback.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "BuildApprovedVisualMediaHandoffParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Read-only prompt guidance for Media Studio; never an asset or generation request.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "default": "",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_revision": {
+            "default": 0,
+            "title": "Profile Revision",
+            "type": "integer"
+          },
+          "visual_intent": {
+            "default": "",
+            "title": "Visual Intent",
+            "type": "string"
+          },
+          "style_direction": {
+            "default": "",
+            "title": "Style Direction",
+            "type": "string"
+          },
+          "prohibited_patterns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Patterns",
+            "type": "array"
+          },
+          "provider_policy": {
+            "default": "third_party_only_unless_technical_failure",
+            "title": "Provider Policy",
+            "type": "string"
+          },
+          "generation_boundary": {
+            "default": "No generation is performed by this handoff.",
+            "title": "Generation Boundary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ApprovedVisualMediaHandoff",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "register_visual_evidence",
       "description": "Register a private, unreviewed HTTPS reference for a VBS decision. P0 stores the reference only and never fetches the URL.",
       "action_type": "write",

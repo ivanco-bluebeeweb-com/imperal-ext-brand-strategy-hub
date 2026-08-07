@@ -30,7 +30,7 @@ from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
     AddCompetitorParams, ActivateVisualBrandSystemParams, ActivateVisualProfileParams,
-    BuildApprovedVisualProfileHandoffParams, BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
+    BuildApprovedVisualMediaHandoffParams, BuildApprovedVisualProfileHandoffParams, BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
     InitializeVisualBrandWorkspaceParams, MigrateVisualBrandAccessParams,
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
@@ -41,7 +41,7 @@ from schemas import (
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
-    ApprovalEvidenceBasisIntegrity, ApprovedVisualProfileHandoff, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
+    ApprovalEvidenceBasisIntegrity, ApprovedVisualMediaHandoff, ApprovedVisualProfileHandoff, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
     BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
@@ -1234,6 +1234,51 @@ async def build_approved_visual_profile_handoff(ctx, params: BuildApprovedVisual
         snapshot_hash=profile.data.get("snapshot_hash", ""),
     )
     return ActionResult.success(handoff, "Approved non-personal Visual Profile handoff is ready for downstream content planning.")
+
+
+@chat.function(
+    "build_approved_visual_media_handoff",
+    description=(
+        "Build read-only approved VBS/Profile guidance for a future Media Studio brief. "
+        "It does not create assets or invoke image generation. Third-party providers are required by default; "
+        "Magnific is reserved solely for a documented technical-failure fallback."
+    ),
+    action_type="read",
+    data_model=ApprovedVisualMediaHandoff,
+)
+async def build_approved_visual_media_handoff(ctx, params: BuildApprovedVisualMediaHandoffParams) -> ActionResult[ApprovedVisualMediaHandoff]:
+    """Export integrity-verified, non-personal image-brief guidance without generating any media."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "read")
+    if error:
+        return error
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
+    profiles = await ctx.store.query(VBS_PROFILES, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    profile = next((item for item in profiles.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
+    if not profile:
+        return ActionResult.error("An approved current Visual Profile is required before media handoff.", retryable=False, code="VISUAL_PROFILE_CURRENT_REQUIRED")
+    vbs = await ctx.store.get(VBS_SYSTEMS, profile.data.get("vbs_id", ""))
+    if not vbs or vbs.data.get("tenant_id") != workspace.data["tenant_id"] or vbs.data.get("status") != "approved_current":
+        return ActionResult.error("The approved Visual Profile is not bound to an approved current VBS. Media handoff is blocked.", retryable=False, code="VISUAL_PROFILE_BASELINE_STALE")
+    basis_error = await _require_vbs_approval_evidence_basis(ctx, workspace, vbs)
+    if basis_error:
+        return basis_error
+    rules = "; ".join(vbs.data.get("core_rules", []))
+    direction_parts = [part for part in [vbs.data.get("realism_level", ""), profile.data.get("art_direction", ""), rules] if part]
+    handoff = ApprovedVisualMediaHandoff(
+        id=profile.id,
+        title=f"Approved media guidance · Visual Profile revision {profile.data.get('revision', 1)}",
+        brand_id=params.brand_id,
+        profile_id=profile.id,
+        profile_revision=profile.data.get("revision", 0),
+        visual_intent=vbs.data.get("visual_intent", ""),
+        style_direction="; ".join(direction_parts),
+        prohibited_patterns=vbs.data.get("prohibited_patterns", []),
+        provider_policy="third_party_only_unless_technical_failure",
+        generation_boundary="Read-only handoff: creates no assets, calls no model, and permits Magnific only after other providers technically fail.",
+    )
+    return ActionResult.success(handoff, "Approved non-personal media guidance is ready; no image generation was performed.")
 
 
 @chat.function(

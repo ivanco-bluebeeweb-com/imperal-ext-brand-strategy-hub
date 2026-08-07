@@ -12,6 +12,7 @@ import main as m
 from schemas import (
     ActivateVisualBrandSystemParams,
     ActivateVisualProfileParams,
+    BuildApprovedVisualMediaHandoffParams,
     BuildApprovedVisualProfileHandoffParams,
     CreateBrandProfileParams,
     CreateVisualBrandSystemParams,
@@ -82,6 +83,16 @@ async def test_approved_visual_profile_handoff_exports_only_current_nonpersonal_
     assert handoff.data.art_direction == "Grounded documentary realism; no synthetic people."
     assert handoff.data.snapshot_hash
 
+    media_handoff = await m.build_approved_visual_media_handoff(
+        ctx, BuildApprovedVisualMediaHandoffParams(brand_id=brand_id)
+    )
+    assert media_handoff.status == "success"
+    assert media_handoff.data.profile_id == draft.data["profile_id"]
+    assert media_handoff.data.visual_intent == "Grounded operational confidence"
+    assert media_handoff.data.provider_policy == "third_party_only_unless_technical_failure"
+    assert "creates no assets" in media_handoff.data.generation_boundary
+    assert "Magnific only after other providers technically fail" in media_handoff.data.generation_boundary
+
 
 @pytest.mark.asyncio
 async def test_visual_profile_handoff_requires_approved_profile_and_is_tenant_local():
@@ -95,6 +106,11 @@ async def test_visual_profile_handoff_requires_approved_profile_and_is_tenant_lo
     )
     assert missing.status == "error"
     assert missing.error_code == "VISUAL_PROFILE_CURRENT_REQUIRED"
+    missing_media = await m.build_approved_visual_media_handoff(
+        owner, BuildApprovedVisualMediaHandoffParams(brand_id=brand_id)
+    )
+    assert missing_media.status == "error"
+    assert missing_media.error_code == "VISUAL_PROFILE_CURRENT_REQUIRED"
 
     denied = await m.build_approved_visual_profile_handoff(
         outsider, BuildApprovedVisualProfileHandoffParams(brand_id=brand_id)

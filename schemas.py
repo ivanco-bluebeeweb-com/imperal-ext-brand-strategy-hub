@@ -200,6 +200,18 @@ class ApprovedVisualProfileHandoff(sdl.Entity):
     snapshot_hash: str = ""
 
 
+class ApprovedVisualMediaHandoff(sdl.Entity):
+    """Read-only prompt guidance for Media Studio; never an asset or generation request."""
+    brand_id: str = ""
+    profile_id: str = ""
+    profile_revision: int = 0
+    visual_intent: str = ""
+    style_direction: str = ""
+    prohibited_patterns: list[str] = []
+    provider_policy: str = "third_party_only_unless_technical_failure"
+    generation_boundary: str = "No generation is performed by this handoff."
+
+
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
     brand_id: str = ""
@@ -445,6 +457,10 @@ class ReviewVisualEvidenceParams(BaseModel):
 
 
 class BuildApprovedVisualProfileHandoffParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+
+
+class BuildApprovedVisualMediaHandoffParams(BaseModel):
     brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
 
 
