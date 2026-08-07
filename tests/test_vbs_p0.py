@@ -178,6 +178,32 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "Register evidence reference" in rendered
     assert "register_visual_evidence" in rendered
     assert "never fetches, downloads or processes the source" in rendered
+    assert "Create Visual Profile draft" in rendered
+    assert "Approved VBS required" in rendered
     assert "Audit trail" in rendered
     assert "People/media" in rendered
     assert "Blocked pending privacy/storage spikes" in rendered
+
+    created = await m.create_visual_brand_system(
+        ctx,
+        CreateVisualBrandSystemParams(
+            brand_id=brand_id,
+            expected_workspace_version=1,
+            visual_intent="Grounded operations",
+        ),
+    )
+    approved = await m.activate_visual_brand_system(
+        ctx,
+        ActivateVisualBrandSystemParams(
+            vbs_id=created.data["vbs_id"],
+            expected_revision=1,
+            expected_workspace_version=created.data["workspace_version"],
+        ),
+    )
+    assert approved.status == "success"
+    with_current_vbs = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
+    rendered_current = repr(with_current_vbs)
+    assert "create_visual_profile" in rendered_current
+    assert "Save profile draft" in rendered_current
+    assert "expected_workspace_version" in rendered_current
+    assert "Visual Profiles" in rendered_current

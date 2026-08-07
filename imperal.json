@@ -921,6 +921,755 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "create_visual_profile",
+      "description": "Create a versioned non-personal Visual Profile draft from the current approved VBS and selected private evidence.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:visual_profile"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version shown to the editor; blocks stale writes",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          },
+          "evidence_ids": {
+            "description": "Private evidence IDs to include in this profile snapshot",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "profile_summary": {
+            "description": "Non-personal visual profile summary grounded in the approved VBS",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Profile Summary",
+            "type": "string"
+          },
+          "art_direction": {
+            "default": "",
+            "description": "Optional non-personal art-direction guidance",
+            "maxLength": 2000,
+            "title": "Art Direction",
+            "type": "string"
+          },
+          "change_note": {
+            "default": "",
+            "description": "Why this profile revision is proposed",
+            "maxLength": 1000,
+            "title": "Change Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "expected_workspace_version",
+          "profile_summary"
+        ],
+        "title": "CreateVisualProfileParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Versioned, non-personal resolution of one approved VBS baseline.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "vbs_id": {
+            "default": "",
+            "title": "Vbs Id",
+            "type": "string"
+          },
+          "vbs_revision": {
+            "default": 0,
+            "title": "Vbs Revision",
+            "type": "integer"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "profile_summary": {
+            "default": "",
+            "title": "Profile Summary",
+            "type": "string"
+          },
+          "art_direction": {
+            "default": "",
+            "title": "Art Direction",
+            "type": "string"
+          },
+          "snapshot_hash": {
+            "default": "",
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "supersedes_profile_id": {
+            "default": "",
+            "title": "Supersedes Profile Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualProfile",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.create_visual_profile",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_visual_profiles",
+      "description": "List private Visual Profile revisions for one initialized VBS workspace.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "include_superseded": {
+            "default": false,
+            "description": "Include superseded and archived profile revisions",
+            "title": "Include Superseded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListVisualProfilesParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "VisualProfile": {
+            "description": "Versioned, non-personal resolution of one approved VBS baseline.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "default": "draft",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "revision": {
+                "default": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "vbs_id": {
+                "default": "",
+                "title": "Vbs Id",
+                "type": "string"
+              },
+              "vbs_revision": {
+                "default": 0,
+                "title": "Vbs Revision",
+                "type": "integer"
+              },
+              "evidence_ids": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Evidence Ids",
+                "type": "array"
+              },
+              "profile_summary": {
+                "default": "",
+                "title": "Profile Summary",
+                "type": "string"
+              },
+              "art_direction": {
+                "default": "",
+                "title": "Art Direction",
+                "type": "string"
+              },
+              "snapshot_hash": {
+                "default": "",
+                "title": "Snapshot Hash",
+                "type": "string"
+              },
+              "created_by": {
+                "default": "",
+                "title": "Created By",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "supersedes_profile_id": {
+                "default": "",
+                "title": "Supersedes Profile Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "VisualProfile",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/VisualProfile"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "VisualProfileList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "activate_visual_profile",
+      "description": "Approve one Visual Profile draft as current and supersede the prior current profile.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:visual_profile"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "profile_id": {
+            "description": "UUID of a Visual Profile draft — never invented",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "description": "Profile revision shown to the reviewer",
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version shown to the reviewer; blocks stale approvals",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          },
+          "approval_note": {
+            "default": "",
+            "description": "Reason for approving this profile revision",
+            "maxLength": 1000,
+            "title": "Approval Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "expected_revision",
+          "expected_workspace_version"
+        ],
+        "title": "ActivateVisualProfileParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Versioned, non-personal resolution of one approved VBS baseline.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "vbs_id": {
+            "default": "",
+            "title": "Vbs Id",
+            "type": "string"
+          },
+          "vbs_revision": {
+            "default": 0,
+            "title": "Vbs Revision",
+            "type": "integer"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "profile_summary": {
+            "default": "",
+            "title": "Profile Summary",
+            "type": "string"
+          },
+          "art_direction": {
+            "default": "",
+            "title": "Art Direction",
+            "type": "string"
+          },
+          "snapshot_hash": {
+            "default": "",
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "supersedes_profile_id": {
+            "default": "",
+            "title": "Supersedes Profile Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualProfile",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.activate_visual_profile",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "resolve_current_visual_profile",
+      "description": "Resolve the one deterministic approved VBS plus approved Visual Profile baseline; fails closed when incomplete or stale.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ResolveCurrentVisualProfileParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Versioned, non-personal resolution of one approved VBS baseline.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "vbs_id": {
+            "default": "",
+            "title": "Vbs Id",
+            "type": "string"
+          },
+          "vbs_revision": {
+            "default": 0,
+            "title": "Vbs Revision",
+            "type": "integer"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "profile_summary": {
+            "default": "",
+            "title": "Profile Summary",
+            "type": "string"
+          },
+          "art_direction": {
+            "default": "",
+            "title": "Art Direction",
+            "type": "string"
+          },
+          "snapshot_hash": {
+            "default": "",
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "supersedes_profile_id": {
+            "default": "",
+            "title": "Supersedes Profile Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualProfile",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "register_visual_evidence",
       "description": "Register a private, unreviewed HTTPS reference for a VBS decision. P0 stores the reference only and never fetches the URL.",
       "action_type": "write",

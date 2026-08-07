@@ -99,6 +99,26 @@ class VisualEvidenceList(sdl.EntityList[VisualEvidence]):
     pass
 
 
+class VisualProfile(sdl.Entity):
+    """Versioned, non-personal resolution of one approved VBS baseline."""
+    brand_id: str = ""
+    revision: int = 1
+    status: str = "draft"
+    vbs_id: str = ""
+    vbs_revision: int = 0
+    evidence_ids: list[str] = []
+    profile_summary: str = ""
+    art_direction: str = ""
+    snapshot_hash: str = ""
+    created_by: str = ""
+    tenant_id: str = ""
+    supersedes_profile_id: str = ""
+
+
+class VisualProfileList(sdl.EntityList[VisualProfile]):
+    pass
+
+
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
     brand_id: str = ""
@@ -291,6 +311,31 @@ class RegisterVisualEvidenceParams(BaseModel):
 class ListVisualEvidenceParams(BaseModel):
     brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
     limit: int = Field(50, description="Max evidence records to return (1-100)")
+
+
+class CreateVisualProfileParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the editor; blocks stale writes")
+    evidence_ids: list[str] = Field(default_factory=list, max_length=50, description="Private evidence IDs to include in this profile snapshot")
+    profile_summary: str = Field(min_length=1, max_length=4000, description="Non-personal visual profile summary grounded in the approved VBS")
+    art_direction: str = Field("", max_length=2000, description="Optional non-personal art-direction guidance")
+    change_note: str = Field("", max_length=1000, description="Why this profile revision is proposed")
+
+
+class ListVisualProfilesParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    include_superseded: bool = Field(False, description="Include superseded and archived profile revisions")
+
+
+class ActivateVisualProfileParams(BaseModel):
+    profile_id: str = Field(description="UUID of a Visual Profile draft — never invented")
+    expected_revision: int = Field(ge=1, description="Profile revision shown to the reviewer")
+    expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the reviewer; blocks stale approvals")
+    approval_note: str = Field("", max_length=1000, description="Reason for approving this profile revision")
+
+
+class ResolveCurrentVisualProfileParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
 
 
 class AddCompetitorParams(BaseModel):

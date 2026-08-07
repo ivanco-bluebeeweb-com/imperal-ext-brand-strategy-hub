@@ -22,23 +22,25 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
+import hashlib
 import ipaddress
+import json
 
 from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
-    AddCompetitorParams, ActivateVisualBrandSystemParams,
-    BuildContentStrategyHandoffParams, CreateBrandProfileParams,
+    AddCompetitorParams, ActivateVisualBrandSystemParams, ActivateVisualProfileParams,
+    BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
     InitializeVisualBrandWorkspaceParams,
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
-    ListVisualBrandSystemsParams, ListVisualEvidenceParams,
-    RegisterVisualEvidenceParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
+    ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
+    RegisterVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     UpdateBrandProfileParams,
     AuditEvent, AuditEventList, BrandContentHandoff,
     BrandProfile, BrandProfileList, VisualBrandSystem, VisualBrandSystemList,
-    VisualBrandWorkspace, VisualEvidence, VisualEvidenceList,
+    VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
     CompetitorProfile, CompetitorProfileList,
     GapAnalysisResult, GapAnalysisResultList,
@@ -67,6 +69,7 @@ VBS_WORKSPACES = "vbs_workspaces"
 VBS_SYSTEMS = "visual_brand_systems"
 VBS_AUDIT_EVENTS = "visual_brand_audit_events"
 VBS_EVIDENCE = "visual_evidence"
+VBS_PROFILES = "visual_profiles"
 
 
 def _actor(ctx) -> tuple[str, str]:
@@ -131,6 +134,34 @@ async def _advance_vbs_workspace(ctx, workspace, expected_version: int):
         {**latest.data, "version": expected_version + 1, "updated_at": _now_iso()},
     )
     return updated, None
+
+
+def _profile_snapshot_hash(vbs, evidence_records, profile_summary: str, art_direction: str) -> str:
+    """Hash a canonical, non-personal baseline so downstream resolution is auditable."""
+    payload = {
+        "vbs": {
+            "id": vbs.id,
+            "revision": vbs.data.get("revision"),
+            "visual_intent": vbs.data.get("visual_intent", ""),
+            "realism_level": vbs.data.get("realism_level", ""),
+            "core_rules": vbs.data.get("core_rules", []),
+            "prohibited_patterns": vbs.data.get("prohibited_patterns", []),
+        },
+        "evidence": [
+            {
+                "id": record.id,
+                "source_url": record.data.get("source_url", ""),
+                "source_title": record.data.get("source_title", ""),
+                "observation": record.data.get("observation", ""),
+                "status": record.data.get("status", ""),
+            }
+            for record in sorted(evidence_records, key=lambda item: item.id)
+        ],
+        "profile_summary": profile_summary,
+        "art_direction": art_direction,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _validate_public_https_reference(raw_url: str) -> tuple[str | None, str | None]:
@@ -512,6 +543,120 @@ async def list_visual_brand_audit_events(ctx, params: ListVisualBrandAuditEvents
         for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]
     ]
     return ActionResult.success(AuditEventList(items=items), f"Found {len(items)} VBS audit event(s).")
+
+
+@chat.function(
+    "create_visual_profile",
+    description="Create a versioned non-personal Visual Profile draft from the current approved VBS and selected private evidence.",
+    action_type="write",
+    effects=["create:visual_profile"],
+    event="brand-strategy-hub.create_visual_profile",
+    data_model=VisualProfile,
+)
+async def create_visual_profile(ctx, params: CreateVisualProfileParams) -> ActionResult[VisualProfile]:
+    """Create a draft profile bound deterministically to the approved VBS baseline."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before saving the profile.", retryable=True, code="VBS_STALE_WORKSPACE")
+    vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    current_vbs = next((item for item in vbs_page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
+    if not current_vbs:
+        return ActionResult.error("An approved current VBS is required before creating a Visual Profile.", retryable=False, code="VBS_CURRENT_REQUIRED")
+    requested_ids = list(dict.fromkeys(params.evidence_ids))
+    evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    evidence_by_id = {item.id: item for item in evidence_page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]}
+    missing = [item_id for item_id in requested_ids if item_id not in evidence_by_id]
+    if missing:
+        return ActionResult.error("One or more selected evidence references are unavailable in this private workspace.", retryable=False, code="VBS_EVIDENCE_ACCESS_DENIED")
+    advanced_workspace, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
+    if error:
+        return error
+    profiles = await ctx.store.query(VBS_PROFILES, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    owned_profiles = [item for item in profiles.data if item.data.get("tenant_id") == workspace.data["tenant_id"]]
+    revision = max((int(item.data.get("revision", 0)) for item in owned_profiles), default=0) + 1
+    summary, direction = params.profile_summary.strip(), params.art_direction.strip()
+    snapshot_hash = _profile_snapshot_hash(current_vbs, [evidence_by_id[item_id] for item_id in requested_ids], summary, direction)
+    actor_id, tenant_id = _actor(ctx)
+    profile = await ctx.store.create(VBS_PROFILES, {"brand_id": params.brand_id, "revision": revision, "status": "draft", "vbs_id": current_vbs.id, "vbs_revision": current_vbs.data.get("revision", 0), "evidence_ids": requested_ids, "profile_summary": summary, "art_direction": direction, "change_note": params.change_note.strip(), "snapshot_hash": snapshot_hash, "created_by": actor_id, "tenant_id": tenant_id, "supersedes_profile_id": "", "created_at": _now_iso()})
+    await _append_vbs_audit(ctx, brand_id=params.brand_id, vbs_id=current_vbs.id, event_type="visual_profile_draft_created", details=f"Created Visual Profile revision {revision}; snapshot {snapshot_hash}.")
+    return ActionResult.success({"profile_id": profile.id, "brand_id": params.brand_id, "revision": revision, "status": "draft", "snapshot_hash": snapshot_hash, "workspace_version": advanced_workspace.data["version"]}, f"Created Visual Profile revision {revision}.", refresh_panels=["brand_detail"])
+
+
+@chat.function("list_visual_profiles", description="List private Visual Profile revisions for one initialized VBS workspace.")
+async def list_visual_profiles(ctx, params: ListVisualProfilesParams) -> ActionResult[VisualProfileList]:
+    """List only the caller's profile revisions, optionally excluding history."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    page = await ctx.store.query(VBS_PROFILES, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    records = [item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]]
+    if not params.include_superseded:
+        records = [item for item in records if item.data.get("status") not in {"superseded", "archived"}]
+    return ActionResult.success(VisualProfileList(items=[VisualProfile(id=item.id, title=f"Visual Profile revision {item.data.get('revision', 1)}", **item.data) for item in records]), f"Found {len(records)} Visual Profile revision(s).")
+
+
+@chat.function(
+    "activate_visual_profile",
+    description="Approve one Visual Profile draft as current and supersede the prior current profile.",
+    action_type="write",
+    effects=["update:visual_profile"],
+    event="brand-strategy-hub.activate_visual_profile",
+    data_model=VisualProfile,
+)
+async def activate_visual_profile(ctx, params: ActivateVisualProfileParams) -> ActionResult[VisualProfile]:
+    """Approve one profile revision and preserve any previous current revision."""
+    candidate = await ctx.store.get(VBS_PROFILES, params.profile_id)
+    if not candidate:
+        return ActionResult.error("Visual Profile revision not found.", retryable=False, code="VISUAL_PROFILE_NOT_FOUND")
+    brand_id = candidate.data.get("brand_id", "")
+    workspace, error = await _require_vbs_workspace_owner(ctx, brand_id)
+    if error:
+        return error
+    if candidate.data.get("tenant_id") != workspace.data["tenant_id"]:
+        return ActionResult.error("You do not have access to this Visual Profile revision.", retryable=False, code="VBS_ACCESS_DENIED")
+    if candidate.data.get("status") != "draft" or candidate.data.get("revision") != params.expected_revision:
+        return ActionResult.error("This Visual Profile revision is no longer the draft you reviewed.", retryable=True, code="VISUAL_PROFILE_STALE")
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before approving the profile.", retryable=True, code="VBS_STALE_WORKSPACE")
+    bound_vbs = await ctx.store.get(VBS_SYSTEMS, candidate.data.get("vbs_id", ""))
+    if (
+        not bound_vbs
+        or bound_vbs.data.get("tenant_id") != workspace.data["tenant_id"]
+        or bound_vbs.data.get("status") != "approved_current"
+    ):
+        return ActionResult.error(
+            "This Visual Profile is based on a superseded VBS baseline. Create a new profile from the current VBS.",
+            retryable=False,
+            code="VISUAL_PROFILE_BASELINE_STALE",
+        )
+    advanced_workspace, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
+    if error:
+        return error
+    profiles = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-created_at", limit=200)
+    for prior in profiles.data:
+        if prior.data.get("tenant_id") == workspace.data["tenant_id"] and prior.data.get("status") == "approved_current":
+            await ctx.store.update(VBS_PROFILES, prior.id, {**prior.data, "status": "superseded", "superseded_at": _now_iso(), "superseded_by": candidate.id})
+    await ctx.store.update(VBS_PROFILES, candidate.id, {**candidate.data, "status": "approved_current", "approved_at": _now_iso(), "approval_note": params.approval_note.strip()})
+    await _append_vbs_audit(ctx, brand_id=brand_id, vbs_id=candidate.data.get("vbs_id", ""), event_type="visual_profile_approved_current", details=params.approval_note.strip() or f"Approved Visual Profile revision {params.expected_revision}.")
+    return ActionResult.success({"profile_id": candidate.id, "brand_id": brand_id, "revision": params.expected_revision, "status": "approved_current", "snapshot_hash": candidate.data.get("snapshot_hash", ""), "workspace_version": advanced_workspace.data["version"]}, f"Visual Profile revision {params.expected_revision} is now current.", refresh_panels=["brand_detail"])
+
+
+@chat.function("resolve_current_visual_profile", description="Resolve the one deterministic approved VBS plus approved Visual Profile baseline; fails closed when incomplete or stale.")
+async def resolve_current_visual_profile(ctx, params: ResolveCurrentVisualProfileParams) -> ActionResult[VisualProfile]:
+    """Resolve only a complete, current approved baseline; never guess a fallback."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    profiles = await ctx.store.query(VBS_PROFILES, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    current = next((item for item in profiles.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
+    if not current:
+        return ActionResult.error("No approved current Visual Profile exists for this workspace.", retryable=False, code="VISUAL_PROFILE_CURRENT_REQUIRED")
+    vbs = await ctx.store.get(VBS_SYSTEMS, current.data.get("vbs_id", ""))
+    if not vbs or vbs.data.get("tenant_id") != workspace.data["tenant_id"] or vbs.data.get("status") != "approved_current":
+        return ActionResult.error("The current Visual Profile is not bound to an approved current VBS. Resolution is blocked.", retryable=False, code="VISUAL_PROFILE_BASELINE_STALE")
+    return ActionResult.success(VisualProfile(id=current.id, title=f"Visual Profile revision {current.data.get('revision', 1)}", **current.data), "Resolved approved Visual Profile baseline.")
 
 
 @chat.function(
@@ -1531,10 +1676,12 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     vbs_page = None
     vbs_audit_page = None
     vbs_evidence_page = None
+    vbs_profile_page = None
     if vbs_workspace_owned:
         vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
         vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
         vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+        vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
 
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
@@ -1690,7 +1837,9 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         vbs_revisions = list(vbs_page.data) if vbs_page else []
         vbs_audit_events = list(vbs_audit_page.data) if vbs_audit_page else []
         vbs_evidence = list(vbs_evidence_page.data) if vbs_evidence_page else []
+        vbs_profiles = list(vbs_profile_page.data) if vbs_profile_page else []
         current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
+        current_profile = next((d for d in vbs_profiles if d.data.get("status") == "approved_current"), None)
         revision_rows = [
             ui.Card(
                 title=f"Revision {d.data.get('revision', '?')} · {d.data.get('status', 'draft')}",
@@ -1779,6 +1928,62 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                             ) for evidence in vbs_evidence
                         ],
                     ) if vbs_evidence else ui.Empty(message="No evidence references yet. Add only public HTTPS sources you want to review later.", icon="Link"),
+                ),
+                ui.Card(
+                    title="Create Visual Profile draft",
+                    subtitle=(
+                        "Binds a non-personal profile snapshot to the approved VBS and selected private evidence."
+                        if current_vbs else "Approve a VBS revision first; profiles never guess a baseline."
+                    ),
+                    content=ui.Form(
+                        action="create_visual_profile",
+                        submit_label="Save profile draft",
+                        defaults={
+                            "brand_id": brand_id,
+                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                        },
+                        children=[
+                            ui.TagInput(param_name="evidence_ids", placeholder="Optional evidence ID and Enter"),
+                            ui.TextArea(param_name="profile_summary", placeholder="Non-personal visual profile summary", rows=3),
+                            ui.TextArea(param_name="art_direction", placeholder="Non-personal art direction (optional)", rows=2),
+                            ui.TextArea(param_name="change_note", placeholder="Why this profile revision is needed (optional)", rows=2),
+                        ],
+                    ) if current_vbs else ui.Alert(
+                        title="Approved VBS required",
+                        message="Visual Profiles can only be created from the current approved VBS baseline.",
+                        type="info",
+                    ),
+                ),
+                ui.Card(
+                    title=f"Visual Profiles ({len(vbs_profiles)})",
+                    subtitle=(
+                        f"Current profile: revision {current_profile.data.get('revision')}" if current_profile
+                        else "No approved current Visual Profile. Downstream resolution remains blocked."
+                    ),
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Card(
+                                title=f"Profile revision {profile.data.get('revision', '?')} · {profile.data.get('status', 'draft')}",
+                                subtitle=profile.data.get("profile_summary", ""),
+                                content=ui.KeyValue(columns=1, items=[
+                                    {"key": "VBS baseline", "value": f"Revision {profile.data.get('vbs_revision', '?')}"},
+                                    {"key": "Evidence", "value": str(len(profile.data.get('evidence_ids', [])))},
+                                    {"key": "Snapshot hash", "value": profile.data.get("snapshot_hash", "—")},
+                                ]),
+                                footer=ui.Form(
+                                    action="activate_visual_profile",
+                                    submit_label="Approve as current profile",
+                                    defaults={
+                                        "profile_id": profile.id,
+                                        "expected_revision": profile.data.get("revision", 1),
+                                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                                    },
+                                    children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
+                                ) if profile.data.get("status") in {"draft", "in_review"} else None,
+                            ) for profile in vbs_profiles
+                        ],
+                    ) if vbs_profiles else ui.Empty(message="No Visual Profile drafts yet.", icon="Layers"),
                 ),
                 ui.Card(
                     title=f"Revision history ({len(vbs_revisions)})",
