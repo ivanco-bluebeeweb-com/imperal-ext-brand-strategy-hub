@@ -234,7 +234,10 @@ def _audit_event_hash(payload: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str) -> None:
+async def _append_vbs_audit(
+    ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str,
+    immutable_metadata: dict | None = None,
+) -> None:
     """Append a chained audit event and advance its workspace-local integrity anchor."""
     workspace = await _workspace_for_brand(ctx, brand_id)
     if not workspace:
@@ -253,9 +256,12 @@ async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str,
         "occurred_at": occurred_at,
         "chain_sequence": sequence,
         "previous_integrity_hash": previous_hash,
+        "immutable_metadata": immutable_metadata or {},
     }
-    integrity_hash = _audit_event_hash(payload)
-    await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": integrity_hash, "integrity_version": 2})
+    integrity_version = 3 if immutable_metadata else 2
+    hash_payload = payload if integrity_version == 3 else {key: value for key, value in payload.items() if key != "immutable_metadata"}
+    integrity_hash = _audit_event_hash(hash_payload)
+    await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": integrity_hash, "integrity_version": integrity_version})
     await ctx.store.update(VBS_WORKSPACES, workspace.id, {
         **workspace.data,
         "audit_chain_head": integrity_hash,
@@ -283,19 +289,21 @@ async def _verify_vbs_audit_integrity(ctx, workspace) -> AuditIntegrity:
     chained = 0
     previous_hash = ""
     expected_sequence = 1
-    chained_events = [item for item in events if item.data.get("integrity_version") == 2]
+    chained_events = [item for item in events if item.data.get("integrity_version") in {2, 3}]
     for item in events:
         stored_hash = item.data.get("integrity_hash", "")
         if not stored_hash:
             continue
         sealed += 1
-        if item.data.get("integrity_version") != 2:
+        if item.data.get("integrity_version") not in {2, 3}:
             payload = {key: item.data.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at")}
             if _audit_event_hash(payload) != stored_hash:
                 return _audit_integrity_result(workspace, events, sealed, chained, False, "A sealed audit event does not match its recorded integrity hash.", item.id)
             continue
         chained += 1
         payload = {key: item.data.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at", "chain_sequence", "previous_integrity_hash")}
+        if item.data.get("integrity_version") == 3:
+            payload["immutable_metadata"] = item.data.get("immutable_metadata", {})
         if _audit_event_hash(payload) != stored_hash:
             return _audit_integrity_result(workspace, events, sealed, chained, False, "A chained audit event does not match its recorded integrity hash.", item.id)
         if item.data.get("chain_sequence") != expected_sequence or item.data.get("previous_integrity_hash", "") != previous_hash:
@@ -313,8 +321,8 @@ async def _verify_vbs_audit_integrity(ctx, workspace) -> AuditIntegrity:
         message += f" {sealed - chained} sealed v1 event(s) predate the audit chain and remain individually verified only."
     return _audit_integrity_result(workspace, events, sealed, chained, True, message)
 
-def _verify_vbs_approval_evidence_basis(vbs) -> ApprovalEvidenceBasisIntegrity:
-    """Verify only the immutable evidence snapshot stored at VBS approval time."""
+async def _verify_vbs_approval_evidence_basis(ctx, workspace, vbs) -> ApprovalEvidenceBasisIntegrity:
+    """Verify an approval snapshot and, for v3 approvals, its sealed audit-event basis."""
     snapshot = vbs.data.get("approval_evidence_snapshot")
     stored_hash = vbs.data.get("approval_evidence_snapshot_hash", "")
     if snapshot is None or not stored_hash:
@@ -325,18 +333,42 @@ def _verify_vbs_approval_evidence_basis(vbs) -> ApprovalEvidenceBasisIntegrity:
             message="This approved VBS predates evidence-basis snapshots or was approved with no recorded basis.",
         )
     calculated_hash = _audit_event_hash({"evidence_basis": snapshot})
-    valid = calculated_hash == stored_hash
+    if calculated_hash != stored_hash:
+        return ApprovalEvidenceBasisIntegrity(
+            id=f"approval-evidence-basis:{vbs.id}", title="VBS approval evidence basis",
+            brand_id=vbs.data.get("brand_id", ""), vbs_id=vbs.id,
+            snapshot_hash=stored_hash, evidence_count=len(snapshot), valid=False,
+            message="The approval evidence basis no longer matches its immutable snapshot hash.",
+        )
+    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="-occurred_at", limit=500)
+    approval_event = next((item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("vbs_id") == vbs.id and item.data.get("event_type") == "vbs_approved_current"), None)
+    metadata = approval_event.data.get("immutable_metadata", {}) if approval_event else {}
+    if approval_event and approval_event.data.get("integrity_version") == 3:
+        expected = {
+            "approval_evidence_snapshot_hash": stored_hash,
+            "approval_evidence_count": len(snapshot),
+            "vbs_revision": vbs.data.get("revision"),
+            "workspace_version": vbs.data.get("approval_evidence_workspace_version"),
+        }
+        if metadata != expected:
+            return ApprovalEvidenceBasisIntegrity(
+                id=f"approval-evidence-basis:{vbs.id}", title="VBS approval evidence basis",
+                brand_id=vbs.data.get("brand_id", ""), vbs_id=vbs.id,
+                snapshot_hash=stored_hash, evidence_count=len(snapshot), valid=False,
+                message="The approval evidence basis does not match its sealed approval audit event.",
+            )
     return ApprovalEvidenceBasisIntegrity(
         id=f"approval-evidence-basis:{vbs.id}", title="VBS approval evidence basis",
         brand_id=vbs.data.get("brand_id", ""), vbs_id=vbs.id,
-        snapshot_hash=stored_hash, evidence_count=len(snapshot), valid=valid,
-        message=("The approval evidence basis matches its immutable snapshot hash." if valid else "The approval evidence basis no longer matches its immutable snapshot hash."),
+        snapshot_hash=stored_hash, evidence_count=len(snapshot), valid=True,
+        legacy_or_empty=not approval_event or approval_event.data.get("integrity_version") != 3,
+        message=("The approval evidence basis matches its snapshot and sealed approval audit event." if approval_event and approval_event.data.get("integrity_version") == 3 else "The approval evidence basis matches its snapshot; its approval event predates structured event linkage."),
     )
 
 
-async def _require_vbs_approval_evidence_basis(vbs):
+async def _require_vbs_approval_evidence_basis(ctx, workspace, vbs):
     """Fail closed for profile decisions when the approved VBS basis was altered."""
-    basis = _verify_vbs_approval_evidence_basis(vbs)
+    basis = await _verify_vbs_approval_evidence_basis(ctx, workspace, vbs)
     if not basis.valid:
         return ActionResult.error(
             "The approved VBS evidence basis failed integrity verification. Profile changes are paused; investigate the approved VBS record before continuing.",
@@ -848,7 +880,17 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
     )
     basis_note = f" Evidence basis: {len(evidence_snapshot)} reviewed-valid reference(s), fingerprint {evidence_snapshot_hash[:12]}."
     await _append_vbs_audit(
-        ctx, brand_id=brand_id, vbs_id=candidate.id, event_type="vbs_approved_current", details=(params.approval_note.strip() or "Approved as current VBS.") + basis_note
+        ctx,
+        brand_id=brand_id,
+        vbs_id=candidate.id,
+        event_type="vbs_approved_current",
+        details=params.approval_note.strip() or "Approved as current VBS.",
+        immutable_metadata={
+            "approval_evidence_snapshot_hash": evidence_snapshot_hash,
+            "approval_evidence_count": len(evidence_snapshot),
+            "vbs_revision": params.expected_revision,
+            "workspace_version": advanced_workspace.data["version"],
+        },
     )
     return ActionResult.success(
         {
@@ -984,7 +1026,7 @@ async def verify_visual_brand_approval_evidence_basis(ctx, params: VerifyVisualB
         vbs = next((item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
     if not vbs or vbs.data.get("status") != "approved_current":
         return ActionResult.error("An approved current VBS is required to verify its evidence basis.", retryable=False, code="VBS_CURRENT_REQUIRED")
-    basis = _verify_vbs_approval_evidence_basis(vbs)
+    basis = await _verify_vbs_approval_evidence_basis(ctx, workspace, vbs)
     return ActionResult.success(basis, basis.message)
 
 
@@ -1007,7 +1049,7 @@ async def create_visual_profile(ctx, params: CreateVisualProfileParams) -> Actio
     current_vbs = next((item for item in vbs_page.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
     if not current_vbs:
         return ActionResult.error("An approved current VBS is required before creating a Visual Profile.", retryable=False, code="VBS_CURRENT_REQUIRED")
-    basis_error = await _require_vbs_approval_evidence_basis(current_vbs)
+    basis_error = await _require_vbs_approval_evidence_basis(ctx, workspace, current_vbs)
     if basis_error:
         return basis_error
     requested_ids = list(dict.fromkeys(params.evidence_ids))
@@ -1087,7 +1129,7 @@ async def activate_visual_profile(ctx, params: ActivateVisualProfileParams) -> A
             retryable=False,
             code="VISUAL_PROFILE_BASELINE_STALE",
         )
-    basis_error = await _require_vbs_approval_evidence_basis(bound_vbs)
+    basis_error = await _require_vbs_approval_evidence_basis(ctx, workspace, bound_vbs)
     if basis_error:
         return basis_error
     evidence_ids = candidate.data.get("evidence_ids", [])
@@ -2420,6 +2462,10 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         vbs_can_manage_access = not vbs_integrity_failed and vbs_can_manage_access
         current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
         current_profile = next((d for d in vbs_profiles if d.data.get("status") == "approved_current"), None)
+        vbs_basis_by_id = {
+            d.id: await _verify_vbs_approval_evidence_basis(ctx, vbs_workspace, d)
+            for d in vbs_revisions if d.data.get("status") == "approved_current"
+        }
         revision_rows = [
             ui.Card(
                 title=f"Revision {d.data.get('revision', '?')} · {d.data.get('status', 'draft')}",
@@ -2429,7 +2475,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                     {"key": "Core rules", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
                     {"key": "Avoid", "value": "; ".join(d.data.get("prohibited_patterns", [])) or "—"},
                     {"key": "Change note", "value": d.data.get("change_note") or "—"},
-                    {"key": "Evidence basis", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reviewed-valid reference(s) · {d.data.get('approval_evidence_snapshot_hash', '')[:12]}… · {'verified' if _verify_vbs_approval_evidence_basis(d).valid else 'MISMATCH'}") if d.data.get("status") == "approved_current" else "Captured when approved"},
+                    {"key": "Evidence basis", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reviewed-valid reference(s) · {d.data.get('approval_evidence_snapshot_hash', '')[:12]}… · {'verified' if vbs_basis_by_id[d.id].valid else 'MISMATCH'}") if d.data.get("status") == "approved_current" else "Captured when approved"},
                 ]),
                 footer=(
                     ui.Form(

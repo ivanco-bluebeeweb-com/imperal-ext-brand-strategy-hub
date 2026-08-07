@@ -66,6 +66,27 @@ async def test_tampered_approved_evidence_basis_is_reported_and_blocks_profile_d
     )
     assert approved.status == "success"
 
+    approval_events = await ctx.store.query(m.VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, limit=50)
+    approval_event = next(item for item in approval_events.data if item.data.get("event_type") == "vbs_approved_current")
+    await ctx.store.update(
+        m.VBS_AUDIT_EVENTS,
+        approval_event.id,
+        {
+            **approval_event.data,
+            "immutable_metadata": {
+                **approval_event.data["immutable_metadata"],
+                "approval_evidence_snapshot_hash": "0" * 64,
+            },
+        },
+    )
+    event_tampered = await m.verify_visual_brand_approval_evidence_basis(
+        ctx, VerifyVisualBrandApprovalEvidenceBasisParams(brand_id=brand_id, vbs_id=draft.data["vbs_id"])
+    )
+    assert event_tampered.status == "success"
+    assert event_tampered.data.valid is False
+
+    # Restore the event so this test independently proves a VBS-record snapshot mutation too.
+    await ctx.store.update(m.VBS_AUDIT_EVENTS, approval_event.id, approval_event.data)
     vbs = await ctx.store.get(m.VBS_SYSTEMS, draft.data["vbs_id"])
     tampered_snapshot = [dict(item, observation="Tampered after approval.") for item in vbs.data["approval_evidence_snapshot"]]
     await ctx.store.update(m.VBS_SYSTEMS, vbs.id, {**vbs.data, "approval_evidence_snapshot": tampered_snapshot})
