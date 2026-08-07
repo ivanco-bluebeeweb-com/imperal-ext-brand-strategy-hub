@@ -91,6 +91,7 @@ class VisualEvidence(sdl.Entity):
     source_title: str = ""
     observation: str = ""
     status: str = "discovered"
+    workspace_version: int = 0
     created_by: str = ""
     tenant_id: str = ""
 
@@ -311,6 +312,14 @@ class RegisterVisualEvidenceParams(BaseModel):
 class ListVisualEvidenceParams(BaseModel):
     brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
     limit: int = Field(50, description="Max evidence records to return (1-100)")
+
+
+class ReviewVisualEvidenceParams(BaseModel):
+    evidence_id: str = Field(description="UUID of a private evidence reference — never invented")
+    expected_status: str = Field(description="Evidence status currently shown to the reviewer; blocks stale reviews")
+    expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the reviewer; blocks stale writes")
+    decision: str = Field(description="One of: reviewed_valid, hypothesis, rejected, archived")
+    review_note: str = Field(min_length=1, max_length=2000, description="Why this evidence received the review decision")
 
 
 class CreateVisualProfileParams(BaseModel):

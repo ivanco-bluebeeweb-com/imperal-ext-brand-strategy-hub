@@ -16,6 +16,7 @@ from schemas import (
     InitializeVisualBrandWorkspaceParams,
     ListVisualBrandAuditEventsParams,
     ListVisualBrandSystemsParams,
+    RegisterVisualEvidenceParams,
 )
 
 
@@ -170,6 +171,16 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "Visual System" in repr(uninitialized)
 
     await _workspace(ctx, brand_id)
+    evidence = await m.register_visual_evidence(
+        ctx,
+        RegisterVisualEvidenceParams(
+            brand_id=brand_id,
+            expected_workspace_version=1,
+            source_url="https://example.com/ui-review",
+            observation="A reference used to validate the manual review UI.",
+        ),
+    )
+    assert evidence.status == "success"
     initialized = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered = repr(initialized)
     assert "Create next VBS draft" in rendered
@@ -178,6 +189,9 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "Register evidence reference" in rendered
     assert "register_visual_evidence" in rendered
     assert "never fetches, downloads or processes the source" in rendered
+    assert "review_visual_evidence" in rendered
+    assert "Save review decision" in rendered
+    assert "expected_status" in rendered
     assert "Create Visual Profile draft" in rendered
     assert "Approved VBS required" in rendered
     assert "Audit trail" in rendered
@@ -188,7 +202,7 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
         ctx,
         CreateVisualBrandSystemParams(
             brand_id=brand_id,
-            expected_workspace_version=1,
+            expected_workspace_version=evidence.data["workspace_version"],
             visual_intent="Grounded operations",
         ),
     )

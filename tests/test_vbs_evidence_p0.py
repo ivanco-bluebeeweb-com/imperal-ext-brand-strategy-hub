@@ -14,6 +14,7 @@ from schemas import (
     InitializeVisualBrandWorkspaceParams,
     ListVisualEvidenceParams,
     RegisterVisualEvidenceParams,
+    ReviewVisualEvidenceParams,
 )
 
 

@@ -36,7 +36,7 @@ from schemas import (
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
-    RegisterVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
+    RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     UpdateBrandProfileParams,
     AuditEvent, AuditEventList, BrandContentHandoff,
     BrandProfile, BrandProfileList, VisualBrandSystem, VisualBrandSystemList,
@@ -570,6 +570,13 @@ async def create_visual_profile(ctx, params: CreateVisualProfileParams) -> Actio
     missing = [item_id for item_id in requested_ids if item_id not in evidence_by_id]
     if missing:
         return ActionResult.error("One or more selected evidence references are unavailable in this private workspace.", retryable=False, code="VBS_EVIDENCE_ACCESS_DENIED")
+    ineligible = [item_id for item_id in requested_ids if evidence_by_id[item_id].data.get("status") not in {"reviewed_valid", "hypothesis"}]
+    if ineligible:
+        return ActionResult.error(
+            "A Visual Profile may include only reviewed_valid or explicitly marked hypothesis evidence.",
+            retryable=False,
+            code="VBS_EVIDENCE_NOT_ELIGIBLE",
+        )
     advanced_workspace, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
     if error:
         return error
@@ -631,6 +638,16 @@ async def activate_visual_profile(ctx, params: ActivateVisualProfileParams) -> A
             retryable=False,
             code="VISUAL_PROFILE_BASELINE_STALE",
         )
+    evidence_ids = candidate.data.get("evidence_ids", [])
+    if evidence_ids:
+        evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=200)
+        current_evidence = {item.id: item for item in evidence_page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]}
+        if any(item_id not in current_evidence or current_evidence[item_id].data.get("status") not in {"reviewed_valid", "hypothesis"} for item_id in evidence_ids):
+            return ActionResult.error(
+                "This Visual Profile includes evidence that is no longer eligible. Create a new profile snapshot.",
+                retryable=False,
+                code="VISUAL_PROFILE_EVIDENCE_STALE",
+            )
     advanced_workspace, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
     if error:
         return error
@@ -698,6 +715,7 @@ async def register_visual_evidence(ctx, params: RegisterVisualEvidenceParams) ->
             "source_title": params.source_title.strip(),
             "observation": params.observation.strip(),
             "status": "discovered",
+            "workspace_version": advanced_workspace.data["version"],
             "created_by": actor_id,
             "tenant_id": tenant_id,
             "created_at": _now_iso(),
@@ -719,6 +737,73 @@ async def register_visual_evidence(ctx, params: RegisterVisualEvidenceParams) ->
             "workspace_version": advanced_workspace.data["version"],
         },
         "Unreviewed evidence reference registered. The URL was not fetched.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "review_visual_evidence",
+    description="Review one private VBS evidence reference as valid, hypothesis, rejected, or archived.",
+    action_type="write",
+    effects=["update:visual_evidence"],
+    event="brand-strategy-hub.review_visual_evidence",
+    data_model=VisualEvidence,
+)
+async def review_visual_evidence(ctx, params: ReviewVisualEvidenceParams) -> ActionResult[VisualEvidence]:
+    """Apply one allowed P0 evidence review transition and append its audit record."""
+    evidence = await ctx.store.get(VBS_EVIDENCE, params.evidence_id)
+    if not evidence:
+        return ActionResult.error("Evidence reference not found.", retryable=False, code="VBS_EVIDENCE_NOT_FOUND")
+    brand_id = evidence.data.get("brand_id", "")
+    workspace, error = await _require_vbs_workspace_owner(ctx, brand_id)
+    if error:
+        return error
+    if evidence.data.get("tenant_id") != workspace.data["tenant_id"]:
+        return ActionResult.error("You do not have access to this evidence reference.", retryable=False, code="VBS_ACCESS_DENIED")
+    current_status = evidence.data.get("status", "discovered")
+    if current_status != params.expected_status:
+        return ActionResult.error("This evidence reference changed since you opened it. Refresh before reviewing.", retryable=True, code="VBS_EVIDENCE_STALE")
+    allowed = {
+        "discovered": {"reviewed_valid", "hypothesis", "rejected", "archived"},
+        "reviewed_valid": {"archived"},
+        "hypothesis": {"reviewed_valid", "rejected", "archived"},
+        "rejected": {"archived"},
+        "archived": set(),
+    }
+    if params.decision not in allowed.get(current_status, set()):
+        return ActionResult.error(
+            f"Evidence cannot transition from '{current_status}' to '{params.decision}'.",
+            retryable=False,
+            code="VBS_EVIDENCE_INVALID_TRANSITION",
+        )
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before reviewing evidence.", retryable=True, code="VBS_STALE_WORKSPACE")
+    advanced_workspace, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
+    if error:
+        return error
+    actor_id, _ = _actor(ctx)
+    updated = await ctx.store.update(
+        VBS_EVIDENCE,
+        evidence.id,
+        {
+            **evidence.data,
+            "status": params.decision,
+            "review_note": params.review_note.strip(),
+            "reviewed_by": actor_id,
+            "reviewed_at": _now_iso(),
+            "workspace_version": advanced_workspace.data["version"],
+        },
+    )
+    await _append_vbs_audit(
+        ctx,
+        brand_id=brand_id,
+        vbs_id="",
+        event_type=f"evidence_{params.decision}",
+        details=params.review_note.strip(),
+    )
+    return ActionResult.success(
+        VisualEvidence(id=updated.id, title=updated.data.get("source_title") or updated.data.get("source_url", updated.id), **updated.data),
+        f"Evidence marked as {params.decision}.",
         refresh_panels=["brand_detail"],
     )
 
@@ -1924,7 +2009,30 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                 content=ui.KeyValue(columns=1, items=[
                                     {"key": "Status", "value": evidence.data.get("status", "discovered")},
                                     {"key": "Observation", "value": evidence.data.get("observation", "—")},
+                                    {"key": "Review note", "value": evidence.data.get("review_note", "—")},
                                 ]),
+                                footer=ui.Form(
+                                    action="review_visual_evidence",
+                                    submit_label="Save review decision",
+                                    defaults={
+                                        "evidence_id": evidence.id,
+                                        "expected_status": evidence.data.get("status", "discovered"),
+                                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                                    },
+                                    children=[
+                                        ui.Select(
+                                            param_name="decision",
+                                            options=[
+                                                {"value": "reviewed_valid", "label": "Reviewed valid"},
+                                                {"value": "hypothesis", "label": "Mark as hypothesis"},
+                                                {"value": "rejected", "label": "Reject"},
+                                                {"value": "archived", "label": "Archive"},
+                                            ],
+                                            placeholder="Choose review decision",
+                                        ),
+                                        ui.TextArea(param_name="review_note", placeholder="Required: explain the decision", rows=2),
+                                    ],
+                                ) if evidence.data.get("status", "discovered") != "archived" else None,
                             ) for evidence in vbs_evidence
                         ],
                     ) if vbs_evidence else ui.Empty(message="No evidence references yet. Add only public HTTPS sources you want to review later.", icon="Link"),

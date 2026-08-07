@@ -18,6 +18,7 @@ from schemas import (
     InitializeVisualBrandWorkspaceParams,
     ListVisualProfilesParams,
     RegisterVisualEvidenceParams,
+    ReviewVisualEvidenceParams,
     ResolveCurrentVisualProfileParams,
 )
 
@@ -60,11 +61,22 @@ async def test_profile_requires_current_vbs_then_resolves_immutable_snapshot():
             observation="Supports evidence-led operational visuals.",
         ),
     )
+    reviewed = await m.review_visual_evidence(
+        ctx,
+        ReviewVisualEvidenceParams(
+            evidence_id=evidence.data["id"],
+            expected_status="discovered",
+            expected_workspace_version=evidence.data["workspace_version"],
+            decision="reviewed_valid",
+            review_note="Eligible for the profile baseline.",
+        ),
+    )
+    assert reviewed.status == "success"
     profile = await m.create_visual_profile(
         ctx,
         CreateVisualProfileParams(
             brand_id=brand_id,
-            expected_workspace_version=evidence.data["workspace_version"],
+            expected_workspace_version=reviewed.data.workspace_version,
             evidence_ids=[evidence.data["id"]],
             profile_summary="Documentary-feeling visual language for operational trust.",
             art_direction="Grounded light, real environments, no stock staging.",

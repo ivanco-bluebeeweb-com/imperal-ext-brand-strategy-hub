@@ -1806,6 +1806,11 @@
             "title": "Observation",
             "type": "string"
           },
+          "workspace_version": {
+            "default": 0,
+            "title": "Workspace Version",
+            "type": "integer"
+          },
           "created_by": {
             "default": "",
             "title": "Created By",
@@ -1826,6 +1831,170 @@
         "x-sdl": "entity"
       },
       "event": "brand-strategy-hub.register_visual_evidence",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "review_visual_evidence",
+      "description": "Review one private VBS evidence reference as valid, hypothesis, rejected, or archived.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:visual_evidence"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "evidence_id": {
+            "description": "UUID of a private evidence reference — never invented",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expected_status": {
+            "description": "Evidence status currently shown to the reviewer; blocks stale reviews",
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version shown to the reviewer; blocks stale writes",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          },
+          "decision": {
+            "description": "One of: reviewed_valid, hypothesis, rejected, archived",
+            "title": "Decision",
+            "type": "string"
+          },
+          "review_note": {
+            "description": "Why this evidence received the review decision",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Review Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "expected_status",
+          "expected_workspace_version",
+          "decision",
+          "review_note"
+        ],
+        "title": "ReviewVisualEvidenceParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "A private, non-fetched source reference supporting a VBS decision.\n\nP0 stores a validated HTTPS reference only. It never downloads the URL,\nprocesses files, identifies people or treats a source as approved truth.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "discovered",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "source_url": {
+            "default": "",
+            "title": "Source Url",
+            "type": "string"
+          },
+          "source_title": {
+            "default": "",
+            "title": "Source Title",
+            "type": "string"
+          },
+          "observation": {
+            "default": "",
+            "title": "Observation",
+            "type": "string"
+          },
+          "workspace_version": {
+            "default": 0,
+            "title": "Workspace Version",
+            "type": "integer"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualEvidence",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.review_visual_evidence",
       "background": false,
       "long_running": false,
       "scopes": [],
@@ -1943,6 +2112,11 @@
                 "default": "",
                 "title": "Observation",
                 "type": "string"
+              },
+              "workspace_version": {
+                "default": 0,
+                "title": "Workspace Version",
+                "type": "integer"
               },
               "created_by": {
                 "default": "",
