@@ -35,12 +35,12 @@ from schemas import (
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
-    VerifyVisualBrandAuditIntegrityParams,
+    VerifyVisualBrandAuditIntegrityParams, AcknowledgeVisualBrandAuditIncidentParams,
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
-    AuditEvent, AuditEventList, AuditIntegrity, BrandContentHandoff,
+    AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, BrandContentHandoff,
     BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
@@ -70,6 +70,7 @@ def _now_iso() -> str:
 VBS_WORKSPACES = "vbs_workspaces"
 VBS_SYSTEMS = "visual_brand_systems"
 VBS_AUDIT_EVENTS = "visual_brand_audit_events"
+VBS_AUDIT_INCIDENTS = "visual_brand_audit_integrity_incidents"
 VBS_EVIDENCE = "visual_evidence"
 VBS_PROFILES = "visual_profiles"
 VBS_MEMBERSHIPS = "vbs_brand_memberships"
@@ -795,6 +796,59 @@ async def verify_visual_brand_audit_integrity(ctx, params: VerifyVisualBrandAudi
         return error
     result = await _verify_vbs_audit_integrity(ctx, workspace)
     return ActionResult.success(result, result.message)
+
+
+@chat.function(
+    "acknowledge_visual_brand_audit_incident",
+    description="Record that an owner reviewed a detected VBS audit-integrity incident. This never clears the safety block or edits audit history.",
+    action_type="write",
+    effects=["create:visual_brand_audit_integrity_incident", "create:visual_brand_audit_event"],
+    event="brand-strategy-hub.acknowledge_visual_brand_audit_incident",
+    data_model=AuditIntegrityIncident,
+)
+async def acknowledge_visual_brand_audit_incident(ctx, params: AcknowledgeVisualBrandAuditIncidentParams) -> ActionResult[AuditIntegrityIncident]:
+    """Persist an owner acknowledgement, but deliberately retain the critical-mutation block."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "manage_access")
+    if error:
+        return error
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error("The VBS workspace changed. Refresh before acknowledging the integrity incident.", retryable=True, code="VBS_STALE_WORKSPACE")
+    integrity = await _verify_vbs_audit_integrity(ctx, workspace)
+    if integrity.valid:
+        return ActionResult.error("No audit-integrity incident is currently detected for this VBS workspace.", retryable=False, code="VBS_AUDIT_INTEGRITY_HEALTHY")
+    actor_id, tenant_id = _actor(ctx)
+    page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": params.brand_id}, limit=200)
+    existing = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("invalid_event_id") == integrity.first_invalid_event_id), None)
+    if existing:
+        return ActionResult.success(
+            AuditIntegrityIncident(id=existing.id, title="Acknowledged audit integrity incident", **existing.data),
+            "This audit-integrity incident was already acknowledged. Critical changes remain paused.",
+            refresh_panels=["brand_detail"],
+        )
+    incident = await ctx.store.create(
+        VBS_AUDIT_INCIDENTS,
+        {
+            "brand_id": params.brand_id,
+            "tenant_id": tenant_id,
+            "invalid_event_id": integrity.first_invalid_event_id,
+            "acknowledged_by": actor_id,
+            "acknowledgement_note": params.acknowledgement_note.strip(),
+            "workspace_version": workspace.data["version"],
+            "created_at": _now_iso(),
+        },
+    )
+    await _append_vbs_audit(
+        ctx,
+        brand_id=params.brand_id,
+        vbs_id="",
+        event_type="audit_integrity_incident_acknowledged",
+        details=f"Owner acknowledged integrity incident for audit event {integrity.first_invalid_event_id}; critical changes remain paused.",
+    )
+    return ActionResult.success(
+        AuditIntegrityIncident(id=incident.id, title="Acknowledged audit integrity incident", **incident.data),
+        "Audit-integrity incident acknowledged. Critical changes remain paused until the mismatch is resolved outside this P0 workflow.",
+        refresh_panels=["brand_detail"],
+    )
 
 
 @chat.function(
@@ -2253,6 +2307,19 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                     message=vbs_integrity.message,
                     type="success",
                 ),
+                ui.Card(
+                    title="Acknowledge integrity incident",
+                    subtitle="Records that an owner reviewed the mismatch. It never changes audit history or removes the critical-change block.",
+                    content=ui.Form(
+                        action="acknowledge_visual_brand_audit_incident",
+                        submit_label="Record acknowledgement",
+                        defaults={
+                            "brand_id": brand_id,
+                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                        },
+                        children=[ui.TextArea(param_name="acknowledgement_note", placeholder="What was reviewed? This does not clear the block.", rows=2)],
+                    ),
+                ) if vbs_integrity_failed and vbs_membership.get("role") == "owner" else None,
                 ui.Card(
                     title="Workspace state",
                     content=ui.KeyValue(columns=2, items=[

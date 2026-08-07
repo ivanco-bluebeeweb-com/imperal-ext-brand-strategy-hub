@@ -107,6 +107,16 @@ class AuditIntegrity(sdl.Entity):
     message: str = ""
 
 
+class AuditIntegrityIncident(sdl.Entity):
+    """Owner acknowledgement of a detected mismatch; it never clears the safety gate."""
+    brand_id: str = ""
+    tenant_id: str = ""
+    invalid_event_id: str = ""
+    acknowledged_by: str = ""
+    acknowledgement_note: str = ""
+    workspace_version: int = 0
+
+
 class VisualEvidence(sdl.Entity):
     """A private, non-fetched source reference supporting a VBS decision.
 
@@ -341,6 +351,12 @@ class ListVisualBrandAuditEventsParams(BaseModel):
 
 class VerifyVisualBrandAuditIntegrityParams(BaseModel):
     brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+
+
+class AcknowledgeVisualBrandAuditIncidentParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    expected_workspace_version: int = Field(ge=1, description="Workspace version shown to the owner; blocks stale acknowledgement")
+    acknowledgement_note: str = Field(min_length=3, max_length=1000, description="Owner note confirming the incident was reviewed; does not clear the block")
 
 
 class RegisterVisualEvidenceParams(BaseModel):
