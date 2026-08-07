@@ -168,8 +168,12 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     brand_id = await _brand(ctx)
 
     uninitialized = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
-    assert "VBS workspace not initialized" in repr(uninitialized)
-    assert "Visual System" in repr(uninitialized)
+    rendered_uninitialized = repr(uninitialized)
+    assert "VBS workspace not initialized" in rendered_uninitialized
+    assert "Visual System" in rendered_uninitialized
+    assert "initialize_visual_brand_workspace" in rendered_uninitialized
+    assert "I am the workspace owner — initialize" in rendered_uninitialized
+    assert "confirm_owner_claim" in rendered_uninitialized
 
     await _workspace(ctx, brand_id)
     evidence = await m.register_visual_evidence(

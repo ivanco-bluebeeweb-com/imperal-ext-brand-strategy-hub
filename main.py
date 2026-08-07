@@ -2515,14 +2515,14 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                                 ),
                                 type="warning",
                             ),
-                            ui.Button(
-                                "I am the workspace owner — initialize",
-                                variant="primary",
-                                on_click=ui.Call(
-                                    "initialize_visual_brand_workspace",
-                                    brand_id=brand_id,
-                                    confirm_owner_claim=True,
-                                ),
+                            ui.Form(
+                                action="initialize_visual_brand_workspace",
+                                submit_label="I am the workspace owner — initialize",
+                                defaults={
+                                    "brand_id": brand_id,
+                                    "confirm_owner_claim": True,
+                                },
+                                children=[],
                             ),
                         ],
                     ),
