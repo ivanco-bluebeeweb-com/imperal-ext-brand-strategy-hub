@@ -277,6 +277,18 @@ async def _verify_vbs_audit_integrity(ctx, workspace) -> AuditIntegrity:
     )
 
 
+async def _require_vbs_audit_integrity(ctx, workspace):
+    """Fail closed before critical mutations if a sealed audit record was changed."""
+    integrity = await _verify_vbs_audit_integrity(ctx, workspace)
+    if not integrity.valid:
+        return ActionResult.error(
+            "A sealed VBS audit event failed integrity verification. Critical changes are paused; investigate the audit trail before continuing.",
+            retryable=False,
+            code="VBS_AUDIT_INTEGRITY_FAILED",
+        )
+    return None
+
+
 ext = Extension(
     "brand-strategy-hub",
     version="1.0.0",
@@ -471,6 +483,9 @@ async def migrate_visual_brand_access(ctx, params: MigrateVisualBrandAccessParam
         return ActionResult.error("Only this legacy workspace's founding owner in its tenant may migrate access.", retryable=False, code="VBS_ACCESS_DENIED")
     if workspace.data.get("version") != params.expected_workspace_version:
         return ActionResult.error("The VBS workspace changed. Refresh before migrating access.", retryable=True, code="VBS_STALE_WORKSPACE")
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
     page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": params.brand_id}, limit=200)
     owner_membership = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == actor_id and item.data.get("status") == "active"), None)
     if workspace.data.get("access_model_version", 1) >= 2 and owner_membership:
@@ -545,6 +560,9 @@ async def set_brand_membership(ctx, params: SetBrandMembershipParams) -> ActionR
         return ActionResult.error("The workspace's founding owner remains an owner in P0.", retryable=False, code="VBS_LAST_OWNER_PROTECTED")
     if workspace.data.get("version") != params.expected_workspace_version:
         return ActionResult.error("The VBS workspace changed. Refresh before changing access.", retryable=True, code="VBS_STALE_WORKSPACE")
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
     actor_id, tenant_id = _actor(ctx)
     page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": params.brand_id}, limit=200)
     existing = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == params.user_id), None)
@@ -574,6 +592,9 @@ async def revoke_brand_membership(ctx, params: RevokeBrandMembershipParams) -> A
         return ActionResult.error("The workspace's founding owner cannot be revoked in P0.", retryable=False, code="VBS_LAST_OWNER_PROTECTED")
     if workspace.data.get("version") != params.expected_workspace_version:
         return ActionResult.error("The VBS workspace changed. Refresh before changing access.", retryable=True, code="VBS_STALE_WORKSPACE")
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
     actor_id, tenant_id = _actor(ctx)
     page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": params.brand_id}, limit=200)
     record = next((item for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == params.user_id and item.data.get("status") == "active"), None)
@@ -709,6 +730,9 @@ async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemPar
             retryable=True,
             code="VBS_STALE_WORKSPACE",
         )
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
     advanced_workspace, error = await _advance_vbs_workspace(
         ctx, workspace, params.expected_workspace_version
     )
@@ -855,6 +879,9 @@ async def activate_visual_profile(ctx, params: ActivateVisualProfileParams) -> A
         return ActionResult.error("This Visual Profile revision is no longer the draft you reviewed.", retryable=True, code="VISUAL_PROFILE_STALE")
     if workspace.data.get("version") != params.expected_workspace_version:
         return ActionResult.error("The VBS workspace changed. Refresh before approving the profile.", retryable=True, code="VBS_STALE_WORKSPACE")
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
     bound_vbs = await ctx.store.get(VBS_SYSTEMS, candidate.data.get("vbs_id", ""))
     if (
         not bound_vbs
@@ -1006,6 +1033,9 @@ async def review_visual_evidence(ctx, params: ReviewVisualEvidenceParams) -> Act
         )
     if workspace.data.get("version") != params.expected_workspace_version:
         return ActionResult.error("The VBS workspace changed. Refresh before reviewing evidence.", retryable=True, code="VBS_STALE_WORKSPACE")
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
     advanced_workspace, error = await _advance_vbs_workspace(ctx, workspace, params.expected_workspace_version)
     if error:
         return error
@@ -2179,9 +2209,12 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         vbs_evidence = list(vbs_evidence_page.data) if vbs_evidence_page else []
         vbs_profiles = list(vbs_profile_page.data) if vbs_profile_page else []
         vbs_memberships = list(vbs_membership_page.data) if vbs_membership_page else []
+        vbs_integrity = await _verify_vbs_audit_integrity(ctx, vbs_workspace)
+        vbs_integrity_failed = not vbs_integrity.valid
         vbs_role = vbs_membership.get("role", "viewer")
-        vbs_can_edit = "edit" in ROLE_PERMISSIONS.get(vbs_role, set())
-        vbs_can_review = "review" in ROLE_PERMISSIONS.get(vbs_role, set())
+        vbs_can_edit = not vbs_integrity_failed and "edit" in ROLE_PERMISSIONS.get(vbs_role, set())
+        vbs_can_review = not vbs_integrity_failed and "review" in ROLE_PERMISSIONS.get(vbs_role, set())
+        vbs_can_manage_access = not vbs_integrity_failed and vbs_can_manage_access
         current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
         current_profile = next((d for d in vbs_profiles if d.data.get("status") == "approved_current"), None)
         revision_rows = [
@@ -2211,6 +2244,15 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
         vbs_tab = ui.Stack(
             direction="v", gap=3,
             children=[
+                ui.Alert(
+                    title="Critical changes paused — audit integrity check failed",
+                    message="A sealed VBS audit event no longer matches its integrity hash. Draft approvals, evidence decisions and access changes are blocked until this is investigated. Use the read-only audit verification below; it does not alter records.",
+                    type="error",
+                ) if vbs_integrity_failed else ui.Alert(
+                    title="Audit integrity status",
+                    message=vbs_integrity.message,
+                    type="success",
+                ),
                 ui.Card(
                     title="Workspace state",
                     content=ui.KeyValue(columns=2, items=[
