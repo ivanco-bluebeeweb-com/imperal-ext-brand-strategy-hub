@@ -14,6 +14,906 @@
   ],
   "tools": [
     {
+      "name": "initialize_visual_brand_workspace",
+      "description": "Explicitly initialize a private VBS workspace for one existing brand. Required once before creating or reading VBS revisions for a legacy brand.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:visual_brand_workspace"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "confirm_owner_claim": {
+            "default": false,
+            "description": "Must be explicitly true. In this P0 spike, bind an unscoped legacy brand to the current tenant and workspace owner.",
+            "title": "Confirm Owner Claim",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "InitializeVisualBrandWorkspaceParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Private ownership boundary and optimistic-concurrency counter for one brand.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "ready",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "default": "",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualBrandWorkspace",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.initialize_visual_brand_workspace",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "create_visual_brand_system",
+      "description": "Create the next draft revision of a brand's Visual Brand System. This P0 function accepts non-personal strategic rules only.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:visual_brand_system"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "expected_workspace_version": {
+            "description": "Workspace version currently shown in the UI; blocks stale writes in this P0 flow",
+            "minimum": 1,
+            "title": "Expected Workspace Version",
+            "type": "integer"
+          },
+          "visual_intent": {
+            "description": "What the visual system should make the audience feel or understand",
+            "minLength": 1,
+            "title": "Visual Intent",
+            "type": "string"
+          },
+          "realism_level": {
+            "default": "",
+            "description": "Declared visual mode, e.g. 'grounded realism' or 'stylised illustration'",
+            "title": "Realism Level",
+            "type": "string"
+          },
+          "core_rules": {
+            "description": "Non-negotiable visual rules, one per item",
+            "items": {
+              "type": "string"
+            },
+            "title": "Core Rules",
+            "type": "array"
+          },
+          "prohibited_patterns": {
+            "description": "Visual patterns that must not be used, one per item",
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Patterns",
+            "type": "array"
+          },
+          "change_note": {
+            "default": "",
+            "description": "Why this initial VBS draft is being created",
+            "title": "Change Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "expected_workspace_version",
+          "visual_intent"
+        ],
+        "title": "CreateVisualBrandSystemParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One versioned Visual Brand System draft or approved revision.\n\nThis first P0 slice deliberately contains only non-personal, non-media\nfields. People, consent, licenses and generation gates remain blocked\nuntil their separate privacy and storage spikes are complete.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "visual_intent": {
+            "default": "",
+            "title": "Visual Intent",
+            "type": "string"
+          },
+          "realism_level": {
+            "default": "",
+            "title": "Realism Level",
+            "type": "string"
+          },
+          "core_rules": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Core Rules",
+            "type": "array"
+          },
+          "prohibited_patterns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Patterns",
+            "type": "array"
+          },
+          "change_note": {
+            "default": "",
+            "title": "Change Note",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "supersedes_vbs_id": {
+            "default": "",
+            "title": "Supersedes Vbs Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualBrandSystem",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.create_visual_brand_system",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_visual_brand_systems",
+      "description": "List VBS revisions you can access for one initialized brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "include_superseded": {
+            "default": false,
+            "description": "Include superseded and archived VBS revisions",
+            "title": "Include Superseded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListVisualBrandSystemsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "VisualBrandSystem": {
+            "description": "One versioned Visual Brand System draft or approved revision.\n\nThis first P0 slice deliberately contains only non-personal, non-media\nfields. People, consent, licenses and generation gates remain blocked\nuntil their separate privacy and storage spikes are complete.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "default": "draft",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "revision": {
+                "default": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "visual_intent": {
+                "default": "",
+                "title": "Visual Intent",
+                "type": "string"
+              },
+              "realism_level": {
+                "default": "",
+                "title": "Realism Level",
+                "type": "string"
+              },
+              "core_rules": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Core Rules",
+                "type": "array"
+              },
+              "prohibited_patterns": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Prohibited Patterns",
+                "type": "array"
+              },
+              "change_note": {
+                "default": "",
+                "title": "Change Note",
+                "type": "string"
+              },
+              "created_by": {
+                "default": "",
+                "title": "Created By",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "supersedes_vbs_id": {
+                "default": "",
+                "title": "Supersedes Vbs Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "VisualBrandSystem",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/VisualBrandSystem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "VisualBrandSystemList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "activate_visual_brand_system",
+      "description": "Approve one VBS draft revision and supersede the previously approved current revision.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:visual_brand_system"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "vbs_id": {
+            "description": "UUID of a VBS draft or in-review revision — never invented",
+            "title": "Vbs Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "description": "Revision currently shown to the reviewer; blocks stale activation",
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "approval_note": {
+            "default": "",
+            "description": "Reason for approving this VBS revision",
+            "title": "Approval Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vbs_id",
+          "expected_revision"
+        ],
+        "title": "ActivateVisualBrandSystemParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One versioned Visual Brand System draft or approved revision.\n\nThis first P0 slice deliberately contains only non-personal, non-media\nfields. People, consent, licenses and generation gates remain blocked\nuntil their separate privacy and storage spikes are complete.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "visual_intent": {
+            "default": "",
+            "title": "Visual Intent",
+            "type": "string"
+          },
+          "realism_level": {
+            "default": "",
+            "title": "Realism Level",
+            "type": "string"
+          },
+          "core_rules": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Core Rules",
+            "type": "array"
+          },
+          "prohibited_patterns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Patterns",
+            "type": "array"
+          },
+          "change_note": {
+            "default": "",
+            "title": "Change Note",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "supersedes_vbs_id": {
+            "default": "",
+            "title": "Supersedes Vbs Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "VisualBrandSystem",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.activate_visual_brand_system",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_visual_brand_audit_events",
+      "description": "List append-only VBS audit events for one initialized brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max audit events to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListVisualBrandAuditEventsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "AuditEvent": {
+            "description": "Append-only audit record for a VBS action in this application.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "vbs_id": {
+                "default": "",
+                "title": "Vbs Id",
+                "type": "string"
+              },
+              "event_type": {
+                "default": "",
+                "title": "Event Type",
+                "type": "string"
+              },
+              "actor_id": {
+                "default": "",
+                "title": "Actor Id",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              },
+              "details": {
+                "default": "",
+                "title": "Details",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "AuditEvent",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/AuditEvent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AuditEventList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "create_brand_profile",
       "description": "Create a new brand profile — mission, vision, value proposition, tone of voice, and unique selling points. The anchor for SWOT, competitor tracking, and target segments for this brand.",
       "action_type": "write",
@@ -73,6 +973,14 @@
             "description": "Industry/category, e.g. 'private security services'",
             "title": "Industry",
             "type": "string"
+          },
+          "content_topics": {
+            "description": "Topics/categories this brand's content should cover, e.g. ['ventilation systems', 'heat recovery', 'installation guides'] -- distinct from unique_selling_points. Used by build_content_strategy_handoff to populate content_categories.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Content Topics",
+            "type": "array"
           }
         },
         "required": [
@@ -194,6 +1102,14 @@
             "default": "",
             "title": "Industry",
             "type": "string"
+          },
+          "content_topics": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Content Topics",
+            "type": "array"
           }
         },
         "required": [
@@ -319,6 +1235,22 @@
             "default": null,
             "description": "New industry; omit to keep",
             "title": "Industry"
+          },
+          "content_topics": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Replace content topics/categories; omit to keep",
+            "title": "Content Topics"
           }
         },
         "required": [
@@ -440,6 +1372,14 @@
             "default": "",
             "title": "Industry",
             "type": "string"
+          },
+          "content_topics": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Content Topics",
+            "type": "array"
           }
         },
         "required": [
@@ -590,6 +1530,14 @@
                 "default": "",
                 "title": "Industry",
                 "type": "string"
+              },
+              "content_topics": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Content Topics",
+                "type": "array"
               }
             },
             "required": [

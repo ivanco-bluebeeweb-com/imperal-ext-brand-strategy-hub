@@ -33,6 +33,53 @@ class BrandProfileList(sdl.EntityList[BrandProfile]):
     pass
 
 
+class VisualBrandWorkspace(sdl.Entity):
+    """Private ownership boundary and optimistic-concurrency counter for one brand."""
+    brand_id: str = ""
+    owner_id: str = ""
+    tenant_id: str = ""
+    version: int = 1
+    status: str = "ready"
+
+
+class VisualBrandSystem(sdl.Entity):
+    """One versioned Visual Brand System draft or approved revision.
+
+    This first P0 slice deliberately contains only non-personal, non-media
+    fields. People, consent, licenses and generation gates remain blocked
+    until their separate privacy and storage spikes are complete.
+    """
+    brand_id: str = ""
+    revision: int = 1
+    status: str = "draft"
+    visual_intent: str = ""
+    realism_level: str = ""
+    core_rules: list[str] = []
+    prohibited_patterns: list[str] = []
+    change_note: str = ""
+    created_by: str = ""
+    tenant_id: str = ""
+    supersedes_vbs_id: str = ""
+
+
+class VisualBrandSystemList(sdl.EntityList[VisualBrandSystem]):
+    pass
+
+
+class AuditEvent(sdl.Entity):
+    """Append-only audit record for a VBS action in this application."""
+    brand_id: str = ""
+    vbs_id: str = ""
+    event_type: str = ""
+    actor_id: str = ""
+    tenant_id: str = ""
+    details: str = ""
+
+
+class AuditEventList(sdl.EntityList[AuditEvent]):
+    pass
+
+
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
     brand_id: str = ""
@@ -151,6 +198,52 @@ class UpdateBrandProfileParams(BaseModel):
 
 class ListBrandProfilesParams(BaseModel):
     limit: int = Field(20, description="Max items to return (1-100)")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Visual Brand System — P0 non-personal vertical slice
+# ──────────────────────────────────────────────────────────────────────────
+
+class InitializeVisualBrandWorkspaceParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — never invented")
+    confirm_owner_claim: bool = Field(
+        False,
+        description=(
+            "Must be explicitly true. In this P0 spike, bind an unscoped legacy "
+            "brand to the current tenant and workspace owner."
+        ),
+    )
+
+
+class CreateVisualBrandSystemParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — never invented")
+    expected_workspace_version: int = Field(
+        ge=1,
+        description="Workspace version currently shown in the UI; blocks stale writes in this P0 flow",
+    )
+    visual_intent: str = Field(min_length=1, description="What the visual system should make the audience feel or understand")
+    realism_level: str = Field(
+        "", description="Declared visual mode, e.g. 'grounded realism' or 'stylised illustration'"
+    )
+    core_rules: list[str] = Field(default_factory=list, description="Non-negotiable visual rules, one per item")
+    prohibited_patterns: list[str] = Field(default_factory=list, description="Visual patterns that must not be used, one per item")
+    change_note: str = Field("", description="Why this initial VBS draft is being created")
+
+
+class ListVisualBrandSystemsParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — never invented")
+    include_superseded: bool = Field(False, description="Include superseded and archived VBS revisions")
+
+
+class ActivateVisualBrandSystemParams(BaseModel):
+    vbs_id: str = Field(description="UUID of a VBS draft or in-review revision — never invented")
+    expected_revision: int = Field(ge=1, description="Revision currently shown to the reviewer; blocks stale activation")
+    approval_note: str = Field("", description="Reason for approving this VBS revision")
+
+
+class ListVisualBrandAuditEventsParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — never invented")
+    limit: int = Field(50, description="Max audit events to return (1-100)")
 
 
 class AddCompetitorParams(BaseModel):

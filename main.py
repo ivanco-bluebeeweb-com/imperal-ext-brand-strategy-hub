@@ -25,13 +25,17 @@ from datetime import datetime, timezone
 from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
-    AddCompetitorParams, BuildContentStrategyHandoffParams,
-    CreateBrandProfileParams, CreateTargetSegmentParams,
+    AddCompetitorParams, ActivateVisualBrandSystemParams,
+    BuildContentStrategyHandoffParams, CreateBrandProfileParams,
+    InitializeVisualBrandWorkspaceParams,
+    CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
-    ListSWOTResultsParams, ListTargetSegmentsParams, RunGapAnalysisParams,
-    RunSWOTAnalysisParams, UpdateBrandProfileParams,
-    BrandContentHandoff,
-    BrandProfile, BrandProfileList,
+    ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
+    ListVisualBrandSystemsParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
+    UpdateBrandProfileParams,
+    AuditEvent, AuditEventList, BrandContentHandoff,
+    BrandProfile, BrandProfileList, VisualBrandSystem, VisualBrandSystemList,
+    VisualBrandWorkspace,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
     CompetitorProfile, CompetitorProfileList,
     GapAnalysisResult, GapAnalysisResultList,
@@ -54,6 +58,70 @@ from converters import (
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+VBS_WORKSPACES = "vbs_workspaces"
+VBS_SYSTEMS = "visual_brand_systems"
+VBS_AUDIT_EVENTS = "visual_brand_audit_events"
+
+
+def _actor(ctx) -> tuple[str, str]:
+    """Return the authenticated user and tenant without trusting panel input."""
+    user = getattr(ctx, "user", None)
+    return (
+        getattr(user, "imperal_id", "") or "",
+        getattr(user, "tenant_id", "") or "",
+    )
+
+
+async def _workspace_for_brand(ctx, brand_id: str):
+    """Load the one VBS workspace bound to a brand, if initialized."""
+    page = await ctx.store.query(VBS_WORKSPACES, where={"brand_id": brand_id}, limit=2)
+    return page.data[0] if page.data else None
+
+
+async def _require_vbs_workspace_owner(ctx, brand_id: str):
+    """Enforce tenant + owner isolation for every P0 VBS mutation/read.
+
+    Legacy brand profiles are intentionally inaccessible to VBS functions
+    until their current owner explicitly initializes the VBS workspace. This
+    avoids silently assigning historical brand data to whichever tenant reads
+    it first.
+    """
+    workspace = await _workspace_for_brand(ctx, brand_id)
+    if not workspace:
+        return None, ActionResult.error(
+            "The VBS workspace is not initialized for this brand. Initialize it explicitly first.",
+            retryable=False,
+            code="VBS_WORKSPACE_NOT_INITIALIZED",
+        )
+    actor_id, tenant_id = _actor(ctx)
+    data = workspace.data
+    if not actor_id or not tenant_id or data.get("tenant_id") != tenant_id or data.get("owner_id") != actor_id:
+        return None, ActionResult.error(
+            "You do not have access to this brand's VBS workspace.",
+            retryable=False,
+            code="VBS_ACCESS_DENIED",
+        )
+    return workspace, None
+
+
+async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str) -> None:
+    """Write an append-only application audit event; no UI route may edit it."""
+    actor_id, tenant_id = _actor(ctx)
+    await ctx.store.create(
+        VBS_AUDIT_EVENTS,
+        {
+            "brand_id": brand_id,
+            "vbs_id": vbs_id,
+            "event_type": event_type,
+            "actor_id": actor_id,
+            "tenant_id": tenant_id,
+            "details": details,
+            "occurred_at": _now_iso(),
+        },
+    )
+
 
 ext = Extension(
     "brand-strategy-hub",
@@ -137,6 +205,231 @@ async def fetch_connected_sites(ctx) -> tuple[list[dict], list[dict]]:
                 "site_id": _canonical_site_id(r),
             })
     return sites, problems
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Visual Brand System — P0 non-personal vertical slice
+# ──────────────────────────────────────────────────────────────────────────
+
+@chat.function(
+    "initialize_visual_brand_workspace",
+    description=(
+        "Explicitly initialize a private VBS workspace for one existing brand. "
+        "Required once before creating or reading VBS revisions for a legacy brand."
+    ),
+    action_type="write",
+    effects=["create:visual_brand_workspace"],
+    event="brand-strategy-hub.initialize_visual_brand_workspace",
+    data_model=VisualBrandWorkspace,
+)
+async def initialize_visual_brand_workspace(ctx, params: InitializeVisualBrandWorkspaceParams) -> ActionResult[VisualBrandWorkspace]:
+    """Claim a legacy brand deliberately; never bind it to the first casual reader."""
+    if not params.confirm_owner_claim:
+        return ActionResult.error(
+            "Explicit owner confirmation is required before initializing this VBS workspace.",
+            retryable=False,
+            code="VBS_OWNER_CLAIM_REQUIRED",
+        )
+    actor_id, tenant_id = _actor(ctx)
+    if not actor_id or not tenant_id:
+        return ActionResult.error(
+            "An authenticated tenant context is required to initialize a VBS workspace.",
+            retryable=False,
+            code="VBS_AUTH_CONTEXT_REQUIRED",
+        )
+    brand = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand:
+        return ActionResult.error("Brand profile not found.", retryable=False, code="BRAND_NOT_FOUND")
+
+    workspace = await _workspace_for_brand(ctx, params.brand_id)
+    if workspace:
+        data = workspace.data
+        if data.get("tenant_id") == tenant_id and data.get("owner_id") == actor_id:
+            return ActionResult.success(
+                {"workspace_id": workspace.id, "brand_id": params.brand_id, "version": data.get("version", 1)},
+                "VBS workspace is already initialized for you.",
+                refresh_panels=["brand_detail"],
+            )
+        return ActionResult.error(
+            "A VBS workspace for this brand is already owned by another tenant or user.",
+            retryable=False,
+            code="VBS_WORKSPACE_ALREADY_CLAIMED",
+        )
+
+    workspace = await ctx.store.create(
+        VBS_WORKSPACES,
+        {
+            "brand_id": params.brand_id,
+            "tenant_id": tenant_id,
+            "owner_id": actor_id,
+            "version": 1,
+            "status": "ready",
+            "created_at": _now_iso(),
+        },
+    )
+    await _append_vbs_audit(
+        ctx,
+        brand_id=params.brand_id,
+        vbs_id="",
+        event_type="workspace_initialized",
+        details="Explicit owner claim created the P0 VBS workspace.",
+    )
+    return ActionResult.success(
+        {"workspace_id": workspace.id, "brand_id": params.brand_id, "version": 1},
+        "VBS workspace initialized. You can now create its first draft.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "create_visual_brand_system",
+    description=(
+        "Create the next draft revision of a brand's Visual Brand System. "
+        "This P0 function accepts non-personal strategic rules only."
+    ),
+    action_type="write",
+    effects=["create:visual_brand_system"],
+    event="brand-strategy-hub.create_visual_brand_system",
+    data_model=VisualBrandSystem,
+)
+async def create_visual_brand_system(ctx, params: CreateVisualBrandSystemParams) -> ActionResult[VisualBrandSystem]:
+    """Create the next private VBS draft revision with stale-write protection."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    if workspace.data.get("version") != params.expected_workspace_version:
+        return ActionResult.error(
+            "The VBS workspace changed since you opened it. Refresh and review before saving.",
+            retryable=True,
+            code="VBS_STALE_WORKSPACE",
+        )
+
+    existing_page = await ctx.store.query(
+        VBS_SYSTEMS, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200
+    )
+    revisions = [d for d in existing_page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]]
+    revision = max((int(d.data.get("revision", 0)) for d in revisions), default=0) + 1
+    actor_id, tenant_id = _actor(ctx)
+    vbs = await ctx.store.create(
+        VBS_SYSTEMS,
+        {
+            "brand_id": params.brand_id,
+            "revision": revision,
+            "status": "draft",
+            "visual_intent": params.visual_intent.strip(),
+            "realism_level": params.realism_level.strip(),
+            "core_rules": [rule.strip() for rule in params.core_rules if rule.strip()],
+            "prohibited_patterns": [item.strip() for item in params.prohibited_patterns if item.strip()],
+            "change_note": params.change_note.strip(),
+            "created_by": actor_id,
+            "tenant_id": tenant_id,
+            "supersedes_vbs_id": "",
+            "created_at": _now_iso(),
+        },
+    )
+    await ctx.store.update(
+        VBS_WORKSPACES, workspace.id, {**workspace.data, "version": workspace.data["version"] + 1, "updated_at": _now_iso()}
+    )
+    await _append_vbs_audit(
+        ctx,
+        brand_id=params.brand_id,
+        vbs_id=vbs.id,
+        event_type="vbs_draft_created",
+        details=f"Created revision {revision} as a draft.",
+    )
+    return ActionResult.success(
+        {
+            "vbs_id": vbs.id,
+            "brand_id": params.brand_id,
+            "revision": revision,
+            "status": "draft",
+            "workspace_version": workspace.data["version"] + 1,
+        },
+        f"Created VBS revision {revision} as a draft.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function("list_visual_brand_systems", description="List VBS revisions you can access for one initialized brand.")
+async def list_visual_brand_systems(ctx, params: ListVisualBrandSystemsParams) -> ActionResult[VisualBrandSystemList]:
+    """List the caller's VBS revisions without exposing another workspace."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    records = [d for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]]
+    if not params.include_superseded:
+        records = [d for d in records if d.data.get("status") not in {"superseded", "archived"}]
+    items = [
+        VisualBrandSystem(id=d.id, title=f"VBS revision {d.data.get('revision', 1)}", **d.data)
+        for d in records
+    ]
+    return ActionResult.success(VisualBrandSystemList(items=items), f"Found {len(items)} VBS revision(s).")
+
+
+@chat.function(
+    "activate_visual_brand_system",
+    description="Approve one VBS draft revision and supersede the previously approved current revision.",
+    action_type="write",
+    effects=["update:visual_brand_system"],
+    event="brand-strategy-hub.activate_visual_brand_system",
+    data_model=VisualBrandSystem,
+)
+async def activate_visual_brand_system(ctx, params: ActivateVisualBrandSystemParams) -> ActionResult[VisualBrandSystem]:
+    """Activate one reviewed draft and preserve its predecessor as history."""
+    candidate = await ctx.store.get(VBS_SYSTEMS, params.vbs_id)
+    if not candidate:
+        return ActionResult.error("VBS revision not found.", retryable=False, code="VBS_NOT_FOUND")
+    brand_id = candidate.data.get("brand_id", "")
+    workspace, error = await _require_vbs_workspace_owner(ctx, brand_id)
+    if error:
+        return error
+    if candidate.data.get("tenant_id") != workspace.data.get("tenant_id"):
+        return ActionResult.error("You do not have access to this VBS revision.", retryable=False, code="VBS_ACCESS_DENIED")
+    if candidate.data.get("status") != "draft" or candidate.data.get("revision") != params.expected_revision:
+        return ActionResult.error(
+            "This VBS revision is no longer the draft revision you reviewed.",
+            retryable=True,
+            code="VBS_STALE_REVISION",
+        )
+
+    revisions = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-created_at", limit=200)
+    current = [
+        d for d in revisions.data
+        if d.data.get("tenant_id") == workspace.data["tenant_id"] and d.data.get("status") == "approved_current"
+    ]
+    for old in current:
+        await ctx.store.update(VBS_SYSTEMS, old.id, {**old.data, "status": "superseded", "superseded_at": _now_iso()})
+        await _append_vbs_audit(
+            ctx, brand_id=brand_id, vbs_id=old.id, event_type="vbs_superseded", details=f"Superseded by revision {params.expected_revision}."
+        )
+    await ctx.store.update(
+        VBS_SYSTEMS,
+        candidate.id,
+        {**candidate.data, "status": "approved_current", "approved_at": _now_iso(), "approval_note": params.approval_note.strip()},
+    )
+    await _append_vbs_audit(
+        ctx, brand_id=brand_id, vbs_id=candidate.id, event_type="vbs_approved_current", details=params.approval_note.strip() or "Approved as current VBS."
+    )
+    return ActionResult.success(
+        {"vbs_id": candidate.id, "brand_id": brand_id, "revision": params.expected_revision, "status": "approved_current"},
+        f"VBS revision {params.expected_revision} is now current.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function("list_visual_brand_audit_events", description="List append-only VBS audit events for one initialized brand.")
+async def list_visual_brand_audit_events(ctx, params: ListVisualBrandAuditEventsParams) -> ActionResult[AuditEventList]:
+    """Read the append-only VBS audit projection owned by this caller."""
+    workspace, error = await _require_vbs_workspace_owner(ctx, params.brand_id)
+    if error:
+        return error
+    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": params.brand_id}, order_by="-occurred_at", limit=params.limit)
+    items = [
+        AuditEvent(id=d.id, title=d.data.get("event_type", "audit event"), **d.data)
+        for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]
+    ]
+    return ActionResult.success(AuditEventList(items=items), f"Found {len(items)} VBS audit event(s).")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1063,6 +1356,22 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     data = brand_doc.data
     brand_name = data.get("brand_name", "") or brand_id
 
+    # P0 manual UI spike: this is intentionally a local projection only.
+    # It must not call downstream apps while rendering because renderer-time
+    # IPC may lose authenticated user context.
+    vbs_workspace = await _workspace_for_brand(ctx, brand_id)
+    actor_id, tenant_id = _actor(ctx)
+    vbs_workspace_owned = bool(
+        vbs_workspace
+        and vbs_workspace.data.get("tenant_id") == tenant_id
+        and vbs_workspace.data.get("owner_id") == actor_id
+    )
+    vbs_page = None
+    vbs_audit_page = None
+    if vbs_workspace_owned:
+        vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+        vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
+
     comp_page = await ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
@@ -1163,6 +1472,130 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
             ),
         ],
     )
+
+    # ── Visual System tab — P0 manual UI spike ──────────────────────
+    # No people, consent, external evidence or media actions are exposed
+    # here. This spike validates the safe manual control path for a brand-
+    # scoped, versioned non-personal strategic record first.
+    if not vbs_workspace:
+        vbs_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Alert(
+                    title="VBS workspace not initialized",
+                    message=(
+                        "Visual Brand System data is private and remains unavailable until "
+                        "the current owner explicitly claims this brand workspace."
+                    ),
+                    type="info",
+                ),
+                ui.Card(
+                    title="Initialize private workspace",
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Alert(
+                                title="Explicit owner action",
+                                message=(
+                                    "Initializing binds this VBS workspace to your authenticated "
+                                    "tenant and user. It cannot be silently claimed by a panel read."
+                                ),
+                                type="warning",
+                            ),
+                            ui.Button(
+                                "I am the workspace owner — initialize",
+                                variant="primary",
+                                on_click=ui.Call(
+                                    "initialize_visual_brand_workspace",
+                                    brand_id=brand_id,
+                                    confirm_owner_claim=True,
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ],
+        )
+    elif not vbs_workspace_owned:
+        vbs_tab = ui.Alert(
+            title="VBS workspace unavailable",
+            message="This brand's VBS workspace belongs to another private tenant or user.",
+            type="warning",
+        )
+    else:
+        vbs_revisions = list(vbs_page.data) if vbs_page else []
+        vbs_audit_events = list(vbs_audit_page.data) if vbs_audit_page else []
+        current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
+        revision_rows = [
+            ui.Card(
+                title=f"Revision {d.data.get('revision', '?')} · {d.data.get('status', 'draft')}",
+                subtitle=d.data.get("visual_intent", "No visual intent recorded"),
+                content=ui.KeyValue(columns=1, items=[
+                    {"key": "Realism", "value": d.data.get("realism_level") or "—"},
+                    {"key": "Core rules", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
+                    {"key": "Avoid", "value": "; ".join(d.data.get("prohibited_patterns", [])) or "—"},
+                    {"key": "Change note", "value": d.data.get("change_note") or "—"},
+                ]),
+                footer=(
+                    ui.Form(
+                        action="activate_visual_brand_system",
+                        submit_label="Approve as current",
+                        defaults={"vbs_id": d.id, "expected_revision": d.data.get("revision", 1)},
+                        children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
+                    ) if d.data.get("status") in {"draft", "in_review"} else None
+                ),
+            ) for d in vbs_revisions
+        ]
+        vbs_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Card(
+                    title="Workspace state",
+                    content=ui.KeyValue(columns=2, items=[
+                        {"key": "Workspace version", "value": str(vbs_workspace.data.get("version", 1))},
+                        {"key": "Current revision", "value": str(current_vbs.data.get("revision")) if current_vbs else "Not approved"},
+                        {"key": "Scope", "value": "P0: non-personal visual rules only"},
+                        {"key": "People/media", "value": "Blocked pending privacy/storage spikes"},
+                    ]),
+                ),
+                ui.Card(
+                    title="Create next VBS draft",
+                    subtitle="Saving creates a new revision; it does not overwrite history.",
+                    content=ui.Form(
+                        action="create_visual_brand_system",
+                        submit_label="Save draft revision",
+                        defaults={
+                            "brand_id": brand_id,
+                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
+                        },
+                        children=[
+                            ui.TextArea(param_name="visual_intent", placeholder="Visual intent: what should this brand's visuals make people feel or understand?", rows=3),
+                            ui.Input(param_name="realism_level", placeholder="Realism level, e.g. grounded realism"),
+                            ui.TagInput(param_name="core_rules", placeholder="Add a non-negotiable visual rule and press Enter"),
+                            ui.TagInput(param_name="prohibited_patterns", placeholder="Add a prohibited pattern and press Enter"),
+                            ui.TextArea(param_name="change_note", placeholder="Why this revision is needed (optional)", rows=2),
+                        ],
+                    ),
+                ),
+                ui.Card(
+                    title=f"Revision history ({len(vbs_revisions)})",
+                    content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No VBS revisions yet — create the first draft above.", icon="Palette"),
+                ),
+                ui.Card(
+                    title=f"Audit trail ({len(vbs_audit_events)})",
+                    subtitle="Append-only P0 record of workspace, draft and approval actions.",
+                    content=ui.Stack(
+                        direction="v", gap=1,
+                        children=[
+                            ui.Text(
+                                f"{event.data.get('occurred_at', '')} · {event.data.get('event_type', 'event')} · {event.data.get('details', '')}",
+                                variant="caption",
+                            ) for event in vbs_audit_events
+                        ],
+                    ) if vbs_audit_events else ui.Empty(message="No VBS audit events yet.", icon="History"),
+                ),
+            ],
+        )
 
     # ── SWOT tab ─────────────────────────────────────────────────────
     run_swot_button = ui.Button(
@@ -1322,6 +1755,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
 
     tab_defs = [
         ("profile", "Profile", profile_tab),
+        ("visual_system", "Visual System", vbs_tab),
         ("swot", "SWOT", swot_tab),
         ("gap", "Gap Analysis", gap_tab),
         ("competitors", f"Competitors ({len(competitors)})", competitors_tab),
