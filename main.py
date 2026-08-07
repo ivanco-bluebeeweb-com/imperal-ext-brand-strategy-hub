@@ -2758,6 +2758,15 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         ] or [ui.Text("No integrity incidents have been acknowledged.")],
                     ),
                 ) if vbs_incidents else ui.Text("", variant="caption"),
+                ui.Accordion(
+                    allow_multiple=True,
+                    sections=[
+                        {
+                            "id": "vbs-settings",
+                            "title": "Settings",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
                 ui.Card(
                     title="Workspace state",
                     subtitle="Workspace version is an internal change counter (goes up on every save/approval/access change) — it is not the revision number below.",
@@ -2816,6 +2825,15 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         ] or [ui.Text("No explicit member records yet; the founding owner retains access.")],
                     ),
                 ),
+                                ],
+                            ),
+                        },
+                        {
+                            "id": "vbs-create",
+                            "title": "Create Visual Brand System",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
                 ui.Card(
                     title="Create next VBS draft",
                     subtitle="VBS = Visual Brand System, this brand's approved visual rules. Saving creates a new revision; it does not overwrite history.",
@@ -2839,6 +2857,15 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         type="info",
                     ),
                 ),
+                                ],
+                            ),
+                        },
+                        {
+                            "id": "vbs-evidences",
+                            "title": "Evidences",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
                 ui.Card(
                     title="Register evidence reference",
                     subtitle="P0 stores a public HTTPS reference only. It never fetches, downloads or processes the source.",
@@ -2901,6 +2928,15 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         ],
                     ) if vbs_evidence else ui.Empty(message="No evidence references yet. Add only public HTTPS sources you want to review later.", icon="Link"),
                 ),
+                                ],
+                            ),
+                        },
+                        {
+                            "id": "vbs-profiles",
+                            "title": "Visual Profiles",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
                 ui.Card(
                     title="Create Visual Profile draft",
                     subtitle=(
@@ -2988,6 +3024,15 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         ],
                     ) if vbs_profiles else ui.Empty(message="No Visual Profile drafts yet.", icon="Layers"),
                 ),
+                                ],
+                            ),
+                        },
+                        {
+                            "id": "vbs-handoffs",
+                            "title": "Baseline handoffs",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
                 ui.Card(
                     title="Approved baseline handoffs",
                     subtitle=(
@@ -3021,12 +3066,22 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         type="info",
                     ),
                 ),
+                                ],
+                            ),
+                        },
+                        {
+                            "id": "vbs-revisions",
+                            "title": "Revisions",
+                            "children": ui.Stack(
+                                direction="v", gap=3,
+                                children=[
                 ui.Card(
                     title=f"Revision history ({len(vbs_revisions)})",
                     content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No VBS revisions yet — create the first draft above.", icon="Palette"),
                 ),
-                ui.Accordion(
-                    sections=[
+                                ],
+                            ),
+                        },
                         {
                             "id": "vbs-technical-details",
                             "title": "Technical details: audit chain & integrity log",
