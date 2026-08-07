@@ -36,6 +36,9 @@ async def test_sealed_audit_events_verify_and_tampering_is_detected():
     assert verified.status == "success"
     assert verified.data.valid is True
     assert verified.data.sealed_events >= 1
+    assert verified.data.chained_events >= 1
+    assert verified.data.chain_sequence == verified.data.chained_events
+    assert len(verified.data.chain_head) == 64
 
     page = await ctx.store.query(m.VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, limit=20)
     event = page.data[0]

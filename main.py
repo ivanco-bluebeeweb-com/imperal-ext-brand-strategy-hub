@@ -268,8 +268,10 @@ def _audit_integrity_result(workspace, events, sealed, chained, valid, message, 
     return AuditIntegrity(
         id=f"audit-integrity:{workspace.data['brand_id']}", title="VBS audit integrity",
         brand_id=workspace.data["brand_id"], tenant_id=workspace.data["tenant_id"],
-        checked_events=len(events), sealed_events=sealed, chained_events=chained, valid=valid,
-        first_invalid_event_id=invalid_event_id, message=message,
+        checked_events=len(events), sealed_events=sealed, chained_events=chained,
+        chain_head=workspace.data.get("audit_chain_head", ""),
+        chain_sequence=int(workspace.data.get("audit_chain_sequence", 0)),
+        valid=valid, first_invalid_event_id=invalid_event_id, message=message,
     )
 
 
@@ -2588,6 +2590,15 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                 ui.Card(
                     title=f"Revision history ({len(vbs_revisions)})",
                     content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No VBS revisions yet — create the first draft above.", icon="Palette"),
+                ),
+                ui.Card(
+                    title="Audit-chain status",
+                    subtitle="Read-only workspace anchor for chained audit events. A mismatch blocks critical changes.",
+                    content=ui.KeyValue(columns=3, items=[
+                        {"key": "Chain sequence", "value": str(vbs_integrity.chain_sequence)},
+                        {"key": "Chained events", "value": str(vbs_integrity.chained_events)},
+                        {"key": "Anchor fingerprint", "value": (vbs_integrity.chain_head[:12] + "…") if vbs_integrity.chain_head else "Not started"},
+                    ]),
                 ),
                 ui.Card(
                     title=f"Audit trail ({len(vbs_audit_events)})",

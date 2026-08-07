@@ -106,6 +106,8 @@ class AuditIntegrity(sdl.Entity):
     checked_events: int = 0
     sealed_events: int = 0
     chained_events: int = 0
+    chain_head: str = ""
+    chain_sequence: int = 0
     valid: bool = True
     first_invalid_event_id: str = ""
     message: str = ""

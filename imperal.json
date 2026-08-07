@@ -1685,6 +1685,16 @@
             "title": "Chained Events",
             "type": "integer"
           },
+          "chain_head": {
+            "default": "",
+            "title": "Chain Head",
+            "type": "string"
+          },
+          "chain_sequence": {
+            "default": 0,
+            "title": "Chain Sequence",
+            "type": "integer"
+          },
           "valid": {
             "default": true,
             "title": "Valid",
