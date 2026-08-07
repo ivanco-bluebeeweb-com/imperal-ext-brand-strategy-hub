@@ -41,6 +41,9 @@ class VisualBrandWorkspace(sdl.Entity):
     version: int = 1
     access_model_version: int = 1
     status: str = "ready"
+    audit_chain_head: str = ""
+    audit_chain_sequence: int = 0
+    audit_chain_started_at: str = ""
 
 
 class BrandMembership(sdl.Entity):
@@ -102,6 +105,7 @@ class AuditIntegrity(sdl.Entity):
     tenant_id: str = ""
     checked_events: int = 0
     sealed_events: int = 0
+    chained_events: int = 0
     valid: bool = True
     first_invalid_event_id: str = ""
     message: str = ""

@@ -235,9 +235,14 @@ def _audit_event_hash(payload: dict) -> str:
 
 
 async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str) -> None:
-    """Write a sealed append-only application audit event; no app route can edit it."""
+    """Append a chained audit event and advance its workspace-local integrity anchor."""
+    workspace = await _workspace_for_brand(ctx, brand_id)
+    if not workspace:
+        raise ValueError("VBS workspace must exist before appending an audit event.")
     actor_id, tenant_id = _actor(ctx)
     occurred_at = _now_iso()
+    sequence = int(workspace.data.get("audit_chain_sequence", 0)) + 1
+    previous_hash = workspace.data.get("audit_chain_head", "")
     payload = {
         "brand_id": brand_id,
         "vbs_id": vbs_id,
@@ -246,38 +251,65 @@ async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str,
         "tenant_id": tenant_id,
         "details": details,
         "occurred_at": occurred_at,
+        "chain_sequence": sequence,
+        "previous_integrity_hash": previous_hash,
     }
-    await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": _audit_event_hash(payload)})
+    integrity_hash = _audit_event_hash(payload)
+    await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": integrity_hash, "integrity_version": 2})
+    await ctx.store.update(VBS_WORKSPACES, workspace.id, {
+        **workspace.data,
+        "audit_chain_head": integrity_hash,
+        "audit_chain_sequence": sequence,
+        "audit_chain_started_at": workspace.data.get("audit_chain_started_at") or occurred_at,
+    })
+
+
+def _audit_integrity_result(workspace, events, sealed, chained, valid, message, invalid_event_id="") -> AuditIntegrity:
+    return AuditIntegrity(
+        id=f"audit-integrity:{workspace.data['brand_id']}", title="VBS audit integrity",
+        brand_id=workspace.data["brand_id"], tenant_id=workspace.data["tenant_id"],
+        checked_events=len(events), sealed_events=sealed, chained_events=chained, valid=valid,
+        first_invalid_event_id=invalid_event_id, message=message,
+    )
 
 
 async def _verify_vbs_audit_integrity(ctx, workspace) -> AuditIntegrity:
-    """Recompute seals for this tenant's audit events; unsealed historical events remain explicitly legacy."""
+    """Verify record seals plus the v2 ordered chain against its workspace anchor."""
     page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="occurred_at", limit=500)
     events = [item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]]
     sealed = 0
+    chained = 0
+    previous_hash = ""
+    expected_sequence = 1
+    chained_events = [item for item in events if item.data.get("integrity_version") == 2]
     for item in events:
         stored_hash = item.data.get("integrity_hash", "")
         if not stored_hash:
             continue
         sealed += 1
-        payload = {key: item.data.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at")}
+        if item.data.get("integrity_version") != 2:
+            payload = {key: item.data.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at")}
+            if _audit_event_hash(payload) != stored_hash:
+                return _audit_integrity_result(workspace, events, sealed, chained, False, "A sealed audit event does not match its recorded integrity hash.", item.id)
+            continue
+        chained += 1
+        payload = {key: item.data.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at", "chain_sequence", "previous_integrity_hash")}
         if _audit_event_hash(payload) != stored_hash:
-            return AuditIntegrity(
-                id=f"audit-integrity:{workspace.data['brand_id']}", title="VBS audit integrity",
-                brand_id=workspace.data["brand_id"], tenant_id=workspace.data["tenant_id"],
-                checked_events=len(events), sealed_events=sealed, valid=False,
-                first_invalid_event_id=item.id,
-                message="A sealed audit event does not match its recorded integrity hash.",
-            )
+            return _audit_integrity_result(workspace, events, sealed, chained, False, "A chained audit event does not match its recorded integrity hash.", item.id)
+        if item.data.get("chain_sequence") != expected_sequence or item.data.get("previous_integrity_hash", "") != previous_hash:
+            return _audit_integrity_result(workspace, events, sealed, chained, False, "The ordered audit hash chain is missing or out of sequence.", item.id)
+        previous_hash = stored_hash
+        expected_sequence += 1
+    if chained_events and (workspace.data.get("audit_chain_head", "") != previous_hash or workspace.data.get("audit_chain_sequence", 0) != chained):
+        return _audit_integrity_result(workspace, events, sealed, chained, False, "The workspace audit-chain anchor does not match the recorded audit trail.")
     message = "All sealed audit events passed integrity verification."
+    if chained:
+        message += f" {chained} event(s) are protected by the ordered audit hash chain."
     if sealed < len(events):
-        message += f" {len(events) - sealed} legacy event(s) predate sealing and are reported but not cryptographically verifiable."
-    return AuditIntegrity(
-        id=f"audit-integrity:{workspace.data['brand_id']}", title="VBS audit integrity",
-        brand_id=workspace.data["brand_id"], tenant_id=workspace.data["tenant_id"],
-        checked_events=len(events), sealed_events=sealed, valid=True, message=message,
-    )
-
+        message += f" {len(events) - sealed} unsealed legacy event(s) predate integrity sealing and are reported but not cryptographically verifiable."
+    if sealed > chained:
+        message += f" {sealed - chained} sealed v1 event(s) predate the audit chain and remain individually verified only."
+    return _audit_integrity_result(workspace, events, sealed, chained, True, message)
 
 async def _require_vbs_audit_integrity(ctx, workspace):
     """Fail closed before critical mutations if a sealed audit record was changed."""
@@ -2330,7 +2362,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
             children=[
                 ui.Alert(
                     title="Critical changes paused — audit integrity check failed",
-                    message="A sealed VBS audit event no longer matches its integrity hash. Draft approvals, evidence decisions and access changes are blocked until this is investigated. Use the read-only audit verification below; it does not alter records.",
+                    message="The VBS audit seal, ordered hash chain, or workspace anchor no longer matches. Draft approvals, evidence decisions and access changes are blocked until this is investigated. Use the read-only audit verification below; it does not alter records.",
                     type="error",
                 ) if vbs_integrity_failed else ui.Alert(
                     title="Audit integrity status",

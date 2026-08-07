@@ -130,6 +130,21 @@
             "default": 1,
             "title": "Access Model Version",
             "type": "integer"
+          },
+          "audit_chain_head": {
+            "default": "",
+            "title": "Audit Chain Head",
+            "type": "string"
+          },
+          "audit_chain_sequence": {
+            "default": 0,
+            "title": "Audit Chain Sequence",
+            "type": "integer"
+          },
+          "audit_chain_started_at": {
+            "default": "",
+            "title": "Audit Chain Started At",
+            "type": "string"
           }
         },
         "required": [
@@ -265,6 +280,21 @@
             "default": 1,
             "title": "Access Model Version",
             "type": "integer"
+          },
+          "audit_chain_head": {
+            "default": "",
+            "title": "Audit Chain Head",
+            "type": "string"
+          },
+          "audit_chain_sequence": {
+            "default": 0,
+            "title": "Audit Chain Sequence",
+            "type": "integer"
+          },
+          "audit_chain_started_at": {
+            "default": "",
+            "title": "Audit Chain Started At",
+            "type": "string"
           }
         },
         "required": [
@@ -1648,6 +1678,11 @@
           "sealed_events": {
             "default": 0,
             "title": "Sealed Events",
+            "type": "integer"
+          },
+          "chained_events": {
+            "default": 0,
+            "title": "Chained Events",
             "type": "integer"
           },
           "valid": {
