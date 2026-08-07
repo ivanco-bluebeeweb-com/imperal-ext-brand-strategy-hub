@@ -2389,15 +2389,20 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, limit=50)
                 vbs_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
                 vbs_load_stage = "audit events"
-                vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, order_by="-occurred_at", limit=50)
+                vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, limit=50)
+                vbs_audit_page.data.sort(key=lambda record: str(record.data.get("occurred_at", "")), reverse=True)
                 vbs_load_stage = "evidence"
-                vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+                vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, limit=50)
+                vbs_evidence_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
                 vbs_load_stage = "Visual Profiles"
-                vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, order_by="-revision", limit=50)
+                vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, limit=50)
+                vbs_profile_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
                 vbs_load_stage = "memberships"
-                vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, order_by="-created_at", limit=100)
+                vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, limit=100)
+                vbs_membership_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
                 vbs_load_stage = "integrity incidents"
-                vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, order_by="-created_at", limit=50)
+                vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, limit=50)
+                vbs_incident_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
         except Exception as exc:  # keep VBS storage failures inside the VBS tab
             vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
