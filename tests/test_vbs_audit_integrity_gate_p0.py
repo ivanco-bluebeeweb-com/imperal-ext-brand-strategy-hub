@@ -82,6 +82,13 @@ async def test_failed_integrity_blocks_evidence_review_and_vbs_approval():
     )
     await _tamper_first_sealed_audit(owner, brand_id)
 
+    paused_panel = await m.brand_detail_panel(owner, brand_id=brand_id, tab="visual_system")
+    rendered_paused = repr(paused_panel)
+    assert "Critical changes paused — audit integrity check failed" in rendered_paused
+    assert "Save review decision" not in rendered_paused
+    assert "Approve as current" not in rendered_paused
+    assert "Save member role" not in rendered_paused
+
     review = await m.review_visual_evidence(
         owner,
         ReviewVisualEvidenceParams(
