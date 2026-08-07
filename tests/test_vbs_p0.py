@@ -189,6 +189,7 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     initialized = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered = repr(initialized)
     assert "Create next VBS draft" in rendered
+    assert "None" not in rendered
     assert "create_visual_brand_system" in rendered
     assert "expected_workspace_version" in rendered
     assert "Register evidence reference" in rendered

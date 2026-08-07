@@ -2644,7 +2644,7 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                         },
                         children=[ui.TextArea(param_name="acknowledgement_note", placeholder="What was reviewed? This does not clear the block.", rows=2)],
                     ),
-                ) if vbs_integrity_failed and vbs_membership.get("role") == "owner" else None,
+                ) if vbs_integrity_failed and vbs_membership.get("role") == "owner" else ui.Text("", variant="caption"),
                 ui.Card(
                     title=f"Integrity incident history ({len(vbs_incidents)})",
                     subtitle="Owner acknowledgements are retained for review and never clear the safety block.",
