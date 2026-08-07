@@ -116,6 +116,17 @@ class AuditIntegrity(sdl.Entity):
     message: str = ""
 
 
+class ApprovalEvidenceBasisIntegrity(sdl.Entity):
+    """Read-only integrity result for the evidence snapshot stored on an approved VBS."""
+    brand_id: str = ""
+    vbs_id: str = ""
+    snapshot_hash: str = ""
+    evidence_count: int = 0
+    valid: bool = True
+    legacy_or_empty: bool = False
+    message: str = ""
+
+
 class AuditIntegrityIncident(sdl.Entity):
     """Owner acknowledgement of a detected mismatch; it never clears the safety gate."""
     brand_id: str = ""
@@ -375,6 +386,11 @@ class AcknowledgeVisualBrandAuditIncidentParams(BaseModel):
 class ListVisualBrandAuditIncidentsParams(BaseModel):
     brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
     limit: int = Field(50, ge=1, le=100, description="Maximum incident acknowledgements to return")
+
+
+class VerifyVisualBrandApprovalEvidenceBasisParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    vbs_id: str = Field(default="", description="Optional approved VBS UUID; empty selects the current approved revision")
 
 
 class RegisterVisualEvidenceParams(BaseModel):
