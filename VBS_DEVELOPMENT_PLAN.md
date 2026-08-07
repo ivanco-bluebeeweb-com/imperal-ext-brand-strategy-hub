@@ -120,7 +120,9 @@ In **Imperal panel → Brand Strategy Hub**:
 - Any failure is recorded as a reproducible product issue: route, role, exact action, expected result, actual result.
 - If fixes are necessary, they are followed by a focused regression test, full test suite, build/validate, commit and push.
 
-**Status:** `NEXT — manual live proof required`.
+**Deployment:** Brand Strategy Hub deployed to Imperal from commit `0971cafd` on 2026-08-07; panels, manifest and icon synced. Deployment reported `20/21` checks with a warning, whose cause was not included in the terminal response.
+
+**Status:** `DEPLOYED — manual live proof required`.
 
 ---
 
