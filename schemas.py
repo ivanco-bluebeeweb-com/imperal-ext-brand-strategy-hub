@@ -96,6 +96,17 @@ class AuditEventList(sdl.EntityList[AuditEvent]):
     pass
 
 
+class AuditIntegrity(sdl.Entity):
+    """Read-only result of recomputing hashes for VBS audit entries."""
+    brand_id: str = ""
+    tenant_id: str = ""
+    checked_events: int = 0
+    sealed_events: int = 0
+    valid: bool = True
+    first_invalid_event_id: str = ""
+    message: str = ""
+
+
 class VisualEvidence(sdl.Entity):
     """A private, non-fetched source reference supporting a VBS decision.
 
@@ -326,6 +337,10 @@ class ActivateVisualBrandSystemParams(BaseModel):
 class ListVisualBrandAuditEventsParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — never invented")
     limit: int = Field(50, description="Max audit events to return (1-100)")
+
+
+class VerifyVisualBrandAuditIntegrityParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
 
 
 class RegisterVisualEvidenceParams(BaseModel):

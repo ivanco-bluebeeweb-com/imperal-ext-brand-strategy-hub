@@ -1539,6 +1539,148 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "verify_visual_brand_audit_integrity",
+      "description": "Verify integrity hashes for sealed VBS audit events in one private workspace.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "VerifyVisualBrandAuditIntegrityParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Read-only result of recomputing hashes for VBS audit entries.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "checked_events": {
+            "default": 0,
+            "title": "Checked Events",
+            "type": "integer"
+          },
+          "sealed_events": {
+            "default": 0,
+            "title": "Sealed Events",
+            "type": "integer"
+          },
+          "valid": {
+            "default": true,
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "first_invalid_event_id": {
+            "default": "",
+            "title": "First Invalid Event Id",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "AuditIntegrity",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "create_visual_profile",
       "description": "Create a versioned non-personal Visual Profile draft from the current approved VBS and selected private evidence.",
       "action_type": "write",

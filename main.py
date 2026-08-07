@@ -35,11 +35,12 @@ from schemas import (
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
+    VerifyVisualBrandAuditIntegrityParams,
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
-    AuditEvent, AuditEventList, BrandContentHandoff,
+    AuditEvent, AuditEventList, AuditIntegrity, BrandContentHandoff,
     BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
@@ -225,20 +226,54 @@ def _validate_public_https_reference(raw_url: str) -> tuple[str | None, str | No
     return urlunsplit(("https", parsed.netloc.lower(), parsed.path or "/", parsed.query, "")), None
 
 
+def _audit_event_hash(payload: dict) -> str:
+    """Return a canonical seal for one audit event's immutable application fields."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 async def _append_vbs_audit(ctx, *, brand_id: str, vbs_id: str, event_type: str, details: str) -> None:
-    """Write an append-only application audit event; no UI route may edit it."""
+    """Write a sealed append-only application audit event; no app route can edit it."""
     actor_id, tenant_id = _actor(ctx)
-    await ctx.store.create(
-        VBS_AUDIT_EVENTS,
-        {
-            "brand_id": brand_id,
-            "vbs_id": vbs_id,
-            "event_type": event_type,
-            "actor_id": actor_id,
-            "tenant_id": tenant_id,
-            "details": details,
-            "occurred_at": _now_iso(),
-        },
+    occurred_at = _now_iso()
+    payload = {
+        "brand_id": brand_id,
+        "vbs_id": vbs_id,
+        "event_type": event_type,
+        "actor_id": actor_id,
+        "tenant_id": tenant_id,
+        "details": details,
+        "occurred_at": occurred_at,
+    }
+    await ctx.store.create(VBS_AUDIT_EVENTS, {**payload, "integrity_hash": _audit_event_hash(payload)})
+
+
+async def _verify_vbs_audit_integrity(ctx, workspace) -> AuditIntegrity:
+    """Recompute seals for this tenant's audit events; unsealed historical events remain explicitly legacy."""
+    page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": workspace.data["brand_id"]}, order_by="occurred_at", limit=500)
+    events = [item for item in page.data if item.data.get("tenant_id") == workspace.data["tenant_id"]]
+    sealed = 0
+    for item in events:
+        stored_hash = item.data.get("integrity_hash", "")
+        if not stored_hash:
+            continue
+        sealed += 1
+        payload = {key: item.data.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at")}
+        if _audit_event_hash(payload) != stored_hash:
+            return AuditIntegrity(
+                id=f"audit-integrity:{workspace.data['brand_id']}", title="VBS audit integrity",
+                brand_id=workspace.data["brand_id"], tenant_id=workspace.data["tenant_id"],
+                checked_events=len(events), sealed_events=sealed, valid=False,
+                first_invalid_event_id=item.id,
+                message="A sealed audit event does not match its recorded integrity hash.",
+            )
+    message = "All sealed audit events passed integrity verification."
+    if sealed < len(events):
+        message += f" {len(events) - sealed} legacy event(s) predate sealing and are reported but not cryptographically verifiable."
+    return AuditIntegrity(
+        id=f"audit-integrity:{workspace.data['brand_id']}", title="VBS audit integrity",
+        brand_id=workspace.data["brand_id"], tenant_id=workspace.data["tenant_id"],
+        checked_events=len(events), sealed_events=sealed, valid=True, message=message,
     )
 
 
@@ -723,6 +758,19 @@ async def list_visual_brand_audit_events(ctx, params: ListVisualBrandAuditEvents
         for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]
     ]
     return ActionResult.success(AuditEventList(items=items), f"Found {len(items)} VBS audit event(s).")
+
+
+@chat.function(
+    "verify_visual_brand_audit_integrity",
+    description="Verify integrity hashes for sealed VBS audit events in one private workspace.",
+)
+async def verify_visual_brand_audit_integrity(ctx, params: VerifyVisualBrandAuditIntegrityParams) -> ActionResult[AuditIntegrity]:
+    """Return a read-only integrity report; this never changes audit records."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "read")
+    if error:
+        return error
+    result = await _verify_vbs_audit_integrity(ctx, workspace)
+    return ActionResult.success(result, result.message)
 
 
 @chat.function(
@@ -2358,7 +2406,13 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
                 ),
                 ui.Card(
                     title=f"Audit trail ({len(vbs_audit_events)})",
-                    subtitle="Append-only P0 record of workspace, draft and approval actions.",
+                    subtitle="Append-only P0 record of workspace, draft and approval actions. Sealed entries can be verified without changing them.",
+                    footer=ui.Form(
+                        action="verify_visual_brand_audit_integrity",
+                        submit_label="Verify sealed audit integrity",
+                        defaults={"brand_id": brand_id},
+                        children=[],
+                    ),
                     content=ui.Stack(
                         direction="v", gap=1,
                         children=[
