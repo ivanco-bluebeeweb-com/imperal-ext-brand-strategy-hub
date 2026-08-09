@@ -122,7 +122,15 @@ In **Imperal panel → Brand Strategy Hub**:
 
 **Deployment:** Brand Strategy Hub deployed to Imperal from commit `0971cafd` on 2026-08-07; panels, manifest and icon synced. Deployment reported `20/21` checks with a warning, whose cause was not included in the terminal response.
 
-**Status:** `DEPLOYED — manual live proof required`.
+**Status:** `LIVE-PROVEN — 2026-08-07`. The full flow (initialize workspace → draft VBS → register evidence → review valid → approve VBS → create Visual Profile → approve profile → confirm handoffs) was completed once end-to-end in the live Imperal panel for Climtec.md, via real clicks and real form input, each step re-verified by a direct read call as source of truth. `resolve_current_visual_profile` for Climtec.md now returns a deterministic approved baseline: VBS revision 2, Visual Profile revision 1, snapshot hash present, evidence basis verified. Two real defects were found live and fixed during this proof (`list_visual_brand_audit_events` 500, `ui.Tooltip` inside `ui.KeyValue` rendering as `[object Object]`); both are fixed, tested and deployed. Full UX-simulation pass (target-user persona) and its resulting fix plan were also completed and deployed on top of this baseline — see `VBS panel UX` commits.
+
+### P1-A live proof — 2026-08-09
+
+`build_approved_visual_profile_handoff` and `build_approved_visual_media_handoff` were called live for Climtec.md and returned the exact approved guidance (visual intent, style direction, core rules, prohibited patterns, provider policy, snapshot hash) with no fetch/generation side effects, confirming the fail-closed read-only contract in production.
+
+**New finding — the handoff is not yet wired into the pipeline that would consume it.** Climtec.md's one existing Media Studio package (created 2026-08-06, before the VBS baseline existed) uses an ad-hoc style direction that does not match the approved Visual Profile. There is no code anywhere in Content Strategy → Article Writer → Media Studio → WordPress Hub that calls `build_approved_visual_media_handoff` and feeds its output into `create_media_brief`. This is consistent with an earlier pipeline finding (note "Недоработки пайплайна SEO-контента — прогон Climtec", 2026-08-06, item 9): image generation is a fully disconnected, nobody-triggers-it step in the pipeline today.
+
+As a live proof of the correct pattern, one real media brief was created manually for Climtec.md using the exact approved handoff text verbatim as `style_direction` (see media package `a0e35e28`, article "Рекуператор для квартиры"). This confirms the bridge works when done by hand; it does not yet happen automatically. **This is the next concrete slice for VBS's role in the SEO pipeline** — see P1-D below.
 
 ---
 
@@ -139,6 +147,17 @@ In **Imperal panel → Brand Strategy Hub**:
 **User-visible result:** before leaving Content Strategy, the user sees the compact payload that Writer or Media Studio would receive: guidance, provenance, baseline state and the no-generation/provider-policy boundary.
 
 **Not in scope:** creating Media Studio packages, images, uploads or publishing.
+
+### P1-D — wire the approved handoff into the actual Media Studio brief (next concrete slice)
+
+**Problem this closes:** `build_approved_visual_media_handoff` exists and is proven live (P1-A), but nothing in the pipeline calls it before `create_media_brief` runs, so approved visual guidance and the images actually generated for a site can silently diverge (observed live for Climtec.md on 2026-08-09).
+
+**Constraint:** there is no cross-extension IPC on this platform (confirmed by Brand Strategy Hub's own `build_content_strategy_handoff` docstring) — Media Studio cannot call Brand Strategy Hub directly, and this plan does not authorise adding such a channel.
+
+**Proposed shape, human-in-the-loop, no new automation:**
+- In Brand Strategy Hub's Visual System tab, the existing "Approved baseline handoffs" block gets one more concrete, copyable field: a ready-to-paste `style_direction` string built from `build_approved_visual_media_handoff`'s `style_direction` + `prohibited_patterns`, formatted exactly as it should be pasted into Media Studio's `create_media_brief`.
+- No auto-fill, no silent write into Media Studio — the human doing the media brief copies this value in, same as they copy any other brief detail today. This keeps the read-only, no-generation boundary intact and needs no schema or permission change.
+- Definition of done: a user can go from "VBS approved" to "media brief created with the right style_direction" without leaving guesswork to memory or ad-hoc wording, demonstrated live for one real site.
 
 ### P2 — asset and generation decision (not planned for implementation)
 

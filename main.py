@@ -118,6 +118,22 @@ def _status_label(value: str) -> str:
     return STATUS_LABELS.get(value, value)
 
 
+def _vbs_style_direction_for_paste(vbs, profile) -> str:
+    """Build the same style_direction string build_approved_visual_media_handoff would return,
+    formatted as a single ready-to-paste value for Media Studio's create_media_brief(style_direction=...).
+    Kept in sync with build_approved_visual_media_handoff's own concatenation logic on purpose:
+    this is a copy-paste convenience for a human, not a second source of truth."""
+    if not vbs:
+        return ""
+    rules = "; ".join(vbs.data.get("core_rules", []))
+    direction_parts = [part for part in [vbs.data.get("realism_level", ""), (profile.data.get("art_direction", "") if profile else ""), rules] if part]
+    style_direction = "; ".join(direction_parts)
+    prohibited = vbs.data.get("prohibited_patterns", [])
+    if prohibited:
+        style_direction = f"{style_direction}. Prohibited: {'; '.join(prohibited)}." if style_direction else f"Prohibited: {'; '.join(prohibited)}."
+    return style_direction
+
+
 async def _membership_for_actor(ctx, workspace):
     """Resolve an active tenant-local membership; ordinary ACL never trusts legacy owner fields."""
     actor_id, tenant_id = _actor(ctx)
@@ -472,7 +488,7 @@ async def health_check(ctx) -> dict:
 # returning [{"site_id", "name", "url", "status"}, ...]. Any future site
 # provider (Shopify, Webflow, a plain-domain connector, ...) is added here
 # and Quick Add picks it up automatically -- no panel code changes needed.
-SITE_PROVIDER_APP_IDS: list[str] = ["wp-site-connector"]
+SITE_PROVIDER_APP_IDS: list[str] = ["wordpress-hub"]
 
 
 def _canonical_site_id(row: dict) -> str:
@@ -3059,7 +3075,14 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 "Media policy: use third-party providers; use Magnific only after other providers technically fail.",
                                 variant="caption",
                             ),
-                        ],
+                        ] + ([
+                            ui.Divider(label="Paste into Media Studio"),
+                            ui.Text(
+                                "Copy this into Media Studio's media brief style_direction field so the images actually generated match the approved profile below.",
+                                variant="caption",
+                            ),
+                            ui.Code(content=_vbs_style_direction_for_paste(current_vbs, current_profile), language="text"),
+                        ] if current_vbs else []),
                     ) if current_profile and current_vbs_basis and current_vbs_basis.valid else ui.Alert(
                         title="Approved Visual Profile required",
                         message="Handoffs remain unavailable until the current profile and its VBS evidence basis are approved and verified.",

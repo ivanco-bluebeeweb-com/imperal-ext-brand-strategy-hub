@@ -510,7 +510,7 @@ async def test_gap_tab_without_any_segment_shows_hint_not_a_broken_form():
 async def test_fetch_connected_sites_calls_every_registered_provider():
     ctx = MockContext()
     ctx.extensions.register(
-        "wp-site-connector", "list_connected_sites",
+        "wordpress-hub", "list_connected_sites",
         lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
     )
     sites, problems = await m.fetch_connected_sites(ctx)
@@ -518,7 +518,7 @@ async def test_fetch_connected_sites_calls_every_registered_provider():
     assert len(sites) == 1
     assert sites[0]["site_id"] == "g4s.md"
     assert sites[0]["name"] == "G4S Moldova"
-    assert sites[0]["provider"] == "wp-site-connector"
+    assert sites[0]["provider"] == "wordpress-hub"
 
 
 @pytest.mark.asyncio
@@ -528,7 +528,7 @@ async def test_provider_slug_site_id_is_normalised_to_the_bare_domain():
     click would create a duplicate profile beside the existing one."""
     ctx = MockContext()
     ctx.extensions.register(
-        "wp-site-connector", "list_connected_sites",
+        "wordpress-hub", "list_connected_sites",
         lambda **kw: [{"site_id": "g4s-md", "name": "G4S Moldova",
                        "url": "https://www.g4s.md/", "status": "connected"}],
     )
@@ -546,7 +546,7 @@ async def test_fetch_connected_sites_reports_unreachable_provider_instead_of_hid
     sites, problems = await m.fetch_connected_sites(ctx)
     assert sites == []
     assert len(problems) == 1
-    assert problems[0]["provider"] == "wp-site-connector"
+    assert problems[0]["provider"] == "wordpress-hub"
     assert problems[0]["reason"]  # carries a real cause, not an empty string
 
 
@@ -557,7 +557,7 @@ async def test_brands_panel_shows_not_loaded_yet_before_first_refresh():
     honestly instead of erroring or vanishing."""
     ctx = MockContext()
     ctx.extensions.register(
-        "wp-site-connector", "list_connected_sites",
+        "wordpress-hub", "list_connected_sites",
         lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
     )
     node = await m.brands_panel(ctx)
@@ -571,7 +571,7 @@ async def test_brands_panel_shows_not_loaded_yet_before_first_refresh():
 async def test_brands_panel_shows_quick_add_for_unclaimed_connected_site_after_cache_warm():
     ctx = MockContext()
     ctx.extensions.register(
-        "wp-site-connector", "list_connected_sites",
+        "wordpress-hub", "list_connected_sites",
         lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
     )
     await m.list_connected_sites(ctx, ListConnectedSitesParams())  # warms the cache
@@ -588,7 +588,7 @@ async def test_brands_panel_quick_add_card_stays_visible_when_all_sites_tracked(
     explains that, so the user can still see the feature exists."""
     ctx = MockContext()
     ctx.extensions.register(
-        "wp-site-connector", "list_connected_sites",
+        "wordpress-hub", "list_connected_sites",
         lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
     )
     await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S Moldova", site_id="g4s.md"))
@@ -612,7 +612,7 @@ async def test_brands_panel_quick_add_card_explains_unreachable_provider():
     rendered = repr(node)
     assert "Quick Add" in rendered
     assert "Could not read connected sites" in rendered
-    assert "wp-site-connector" in rendered
+    assert "wordpress-hub" in rendered
     assert "Refresh" in rendered
 
 
@@ -620,7 +620,7 @@ async def test_brands_panel_quick_add_card_explains_unreachable_provider():
 async def test_list_connected_sites_flags_already_tracked_sites():
     ctx = MockContext()
     ctx.extensions.register(
-        "wp-site-connector", "list_connected_sites",
+        "wordpress-hub", "list_connected_sites",
         lambda **kw: [
             {"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"},
             {"site_id": "climtec.md", "name": "Climtec", "url": "https://climtec.md", "status": "connected"},
@@ -632,7 +632,7 @@ async def test_list_connected_sites_flags_already_tracked_sites():
     by_id = {i.site_id: i for i in result.data.items}
     assert by_id["g4s.md"].already_tracked is True
     assert by_id["climtec.md"].already_tracked is False
-    assert by_id["g4s.md"].provider == "wp-site-connector"
+    assert by_id["g4s.md"].provider == "wordpress-hub"
 
 
 @pytest.mark.asyncio
@@ -644,7 +644,7 @@ async def test_list_connected_sites_surfaces_provider_failure_in_summary():
     assert result.status == "success"
     assert result.data.items == []
     assert "Could not read from" in result.summary
-    assert "wp-site-connector" in result.summary
+    assert "wordpress-hub" in result.summary
 
 
 # ──────────────────────────────────────────────────────────────────────────
