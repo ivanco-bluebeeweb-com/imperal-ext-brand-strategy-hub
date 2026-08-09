@@ -159,6 +159,40 @@ As a live proof of the correct pattern, one real media brief was created manuall
 - No auto-fill, no silent write into Media Studio — the human doing the media brief copies this value in, same as they copy any other brief detail today. This keeps the read-only, no-generation boundary intact and needs no schema or permission change.
 - Definition of done: a user can go from "VBS approved" to "media brief created with the right style_direction" without leaving guesswork to memory or ad-hoc wording, demonstrated live for one real site.
 
+**Status:** `LIVE-PROVEN — 2026-08-09` (re-verified). Deployed commit `79fee279`
+(20/21 checks, same unexplained non-blocking warning pattern seen on every
+release of this app since 2026-08-07 — not investigated further, not
+blocking). All 98 tests pass; `imperal validate`: 0 errors, 0 warnings, 1 info
+(no `on_install` hook — pre-existing, not new). Immediately after deploy,
+called `build_approved_visual_media_handoff` live for Climtec.md and got the
+exact expected `style_direction` string back (grounded realism / no surreal
+elements / Prohibited: no surreal, cartoonish, or exaggerated visual styles),
+confirming the ready-to-paste field under **Brand Strategy Hub → Visual
+System → Baseline handoffs** renders the same text a human would copy into
+Media Studio's `create_media_brief`.
+
+### P1-B and P1-C — delivered, in Content Strategy Hub
+
+These two slices are about the **receiving side** of the handoff (Content
+Strategy showing what it got), not Brand Strategy Hub's sending side, so they
+were implemented and live-proven in Content Strategy Hub's own plan, not here:
+
+- **P1-B** (visible VBS → Content Strategy receipt): `LIVE-IMPLEMENTED —
+  2026-08-09`, commit `04b6a45`. Brief screen shows `Writer handoff: ready` /
+  `visual guidance excluded — baseline stale`.
+- **P1-C** (read-only downstream handoff review): `LIVE-IMPLEMENTED —
+  2026-08-09`, commit `d009b74`, refined `354164f` after a Dana (content
+  editor) UX-simulation pass. One unified card shows both "→ Article Writer"
+  and "→ Media Studio" readiness, baseline state, provenance and boundary
+  text together.
+
+See `Content Strategy Hub/SEO_PIPELINE_DEVELOPMENT_PLAN.md` phases P0-B/P0-C
+for the full delivery record of that side.
+
+**All P1 slices are now closed.** The only remaining item in this plan is P2,
+which is explicitly not authorised for implementation without a separate
+product decision (see below).
+
 ### P2 — asset and generation decision (not planned for implementation)
 
 This requires a separate approved product decision and a new design for storage, permissions, retention, provenance, consent/licensing, provider failure policy and human approval. No implementation is authorised by this plan.
