@@ -222,6 +222,6 @@ async def test_profile_draft_ui_blocks_approval_when_its_vbs_basis_is_tampered()
 
     panel = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered = repr(panel)
-    assert "VBS evidence-basis mismatch — approval blocked" in rendered
-    assert "Profile approval blocked" in rendered
-    assert "Approve as current profile" not in rendered
+    assert "No — something doesn't match" in rendered
+    assert "Can't go live yet" in rendered
+    assert "Make this the live version" not in rendered

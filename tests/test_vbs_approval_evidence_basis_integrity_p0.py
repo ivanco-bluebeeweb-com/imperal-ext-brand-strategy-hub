@@ -111,7 +111,7 @@ async def test_tampered_approved_evidence_basis_is_reported_and_blocks_profile_d
     assert checked.data.valid is False
 
     blocked_panel = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
-    assert "Integrity mismatch — creation is blocked" in repr(blocked_panel)
+    assert "Something doesn't match — saving is blocked" in repr(blocked_panel)
 
     blocked = await m.create_visual_profile(
         ctx,

@@ -288,6 +288,43 @@ chain is broken. Demonstrated live for one real site.
 
 ---
 
+## Plain-language UX pass — Visual System tab
+
+**Why:** owner feedback (repeated): the panel used too much internal jargon
+("workspace", "VBS", "evidence basis", "tenant", "founding owner") for a
+non-technical user to act on without help. Goal: fewer words, clearer next
+action, without weakening any safety/audit semantics underneath.
+
+**Status:** delivered, 2026-08-10.
+
+**Delivery record:**
+
+1. Panel: every user-visible title, subtitle, button label, and alert
+   message in the Visual System tab was rewritten in plain language —
+   uninitialized state, Status card, Who-can-access card, Create/Approve
+   style forms, Evidence/References card, Visual Profile card, Send-to-other-
+   apps card, media-conformance card, membership list, and the top status
+   banner ("Your visual style is live" / "Almost there — one more step" /
+   "Let's set your visual style"). The Revisions/History section and the
+   "For the tech team" audit-chain section (already plain from an earlier
+   pass) were left as-is on inspection — no jargon leaking there. The other
+   tabs (Profile/SWOT/Gap/Competitors/Segments) were checked and found
+   already short and plain; no changes needed there.
+2. Where to see it: Brand Strategy Hub panel → open a brand → Visual System
+   tab, at every stage (not initialized, draft, approved, blocked).
+3. No new params/actions/error codes were touched — only display strings.
+   All existing param_names, action names and error codes are unchanged, so
+   nothing that calls this app from outside (Content Strategy Hub, Media
+   Studio handoffs) is affected.
+4. Tests: 103/103 passing (existing assertions updated to match new
+   strings, no test coverage removed). `imperal validate`: 0 errors / 0
+   warnings / 1 pre-existing info. `imperal build` re-run — manifest
+   unchanged (no new tools).
+5. Next single visible slice: none currently queued for this tab; revisit
+   only if further target-user feedback surfaces remaining confusing spots.
+
+---
+
 ## Explicit non-goals until a separate decision
 
 - Image generation, image editing, asset upload or WordPress media upload.

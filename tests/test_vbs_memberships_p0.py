@@ -85,14 +85,14 @@ async def test_roles_are_enforced_server_side_and_membership_is_tenant_local():
     assert profile.status == "success"
     reviewer_panel = await m.brand_detail_panel(reviewer, brand_id=brand_id, tab="visual_system")
     rendered_reviewer = repr(reviewer_panel)
-    assert "Approve as current profile" in rendered_reviewer
+    assert "Make this the live version" in rendered_reviewer
     assert profile.data["profile_id"] in rendered_reviewer
-    assert "Approved VBS r1" in rendered_reviewer
+    assert "Based on style version" in rendered_reviewer
 
     editor_panel = await m.brand_detail_panel(editor, brand_id=brand_id, tab="visual_system")
     rendered_editor = repr(editor_panel)
     assert "Reviewer access required" in rendered_editor
-    assert "Approve as current profile" not in rendered_editor
+    assert "Make this the live version" not in rendered_editor
 
     viewer_read = await m.list_visual_brand_systems(viewer, ListVisualBrandSystemsParams(brand_id=brand_id))
     assert viewer_read.status == "success"
@@ -114,7 +114,7 @@ async def test_roles_are_enforced_server_side_and_membership_is_tenant_local():
 
     viewer_panel = await m.brand_detail_panel(viewer, brand_id=brand_id, tab="visual_system")
     rendered_viewer = repr(viewer_panel)
-    assert "Editor access required" in rendered_viewer
+    assert "You need edit access" in rendered_viewer
     assert "Save review decision" not in rendered_viewer
     assert "Approve as current" not in rendered_viewer
     assert "Save profile draft" not in rendered_viewer

@@ -169,10 +169,10 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
 
     uninitialized = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered_uninitialized = repr(uninitialized)
-    assert "VBS workspace not initialized" in rendered_uninitialized
+    assert "Set up visual brand rules" in rendered_uninitialized
     assert "Visual System" in rendered_uninitialized
     assert "initialize_visual_brand_workspace" in rendered_uninitialized
-    assert "I am the workspace owner — initialize" in rendered_uninitialized
+    assert "Turn it on — I own this brand" in rendered_uninitialized
     assert "confirm_owner_claim" in rendered_uninitialized
 
     await _workspace(ctx, brand_id)
@@ -188,13 +188,13 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert evidence.status == "success"
     initialized = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered = repr(initialized)
-    assert "Create next VBS draft" in rendered
+    assert "Set your visual style" in rendered
     assert "None" not in rendered
     assert "create_visual_brand_system" in rendered
     assert "expected_workspace_version" in rendered
-    assert "Register evidence reference" in rendered
+    assert "Add a reference" in rendered
     assert "register_visual_evidence" in rendered
-    assert "never fetches, downloads or processes the source" in rendered
+    assert "nothing is downloaded" in rendered
     assert "review_visual_evidence" in rendered
     assert "Save review decision" in rendered
     # Regression: review_note has min_length=1 in ReviewVisualEvidenceParams.
@@ -205,14 +205,14 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     # TextArea must carry a non-empty default so every submission validates.
     assert "'value': 'No additional notes.'" in rendered
     assert "expected_status" in rendered
-    assert "Create Visual Profile draft" in rendered
-    assert "Private workspace access" in rendered
+    assert "Turn your style into a working profile" in rendered
+    assert "Who can see and edit this" in rendered
     assert "set_brand_membership" in rendered
-    assert "Known Imperal user ID" in rendered
-    assert "Editor access and approved VBS required" in rendered
+    assert "Their Imperal user ID" in rendered
+    assert "You need edit access and an approved style" in rendered
     assert "Audit trail" in rendered
-    assert "People/media" in rendered
-    assert "Blocked pending privacy/storage spikes" in rendered
+    assert "Visual style only" in rendered
+    assert "Not supported yet" in rendered
 
     reviewed = await m.review_visual_evidence(
         ctx,
@@ -244,14 +244,14 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
 
     with_current_vbs = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered_current = repr(with_current_vbs)
-    assert "Approved VBS" in rendered_current
+    assert "Approved style version" in rendered_current
     assert "Revision 1" in rendered_current
-    assert "reviewed-valid reference(s) · verified" in rendered_current
-    assert "Choose reviewed-valid evidence ID" in rendered_current
+    assert "reference(s) · all good" in rendered_current
+    assert "Pick a reviewed reference" in rendered_current
     assert evidence.data["id"] in rendered_current
-    assert "Only reviewed-valid references from this private workspace are offered" in rendered_current
+    assert "Only reviewed references show up here" in rendered_current
 
     assert "create_visual_profile" in rendered_current
-    assert "Save profile draft" in rendered_current
+    assert "Turn your style into a working profile" in rendered_current
     assert "expected_workspace_version" in rendered_current
-    assert "Visual Profiles" in rendered_current
+    assert "Profiles (" in rendered_current

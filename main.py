@@ -2664,29 +2664,29 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             direction="v", gap=3,
             children=[
                 ui.Alert(
-                    title="VBS workspace not initialized",
+                    title="Set up visual brand rules",
                     message=(
-                        "Visual Brand System data is private and remains unavailable until "
-                        "the current owner explicitly claims this brand workspace."
+                        "This is private to your team. Turn it on to start defining how this "
+                        "brand's images should look."
                     ),
                     type="info",
                 ),
                 ui.Card(
-                    title="Initialize private workspace",
+                    title="Turn on visual brand rules",
                     content=ui.Stack(
                         direction="v", gap=2,
                         children=[
                             ui.Alert(
-                                title="Explicit owner action",
+                                title="Before you continue",
                                 message=(
-                                    "Initializing binds this VBS workspace to your authenticated "
-                                    "tenant and user. It cannot be silently claimed by a panel read."
+                                    "This makes you the owner of these rules for this brand. "
+                                    "You can add teammates right after."
                                 ),
                                 type="warning",
                             ),
                             ui.Form(
                                 action="initialize_visual_brand_workspace",
-                                submit_label="I am the workspace owner — initialize",
+                                submit_label="Turn it on — I own this brand",
                                 defaults={
                                     "brand_id": brand_id,
                                     "confirm_owner_claim": True,
@@ -2703,13 +2703,13 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             direction="v", gap=3,
             children=[
                 ui.Alert(
-                    title="Access model migration required",
-                    message="This legacy VBS workspace still uses its founding-owner record. Migrate it explicitly to enable the private membership model; no VBS, evidence or Profile content will change.",
+                    title="One-time setup update",
+                    message="This brand still uses an older setup. Update it now to add teammates — your rules and evidence won't change at all.",
                     type="info",
                 ),
                 ui.Form(
                     action="migrate_visual_brand_access",
-                    submit_label="Migrate workspace access",
+                    submit_label="Update setup",
                     defaults={
                         "brand_id": brand_id,
                         "expected_workspace_version": vbs_workspace.data.get("version", 1),
@@ -2720,8 +2720,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         )
     elif not vbs_workspace_owned:
         vbs_tab = ui.Alert(
-            title="VBS workspace unavailable",
-            message="This brand's VBS workspace belongs to another private tenant or user.",
+            title="You don't have access yet",
+            message="Someone else owns this brand's visual rules. Ask them to add you.",
             type="warning",
         )
     else:
@@ -2772,27 +2772,27 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         revision_rows = [
             ui.Card(
                 title=f"Revision {d.data.get('revision', '?')} · {_status_label(d.data.get('status', 'draft'))}",
-                subtitle=d.data.get("visual_intent", "No visual intent recorded"),
+                subtitle=d.data.get("visual_intent", "No description yet"),
                 content=ui.Stack(
                     direction="v", gap=2,
                     children=(
-                        [ui.Badge(label="Old draft — a newer revision exists", color="gray")]
+                        [ui.Badge(label="Older version — a newer one exists", color="gray")]
                         if d.data.get("status") == "draft" and d.data.get("revision", 0) < _vbs_max_revision
                         else []
                     ) + [
                         ui.KeyValue(columns=1, items=[
                             {"key": "Realism", "value": d.data.get("realism_level") or "—"},
-                            {"key": "Core rules", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
+                            {"key": "Must follow", "value": "; ".join(d.data.get("core_rules", [])) or "—"},
                             {"key": "Avoid", "value": "; ".join(d.data.get("prohibited_patterns", [])) or "—"},
-                            {"key": "Change note", "value": d.data.get("change_note") or "—"},
-                            {"key": "Evidence basis", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reviewed-valid reference(s) · {d.data.get('approval_evidence_snapshot_hash', '')[:12]}… · {'verified' if vbs_basis_by_id[d.id].valid else 'MISMATCH'}") if d.data.get("status") == "approved_current" else "Captured when approved"},
+                            {"key": "Notes", "value": d.data.get("change_note") or "—"},
+                            {"key": "References checked", "value": (f"{len(d.data.get('approval_evidence_snapshot', []))} reference(s) · {'all good' if vbs_basis_by_id[d.id].valid else 'MISMATCH'}") if d.data.get("status") == "approved_current" else "Checked on approval"},
                         ]),
                     ],
                 ),
                 footer=(
                     ui.Form(
                         action="activate_visual_brand_system",
-                        submit_label="Approve as current",
+                        submit_label="Make this the live version",
                         defaults={
                             "vbs_id": d.id,
                             "expected_revision": d.data.get("revision", 1),
@@ -2808,27 +2808,20 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         # three separate cards further down the page.
         if current_profile and current_vbs:
             vbs_summary_banner = ui.Alert(
-                title="Brand visual rules are approved and active",
-                message=(
-                    f"Visual Brand System revision {current_vbs.data.get('revision', '?')} and "
-                    f"Visual Profile revision {current_profile.data.get('revision', '?')} are approved. "
-                    "Content Strategy and Media Studio can already use this baseline."
-                ),
+                title="Your visual style is live",
+                message="Other apps (Content Strategy, Media Studio) can already use it to create on-brand content.",
                 type="success",
             )
         elif current_vbs:
             vbs_summary_banner = ui.Alert(
-                title="Visual rules approved — profile not finished yet",
-                message=(
-                    f"Visual Brand System revision {current_vbs.data.get('revision', '?')} is approved, "
-                    "but no Visual Profile has been approved yet. Downstream handoffs stay blocked until one is."
-                ),
+                title="Almost there — one more step",
+                message="Your visual style is approved. Turn it into a profile below so other apps can use it.",
                 type="info",
             )
         else:
             vbs_summary_banner = ui.Alert(
-                title="No approved visual rules yet",
-                message="Create and approve a Visual Brand System (VBS) draft below to give this brand a visual baseline.",
+                title="Let's set your visual style",
+                message="Fill in the form below and save — that's it.",
                 type="info",
             )
         vbs_tab = ui.Stack(
@@ -2836,25 +2829,25 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             children=[
                 ui.Alert(
                     title="Critical changes paused — audit integrity check failed",
-                    message="The VBS audit seal, ordered hash chain, or workspace anchor no longer matches. Draft approvals, evidence decisions and access changes are blocked until this is investigated. Use the read-only audit verification further down; it does not alter records.",
+                    message="Something doesn't add up in this brand's history log, so changes are paused to be safe. Nothing is lost — check the details near the bottom of this page, or contact support.",
                     type="error",
                 ) if vbs_integrity_failed else vbs_summary_banner,
                 ui.Card(
-                    title="Acknowledge integrity incident",
-                    subtitle="Records that an owner reviewed the mismatch. It never changes audit history or removes the critical-change block.",
+                    title="Mark as reviewed",
+                    subtitle="Confirms you looked into it. This alone doesn't unpause changes.",
                     content=ui.Form(
                         action="acknowledge_visual_brand_audit_incident",
-                        submit_label="Record acknowledgement",
+                        submit_label="Mark as reviewed",
                         defaults={
                             "brand_id": brand_id,
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
-                        children=[ui.TextArea(param_name="acknowledgement_note", placeholder="What was reviewed? This does not clear the block.", rows=2)],
+                        children=[ui.TextArea(param_name="acknowledgement_note", placeholder="What did you check? (this alone doesn't fix it)", rows=2)],
                     ),
                 ) if vbs_integrity_failed and vbs_membership.get("role") == "owner" else ui.Text("", variant="caption"),
                 ui.Card(
-                    title=f"Integrity incident history ({len(vbs_incidents)})",
-                    subtitle="Owner acknowledgements are retained for review and never clear the safety block.",
+                    title=f"Review history ({len(vbs_incidents)})",
+                    subtitle="Past reviews are kept here for the record.",
                     content=ui.Stack(
                         direction="v", gap=1,
                         children=[
@@ -2876,41 +2869,40 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 direction="v", gap=3,
                                 children=[
                 ui.Card(
-                    title="Workspace state",
-                    subtitle="Workspace version is an internal change counter (goes up on every save/approval/access change) — it is not the revision number below.",
+                    title="Status",
+                    subtitle="Where this brand's visual rules stand right now.",
                     content=ui.KeyValue(columns=2, items=[
-                        {"key": "Workspace version", "value": str(vbs_workspace.data.get("version", 1))},
-                        {"key": "Current revision", "value": str(current_vbs.data.get("revision")) if current_vbs else "Not approved"},
-                        {"key": "Scope", "value": "P0: non-personal visual rules only"},
-                        {"key": "People/media", "value": "Blocked pending privacy/storage spikes"},
+                        {"key": "Approved version", "value": str(current_vbs.data.get("revision")) if current_vbs else "Not approved yet"},
+                        {"key": "Covers", "value": "Visual style only — no people or media yet"},
+                        {"key": "People in photos", "value": "Not supported yet"},
                     ]),
                 ),
                 ui.Card(
-                    title="Private workspace access",
-                    subtitle="P0 uses known Imperal user IDs only. Roles are enforced server-side; no email lookup or cross-tenant invitations.",
+                    title="Who can see and edit this",
+                    subtitle="Add a teammate by their Imperal user ID and choose what they can do.",
                     content=ui.Form(
                         action="set_brand_membership",
-                        submit_label="Save member role",
+                        submit_label="Save",
                         defaults={
                             "brand_id": brand_id,
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
-                            ui.Input(param_name="user_id", placeholder="Known Imperal user ID"),
+                            ui.Input(param_name="user_id", placeholder="Their Imperal user ID"),
                             ui.Select(
                                 param_name="role",
                                 options=[
-                                    {"value": "owner", "label": "Owner — manage access, edit, review"},
-                                    {"value": "editor", "label": "Editor — create drafts and evidence"},
-                                    {"value": "reviewer", "label": "Reviewer — approve and review evidence"},
-                                    {"value": "viewer", "label": "Viewer — read-only"},
+                                    {"value": "owner", "label": "Owner — full control"},
+                                    {"value": "editor", "label": "Editor — can make changes"},
+                                    {"value": "reviewer", "label": "Reviewer — can approve"},
+                                    {"value": "viewer", "label": "Viewer — can only look"},
                                 ],
                                 placeholder="Choose role",
                             ),
                         ],
                     ) if vbs_can_manage_access else ui.Alert(
-                        title="Read-only access",
-                        message="Only a workspace owner can manage private brand memberships.",
+                        title="Owners only",
+                        message="Ask an owner to add or change teammates.",
                         type="info",
                     ),
                     footer=ui.Stack(
@@ -2918,10 +2910,10 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         children=[
                             ui.Card(
                                 title=f"{item.data.get('user_id', 'Unknown member')} · {item.data.get('role', 'viewer')}",
-                                subtitle="Active private workspace membership",
+                                subtitle="Team member",
                                 footer=ui.Form(
                                     action="revoke_brand_membership",
-                                    submit_label="Revoke access",
+                                    submit_label="Remove",
                                     defaults={
                                         "brand_id": brand_id,
                                         "user_id": item.data.get("user_id", ""),
@@ -2930,7 +2922,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                     children=[],
                                 ) if vbs_can_manage_access and item.data.get("user_id") != vbs_workspace.data.get("owner_id") else ui.Text("", variant="caption"),
                             ) for item in vbs_memberships
-                        ] or [ui.Text("No explicit member records yet; the founding owner retains access.")],
+                        ] or [ui.Text("Just you for now — add teammates above.")],
                     ),
                 ),
                                 ],
@@ -2943,25 +2935,25 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 direction="v", gap=3,
                                 children=[
                 ui.Card(
-                    title="Create next VBS draft",
-                    subtitle="VBS = Visual Brand System, this brand's approved visual rules. Saving creates a new revision; it does not overwrite history.",
+                    title="Set your visual style",
+                    subtitle="Saving adds a new version — nothing gets overwritten, you can always go back.",
                     content=ui.Form(
                         action="create_visual_brand_system",
-                        submit_label="Save draft revision",
+                        submit_label="Save",
                         defaults={
                             "brand_id": brand_id,
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
-                            ui.TextArea(param_name="visual_intent", placeholder="Required: what should this brand's visuals make people feel or understand?", rows=3),
-                            ui.Input(param_name="realism_level", placeholder="Realism level, e.g. grounded realism"),
-                            ui.TagInput(param_name="core_rules", placeholder="Add a non-negotiable visual rule and press Enter"),
-                            ui.TagInput(param_name="prohibited_patterns", placeholder="Add a prohibited pattern and press Enter"),
-                            ui.TextArea(param_name="change_note", placeholder="Why this revision is needed (optional)", rows=2),
+                            ui.TextArea(param_name="visual_intent", placeholder="Required: how should this brand's photos and images feel?", rows=3),
+                            ui.Input(param_name="realism_level", placeholder="How realistic, e.g. 'grounded, real-world photos'"),
+                            ui.TagInput(param_name="core_rules", placeholder="Add a must-follow rule and press Enter"),
+                            ui.TagInput(param_name="prohibited_patterns", placeholder="Add something to avoid and press Enter"),
+                            ui.TextArea(param_name="change_note", placeholder="Why this change (optional)", rows=2),
                         ],
                     ) if vbs_can_edit else ui.Alert(
-                        title="Editor access required",
-                        message="Only workspace editors and owners can create VBS drafts.",
+                        title="You need edit access",
+                        message="Ask an owner to give you editor access to make changes here.",
                         type="info",
                     ),
                 ),
@@ -2975,30 +2967,29 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 direction="v", gap=3,
                                 children=[
                 ui.Card(
-                    title="Register evidence reference",
-                    subtitle="P0 stores a public HTTPS reference only. It never fetches, downloads or processes the source.",
+                    title="Add a reference",
+                    subtitle="Paste a link to something that inspired this brand's look — a photo, logo, or competitor page. We just save the link, nothing is downloaded.",
                     content=ui.Form(
                         action="register_visual_evidence",
-                        submit_label="Register unreviewed reference",
+                        submit_label="Add reference",
                         defaults={
                             "brand_id": brand_id,
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
-                            ui.Input(param_name="source_url", placeholder="Required: https://public-source.example/research"),
-                            ui.Text("Tip: a link to a photo, logo file, or competitor page works well as visual evidence.", variant="caption"),
-                            ui.Input(param_name="source_title", placeholder="Source title (optional)"),
-                            ui.TextArea(param_name="observation", placeholder="Required: what does this source appear to support? This remains unreviewed.", rows=3),
+                            ui.Input(param_name="source_url", placeholder="Required: paste the link (https://...)"),
+                            ui.Input(param_name="source_title", placeholder="Give it a short name (optional)"),
+                            ui.TextArea(param_name="observation", placeholder="Required: why does this matter for the look of this brand?", rows=3),
                         ],
                     ) if vbs_can_edit else ui.Alert(
-                        title="Editor access required",
-                        message="Only workspace editors and owners can register evidence references.",
+                        title="You need edit access",
+                        message="Ask an owner to give you editor access to add references.",
                         type="info",
                     ),
                 ),
                 ui.Card(
-                    title=f"Evidence references ({len(vbs_evidence)})",
-                    subtitle="All are private, unreviewed references — not verified claims or downloadable files.",
+                    title=f"References ({len(vbs_evidence)})",
+                    subtitle="Just links you've saved — private to your team, nothing is downloaded.",
                     content=ui.Stack(
                         direction="v", gap=2,
                         children=[
@@ -3051,29 +3042,29 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 direction="v", gap=3,
                                 children=[
                 ui.Card(
-                    title="Create Visual Profile draft",
+                    title="Turn your style into a working profile",
                     subtitle=(
-                        "Binds a non-personal profile snapshot to the approved VBS and selected private evidence."
-                        if current_vbs else "Approve a VBS revision first; profiles never guess a baseline."
+                        "Picks up your approved style and turns it into something apps can actually use."
+                        if current_vbs else "Save and approve your visual style above first."
                     ),
                     content=ui.Form(
                         action="create_visual_profile",
-                        submit_label="Save profile draft",
+                        submit_label="Save",
                         defaults={
                             "brand_id": brand_id,
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
                             ui.KeyValue(columns=2, items=[
-                                {"key": "Approved VBS", "value": f"Revision {current_vbs.data.get('revision', '?')}"},
-                                {"key": "Basis", "value": (f"{current_vbs_basis.evidence_count} reviewed-valid reference(s) · verified" if current_vbs_basis and current_vbs_basis.valid else "Integrity mismatch — creation is blocked")},
+                                {"key": "Approved style version", "value": f"Revision {current_vbs.data.get('revision', '?')}"},
+                                {"key": "References checked", "value": (f"{current_vbs_basis.evidence_count} reference(s) · all good" if current_vbs_basis and current_vbs_basis.valid else "Something doesn't match — saving is blocked")},
                             ]),
                             ui.TagInput(
                                 param_name="evidence_ids",
                                 suggestions=profile_evidence_suggestions,
-                                placeholder="Choose reviewed-valid evidence ID",
+                                placeholder="Pick a reviewed reference (optional)",
                             ),
-                            ui.Text("Only reviewed-valid references from this private workspace are offered. You may leave this empty.", variant="caption"),
+                            ui.Text("Only reviewed references show up here. You can leave this empty.", variant="caption"),
                             ui.Stack(
                                 direction="v", gap=1,
                                 children=[
@@ -3082,22 +3073,22 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                         variant="caption",
                                     ) for evidence in reviewed_valid_evidence
                                 ],
-                            ) if reviewed_valid_evidence else ui.Text("No reviewed-valid evidence is available yet.", variant="caption"),
-                            ui.TextArea(param_name="profile_summary", placeholder="Required: non-personal visual profile summary", rows=3),
-                            ui.TextArea(param_name="art_direction", placeholder="Non-personal art direction (optional)", rows=2),
-                            ui.TextArea(param_name="change_note", placeholder="Why this profile revision is needed (optional)", rows=2),
+                            ) if reviewed_valid_evidence else ui.Text("No reviewed references yet.", variant="caption"),
+                            ui.TextArea(param_name="profile_summary", placeholder="Required: sum up this brand's look in a sentence or two", rows=3),
+                            ui.TextArea(param_name="art_direction", placeholder="Any extra direction for photos, e.g. lighting, angles (optional)", rows=2),
+                            ui.TextArea(param_name="change_note", placeholder="Why this change (optional)", rows=2),
                         ],
                     ) if current_vbs and vbs_can_edit else ui.Alert(
-                        title="Editor access and approved VBS required",
-                        message="Visual Profiles can only be created by workspace editors or owners from the current approved VBS baseline.",
+                        title="You need edit access and an approved style",
+                        message="Ask an owner for edit access, and make sure a visual style is approved above first.",
                         type="info",
                     ),
                 ),
                 ui.Card(
-                    title=f"Visual Profiles ({len(vbs_profiles)})",
+                    title=f"Profiles ({len(vbs_profiles)})",
                     subtitle=(
-                        f"Current profile: revision {current_profile.data.get('revision')}" if current_profile
-                        else "No approved current Visual Profile. Downstream resolution remains blocked."
+                        f"Live version: {current_profile.data.get('revision')}" if current_profile
+                        else "Nothing is live yet — other apps can't use this brand's look until one is approved."
                     ),
                     content=ui.Stack(
                         direction="v", gap=2,
@@ -3106,52 +3097,51 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 title=f"Profile revision {profile.data.get('revision', '?')} · {_status_label(profile.data.get('status', 'draft'))}",
                                 subtitle=profile.data.get("profile_summary", ""),
                                 content=ui.KeyValue(columns=1, items=[
-                                    {"key": "VBS baseline", "value": f"Revision {profile.data.get('vbs_revision', '?')}"},
-                                    {"key": "Evidence", "value": str(len(profile.data.get('evidence_ids', [])))},
-                                    {"key": "Snapshot hash", "value": profile.data.get("snapshot_hash", "—")},
-                                    {"key": "Bound to", "value": (f"Approved VBS r{profile_approval_context[profile.id][0].data.get('revision', '?')}") if profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else ("VBS evidence-basis mismatch — approval blocked" if profile_approval_context[profile.id][0] else "Baseline is no longer current")},
+                                    {"key": "Based on style version", "value": f"Revision {profile.data.get('vbs_revision', '?')}"},
+                                    {"key": "References used", "value": str(len(profile.data.get('evidence_ids', [])))},
+                                    {"key": "Matches approved style?", "value": ("Yes") if profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else ("No — something doesn't match" if profile_approval_context[profile.id][0] else "No — the approved style has changed since")},
                                 ]),
                                 footer=(
                                     ui.Form(
                                         action="activate_visual_profile",
-                                        submit_label="Approve as current profile",
+                                        submit_label="Make this the live version",
                                         defaults={
                                             "profile_id": profile.id,
                                             "expected_revision": profile.data.get("revision", 1),
                                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                                         },
-                                        children=[ui.TextArea(param_name="approval_note", placeholder="Approval note (optional)", rows=2)],
+                                        children=[ui.TextArea(param_name="approval_note", placeholder="Note (optional)", rows=2)],
                                     ) if vbs_can_review else ui.Alert(
                                         title="Reviewer access required",
-                                        message="Only workspace reviewers and owners can approve a Visual Profile.",
+                                        message="Only reviewers and owners can make a profile the live version.",
                                         type="info",
                                     )
                                 ) if profile.data.get("status") in {"draft", "in_review"} and profile_approval_context[profile.id][0] and profile_approval_context[profile.id][1] and profile_approval_context[profile.id][1].valid else (
                                     ui.Alert(
-                                        title="Profile approval blocked",
-                                        message="This draft is not bound to a current approved VBS with a verified evidence basis. Create a fresh profile snapshot after resolving the baseline.",
+                                        title="Can't go live yet",
+                                        message="This doesn't match the approved style anymore. Save a fresh one above.",
                                         type="warning",
                                     ) if profile.data.get("status") in {"draft", "in_review"} else ui.Text("", variant="caption")
                                 ),
                             ) for profile in vbs_profiles
                         ],
-                    ) if vbs_profiles else ui.Empty(message="No Visual Profile drafts yet.", icon="Layers"),
+                    ) if vbs_profiles else ui.Empty(message="No profiles yet.", icon="Layers"),
                 ),
                                 ],
                             ),
                         },
                         {
                             "id": "vbs-handoffs",
-                            "title": "Baseline handoffs",
+                            "title": "Send to other apps",
                             "children": ui.Stack(
                                 direction="v", gap=3,
                                 children=[
                 ui.Card(
-                    title="Approved baseline handoffs",
+                    title="Send your approved style to other apps",
                     subtitle=(
-                        "Read-only payloads for downstream planning. They create no assets and do not invoke image generation."
+                        "One click hands your approved style to Content Strategy or Media Studio. Nothing is created yet."
                         if current_profile and current_vbs_basis and current_vbs_basis.valid
-                        else "Approve a current Visual Profile from a VBS with a verified evidence basis to unlock downstream handoffs."
+                        else "Approve a profile above first — then you can send it to other apps."
                     ),
                     content=ui.Stack(
                         direction="v", gap=2,
@@ -3181,16 +3171,16 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                             ui.Code(content=_vbs_style_direction_for_paste(current_vbs, current_profile), language="text"),
                         ] if current_vbs else []),
                     ) if current_profile and current_vbs_basis and current_vbs_basis.valid else ui.Alert(
-                        title="Approved Visual Profile required",
-                        message="Handoffs remain unavailable until the current profile and its VBS evidence basis are approved and verified.",
+                        title="Approve a profile first",
+                        message="You need an approved, up-to-date profile before you can send it to other apps.",
                         type="info",
                     ),
                 ),
                 ui.Card(
-                    title=f"Media conformance tracking ({len(vbs_conformance_records)})",
+                    title=f"Do the images actually match? ({len(vbs_conformance_records)})",
                     subtitle=(
-                        "Record whether images actually produced by Media Studio for a package match this approved "
-                        "profile's guidance. A human verdict only — nothing here fetches the package or any image."
+                        "Look at images Media Studio made and say whether they match your approved style. "
+                        "Just your judgment — nothing is fetched or checked automatically."
                     ),
                     content=ui.Stack(
                         direction="v", gap=2,
@@ -3202,39 +3192,39 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                 children=[
                                     ui.Input(
                                         param_name="media_package_id",
-                                        placeholder="Required: Media Studio package id, e.g. from Media Studio's package list",
+                                        placeholder="Required: paste the Media Studio package ID",
                                     ),
                                     ui.Select(
                                         param_name="verdict",
                                         options=[
-                                            {"value": "conforms", "label": "Conforms — matches the approved guidance"},
-                                            {"value": "drifted", "label": "Drifted — does not match, do not use"},
-                                            {"value": "inconclusive", "label": "Inconclusive — needs another look"},
+                                            {"value": "conforms", "label": "Yes — matches"},
+                                            {"value": "drifted", "label": "No — doesn't match, don't use it"},
+                                            {"value": "inconclusive", "label": "Not sure — needs another look"},
                                         ],
-                                        placeholder="Choose verdict",
+                                        placeholder="Does it match?",
                                     ),
                                     ui.TextArea(
                                         param_name="reviewer_note",
-                                        placeholder="Required: what did you check, and why this verdict?",
+                                        placeholder="Required: what did you check?",
                                         rows=3,
                                     ),
                                 ],
                             ) if vbs_can_review else ui.Alert(
                                 title="Reviewer access required",
-                                message="Only workspace reviewers and owners can record a conformance verdict.",
+                                message="Only reviewers and owners can record this.",
                                 type="info",
                             ),
                         ] + ([
-                            ui.Divider(label="Past verdicts"),
+                            ui.Divider(label="Past checks"),
                         ] + [
                             ui.KeyValue(columns=2, items=[
                                 {"key": "Package", "value": record.data.get("media_package_id", "")},
-                                {"key": "Verdict", "value": {"conforms": "Conforms", "drifted": "Drifted — do not use", "inconclusive": "Inconclusive"}.get(record.data.get("verdict", ""), record.data.get("verdict", ""))},
+                                {"key": "Match?", "value": {"conforms": "Yes", "drifted": "No — don't use it", "inconclusive": "Not sure"}.get(record.data.get("verdict", ""), record.data.get("verdict", ""))},
                                 {"key": "Note", "value": record.data.get("reviewer_note", "")},
-                                {"key": "Profile checked against", "value": f"Revision {record.data.get('profile_revision', '?')} (VBS r{record.data.get('vbs_revision', '?')})"},
+                                {"key": "Checked against", "value": f"Profile v{record.data.get('profile_revision', '?')} (style v{record.data.get('vbs_revision', '?')})"},
                             ])
                             for record in vbs_conformance_records
-                        ] if vbs_conformance_records else [ui.Text("No conformance verdicts recorded yet.", variant="caption")]),
+                        ] if vbs_conformance_records else [ui.Text("Nothing checked yet.", variant="caption")]),
                     ),
                 ),
                                 ],
@@ -3242,38 +3232,39 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         },
                         {
                             "id": "vbs-revisions",
-                            "title": "Revisions",
+                            "title": "History",
                             "children": ui.Stack(
                                 direction="v", gap=3,
                                 children=[
                 ui.Card(
-                    title=f"Revision history ({len(vbs_revisions)})",
-                    content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No VBS revisions yet — create the first draft above.", icon="Palette"),
+                    title=f"Past versions ({len(vbs_revisions)})",
+                    subtitle="Every version you've saved, with the newest at the top. Nothing is ever lost.",
+                    content=ui.Stack(direction="v", gap=2, children=revision_rows) if revision_rows else ui.Empty(message="No versions yet — save your first one above.", icon="Palette"),
                 ),
                                 ],
                             ),
                         },
                         {
                             "id": "vbs-technical-details",
-                            "title": "Technical details: audit chain & integrity log",
+                            "title": "For the tech team",
                             "children": ui.Stack(
                                 direction="v", gap=3,
                                 children=[
                                     ui.Card(
-                                        title="Audit-chain status",
-                                        subtitle="Read-only workspace anchor for chained audit events. A mismatch blocks critical changes.",
+                                        title="Tamper check",
+                                        subtitle="We keep every change locked together, so nothing can be edited after the fact without us noticing.",
                                         content=ui.KeyValue(columns=3, items=[
-                                            {"key": "Chain sequence", "value": str(vbs_integrity.chain_sequence)},
-                                            {"key": "Chained events", "value": str(vbs_integrity.chained_events)},
-                                            {"key": "Anchor fingerprint", "value": (vbs_integrity.chain_head[:12] + "…") if vbs_integrity.chain_head else "Not started"},
+                                            {"key": "Changes tracked", "value": str(vbs_integrity.chain_sequence)},
+                                            {"key": "Locked together", "value": str(vbs_integrity.chained_events)},
+                                            {"key": "Latest lock", "value": (vbs_integrity.chain_head[:12] + "…") if vbs_integrity.chain_head else "Not started"},
                                         ]),
                                     ),
                                     ui.Card(
                                         title=f"Audit trail ({len(vbs_audit_events)})",
-                                        subtitle="Append-only P0 record of workspace, draft and approval actions. Sealed entries can be verified without changing them.",
+                                        subtitle="A running log of everything that happened here — who did what, and when.",
                                         footer=ui.Form(
                                             action="verify_visual_brand_audit_integrity",
-                                            submit_label="Verify sealed audit integrity",
+                                            submit_label="Run tamper check",
                                             defaults={"brand_id": brand_id},
                                             children=[],
                                         ),
@@ -3285,7 +3276,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                                     variant="caption",
                                                 ) for event in vbs_audit_events
                                             ],
-                                        ) if vbs_audit_events else ui.Empty(message="No VBS audit events yet.", icon="History"),
+                                        ) if vbs_audit_events else ui.Empty(message="Nothing logged yet.", icon="History"),
                                     ),
                                 ],
                             ),
