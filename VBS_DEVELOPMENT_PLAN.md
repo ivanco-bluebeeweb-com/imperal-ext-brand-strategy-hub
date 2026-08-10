@@ -254,7 +254,35 @@ approved Visual Profile snapshot, whether it conforms — visible in the panel,
 audited, tenant-isolated, fail-closed if the workspace is stale or the VBS/Profile
 chain is broken. Demonstrated live for one real site.
 
-**Status:** in progress, 2026-08-10.
+**Status:** delivered, 2026-08-10.
+
+**Delivery record (P2-A):**
+
+1. Panel: new "Media conformance tracking" card in the brand detail panel's
+   "Baseline handoffs" tab — a form to paste a Media Studio `package_id` and
+   pick a verdict (conforms / drifted / inconclusive) with a required reviewer
+   note, plus a read-only list of past verdicts newest-first.
+2. Where to see it: Brand Strategy Hub panel → open a brand → Baseline
+   handoffs tab (visible once the workspace has an approved current Visual
+   Profile; gated the same way approval/handoff cards already are).
+3. Commits pushed: `8ba5a6a` (feature + tests), `21fa70d` (manifest rebuild —
+   `imperal build` had been skipped before the first deploy, so the two new
+   tools weren't in the synced catalog; caught and fixed same session).
+   Deployed at `21fa70d7`.
+4. Tests: 103/103 passing (5 new: role gate reviewer-vs-editor, invalid
+   verdict, missing approved profile, tenant isolation, audit trail).
+   `imperal validate`: 0 errors / 0 warnings / 1 pre-existing info.
+5. Live-demonstrated on Climtec.md (real brand, real approved Visual Profile
+   revision 1, real Media Studio package "Cost of installing a heat-recovery
+   ventilator"): `record_media_conformance` and `list_media_conformance`
+   called for real through the deployed tools, not just tests — confirmed
+   the stored `snapshot_hash` matches the resolved approved profile exactly.
+   Verdict recorded as `inconclusive` (not `conforms`) because the check
+   verified prompt-fidelity (the approved art_direction text is threaded
+   verbatim into the real Imagen4 prompt for that package — answers the
+   open question "does VBS form the correct image prompt?": **yes**), not a
+   human's actual pixel-level look at the rendered image, which is what a
+   `conforms`/`drifted` verdict requires by design.
 
 **Non-goals reaffirmed (still not authorised by this decision):**
 
