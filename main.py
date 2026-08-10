@@ -2348,7 +2348,7 @@ async def brands_panel(ctx, **kwargs) -> object:
             action="create_brand_profile",
             submit_label="Create brand",
             children=[
-                ui.Input(param_name="brand_name", placeholder="Brand name"),
+                ui.Input(param_name="brand_name", placeholder="Brand name (required)"),
                 ui.Input(param_name="industry", placeholder="Industry (optional)"),
                 ui.Input(param_name="site_id", placeholder="Content Strategy Hub site_id (optional)"),
             ],
@@ -2861,7 +2861,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
-                            ui.TextArea(param_name="visual_intent", placeholder="Visual intent: what should this brand's visuals make people feel or understand?", rows=3),
+                            ui.TextArea(param_name="visual_intent", placeholder="Required: what should this brand's visuals make people feel or understand?", rows=3),
                             ui.Input(param_name="realism_level", placeholder="Realism level, e.g. grounded realism"),
                             ui.TagInput(param_name="core_rules", placeholder="Add a non-negotiable visual rule and press Enter"),
                             ui.TagInput(param_name="prohibited_patterns", placeholder="Add a prohibited pattern and press Enter"),
@@ -2893,10 +2893,10 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                             "expected_workspace_version": vbs_workspace.data.get("version", 1),
                         },
                         children=[
-                            ui.Input(param_name="source_url", placeholder="https://public-source.example/research"),
+                            ui.Input(param_name="source_url", placeholder="Required: https://public-source.example/research"),
                             ui.Text("Tip: a link to a photo, logo file, or competitor page works well as visual evidence.", variant="caption"),
                             ui.Input(param_name="source_title", placeholder="Source title (optional)"),
-                            ui.TextArea(param_name="observation", placeholder="What does this source appear to support? This remains unreviewed.", rows=3),
+                            ui.TextArea(param_name="observation", placeholder="Required: what does this source appear to support? This remains unreviewed.", rows=3),
                         ],
                     ) if vbs_can_edit else ui.Alert(
                         title="Editor access required",
@@ -2991,7 +2991,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                     ) for evidence in reviewed_valid_evidence
                                 ],
                             ) if reviewed_valid_evidence else ui.Text("No reviewed-valid evidence is available yet.", variant="caption"),
-                            ui.TextArea(param_name="profile_summary", placeholder="Non-personal visual profile summary", rows=3),
+                            ui.TextArea(param_name="profile_summary", placeholder="Required: non-personal visual profile summary", rows=3),
                             ui.TextArea(param_name="art_direction", placeholder="Non-personal art direction (optional)", rows=2),
                             ui.TextArea(param_name="change_note", placeholder="Why this profile revision is needed (optional)", rows=2),
                         ],
@@ -3297,7 +3297,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             submit_label="Add segment",
             defaults={"brand_id": brand_id},
             children=[
-                ui.Input(param_name="segment_name", placeholder="Segment name, e.g. 'SMB office managers'"),
+                ui.Input(param_name="segment_name", placeholder="Required: segment name, e.g. 'SMB office managers'"),
                 ui.Input(param_name="demographics", placeholder="Demographics (optional)"),
                 ui.Input(param_name="psychographics", placeholder="Psychographics (optional)"),
                 ui.TagInput(param_name="pain_points", placeholder="Add a pain point and press Enter"),
