@@ -3386,6 +3386,408 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "record_media_conformance",
+      "description": "Record a human's own verdict on whether a Media Studio media package's actual images conform to the approved Visual Profile guidance handed off to it. Stores a verdict only — never fetches the package, inspects any image, or generates anything. Requires the same review permission as evidence review.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:media_conformance_record"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "media_package_id": {
+            "description": "Media Studio package id being reviewed (from Media Studio's own list) — pasted, never fetched",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Media Package Id",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "One of: conforms, drifted, inconclusive",
+            "title": "Verdict",
+            "type": "string"
+          },
+          "reviewer_note": {
+            "description": "What the human actually checked and why this verdict — required, never empty",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reviewer Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "media_package_id",
+          "verdict",
+          "reviewer_note"
+        ],
+        "title": "RecordMediaConformanceParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "A human's own recorded verdict on whether a Media Studio media package's\nactual images conform to the approved Visual Profile guidance handed off to it.\n\nP2-A stores a verdict only. It never fetches the package, inspects any\nimage, or generates anything — the human states what they themselves saw.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "default": "",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_revision": {
+            "default": 0,
+            "title": "Profile Revision",
+            "type": "integer"
+          },
+          "vbs_id": {
+            "default": "",
+            "title": "Vbs Id",
+            "type": "string"
+          },
+          "vbs_revision": {
+            "default": 0,
+            "title": "Vbs Revision",
+            "type": "integer"
+          },
+          "snapshot_hash": {
+            "default": "",
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "media_package_id": {
+            "default": "",
+            "title": "Media Package Id",
+            "type": "string"
+          },
+          "verdict": {
+            "default": "conforms",
+            "title": "Verdict",
+            "type": "string"
+          },
+          "reviewer_note": {
+            "default": "",
+            "title": "Reviewer Note",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "MediaConformanceRecord",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "brand-strategy-hub.record_media_conformance",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_media_conformance",
+      "description": "List human-recorded conformance verdicts for one brand's media packages, newest first.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an initialized VBS workspace — never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max records to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ListMediaConformanceParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "MediaConformanceRecord": {
+            "description": "A human's own recorded verdict on whether a Media Studio media package's\nactual images conform to the approved Visual Profile guidance handed off to it.\n\nP2-A stores a verdict only. It never fetches the package, inspects any\nimage, or generates anything — the human states what they themselves saw.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "profile_id": {
+                "default": "",
+                "title": "Profile Id",
+                "type": "string"
+              },
+              "profile_revision": {
+                "default": 0,
+                "title": "Profile Revision",
+                "type": "integer"
+              },
+              "vbs_id": {
+                "default": "",
+                "title": "Vbs Id",
+                "type": "string"
+              },
+              "vbs_revision": {
+                "default": 0,
+                "title": "Vbs Revision",
+                "type": "integer"
+              },
+              "snapshot_hash": {
+                "default": "",
+                "title": "Snapshot Hash",
+                "type": "string"
+              },
+              "media_package_id": {
+                "default": "",
+                "title": "Media Package Id",
+                "type": "string"
+              },
+              "verdict": {
+                "default": "conforms",
+                "title": "Verdict",
+                "type": "string"
+              },
+              "reviewer_note": {
+                "default": "",
+                "title": "Reviewer Note",
+                "type": "string"
+              },
+              "created_by": {
+                "default": "",
+                "title": "Created By",
+                "type": "string"
+              },
+              "tenant_id": {
+                "default": "",
+                "title": "Tenant Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "MediaConformanceRecord",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/MediaConformanceRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MediaConformanceRecordList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "register_visual_evidence",
       "description": "Register a private, unreviewed HTTPS reference for a VBS decision. P0 stores the reference only and never fetches the URL.",
       "action_type": "write",
