@@ -73,6 +73,16 @@ Human reviewers remain responsible for evidence validity, VBS approval, Visual P
 - **Code status:** complete.
 - **Live-product status:** not yet proven in Imperal panel. This is the active gate below.
 
+### P0-B follow-up fix — evidence-review form silently failed on an empty note
+
+**Problem this closes:** a live browser test on 2026-08-07 against Climtec.md found that clicking **Save review decision** sent a real network request (confirmed via trace) but left the evidence's `status`/`workspace_version` unchanged, with no visible error. Root cause found by direct reproduction: `ReviewVisualEvidenceParams.review_note` requires `min_length=1`, but the panel's `ui.TextArea` for that field shipped with no default `value=`. A reviewer who picked a decision without typing a note submitted `review_note=""`, which failed Pydantic validation in platform dispatch *before* `review_visual_evidence` ever ran — so the extension's own `ActionResult.error()` path was never reached and the panel had nothing to show.
+
+**Fix:** the TextArea now carries `value="No additional notes."` as a non-empty default; a reviewer can still overwrite it. Every submission now validates.
+
+**Delivered:** `ab80460a`. Regression test added to `test_vbs_p0.py` asserting the panel renders the non-empty default. All 98 tests pass; `imperal validate`: 0 errors, 0 warnings, 1 info (pre-existing, no `on_install` hook). Deployed 2026-08-10, `20/21` checks (same pre-existing, non-blocking pricing-confirmation warning seen on every release since 2026-08-07).
+
+**Platform lesson (applies to any panel, not just VBS):** any form field mapped to a Pydantic parameter with `min_length>=1` must ship a non-empty default `value=`, or an unedited required field silently fails validation with no user-visible error.
+
 ---
 
 ## P1-A — read-only downstream handoffs ✅ in code, pending live proof
