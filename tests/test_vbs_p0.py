@@ -197,6 +197,13 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "never fetches, downloads or processes the source" in rendered
     assert "review_visual_evidence" in rendered
     assert "Save review decision" in rendered
+    # Regression: review_note has min_length=1 in ReviewVisualEvidenceParams.
+    # If the review TextArea ships with no default value, a reviewer who
+    # picks a decision without typing a note submits an empty string and the
+    # request fails Pydantic validation before review_visual_evidence ever
+    # runs -- silently, with no ActionResult.error the panel can show. The
+    # TextArea must carry a non-empty default so every submission validates.
+    assert "'value': 'No additional notes.'" in rendered
     assert "expected_status" in rendered
     assert "Create Visual Profile draft" in rendered
     assert "Private workspace access" in rendered

@@ -2937,7 +2937,12 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                                             ],
                                             placeholder="Choose review decision",
                                         ),
-                                        ui.TextArea(param_name="review_note", placeholder="Required: explain the decision", rows=2),
+                                        ui.TextArea(
+                                            param_name="review_note",
+                                            value="No additional notes.",
+                                            placeholder="Explain the decision",
+                                            rows=2,
+                                        ),
                                     ],
                                 ) if vbs_can_review and evidence.data.get("status", "discovered") != "archived" else ui.Text("", variant="caption"),
                             ) for evidence in vbs_evidence
