@@ -203,9 +203,60 @@ for the full delivery record of that side.
 which is explicitly not authorised for implementation without a separate
 product decision (see below).
 
-### P2 — asset and generation decision (not planned for implementation)
+### P2 — asset and generation decision
 
-This requires a separate approved product decision and a new design for storage, permissions, retention, provenance, consent/licensing, provider failure policy and human approval. No implementation is authorised by this plan.
+**Product decision:** authorised by the brand owner on 2026-08-10, scoped narrowly to
+close the exact gap already documented above (P1-D "New finding" — nobody tracks
+whether a Media Studio package's actual images match the Visual Profile they were
+supposed to follow). This decision does NOT authorise image generation, personal
+imagery, or automatic approval — those three non-goals below remain in force
+unchanged. It authorises exactly one new capability: **P2-A**.
+
+### P2-A — human-recorded conformance between a generated media package and the approved Visual Profile
+
+**Problem this closes:** `build_approved_visual_media_handoff` proves the guidance
+Brand Strategy Hub *hands off* is correct (P1-A/P1-D), but nothing records whether
+the images a human actually *received back* from Media Studio conform to it. A
+human currently has no structured place to say "I checked package X against our
+approved guidance and it matches" or "it drifted, don't use it" — the divergence
+found live for Climtec.md on 2026-08-09 could recur silently, indefinitely.
+
+**Design (storage / permissions / retention / provenance / provider-failure / human-approval), per plan requirement:**
+
+- **Storage:** new tenant-scoped store collection `vbs_media_conformance`. One record
+  per human review of one media package. No image bytes, no fetch of the package or
+  any URL — the human pastes the Media Studio `package_id` (free-text reference,
+  exactly like evidence `source_url`) and states their own verdict.
+- **Permissions:** reuses the existing VBS role model unchanged — recording a
+  conformance verdict requires the `review` permission (same role tier as
+  `review_visual_evidence`), enforced server-side by `_require_vbs_access`. No new
+  role, no schema change to `ROLE_PERMISSIONS`.
+- **Retention:** lives inside the same private, tenant-local VBS workspace as every
+  other VBS record; deleted by the existing `purge_brand_strategy_data` cascade —
+  no separate retention path to design or forget.
+- **Provenance:** at recording time, the function snapshots the *current* approved
+  baseline via the same resolver used by the handoffs (`profile_id`,
+  `profile_revision`, `vbs_id`, `vbs_revision`, `snapshot_hash`) so a later change to
+  the approved profile can never silently rewrite what an old conformance verdict
+  was actually checked against — same immutable-basis pattern already proven for
+  approval evidence.
+- **Consent/licensing:** not applicable — this stores no imagery and no personal
+  data, only a human's text verdict about a package id.
+- **Provider failure policy:** not applicable — this calls no image provider and
+  performs no generation of any kind.
+- **Human approval:** this *is* the human-approval mechanism — the verdict
+  (`matches_approved_guidance` | `diverges` | `not_yet_reviewed`) is always a named
+  human's explicit judgment, never inferred or automated.
+
+**Definition of done:** a human can look at one media package (already generated in
+Media Studio, outside this app's control) and record, against the brand's current
+approved Visual Profile snapshot, whether it conforms — visible in the panel,
+audited, tenant-isolated, fail-closed if the workspace is stale or the VBS/Profile
+chain is broken. Demonstrated live for one real site.
+
+**Status:** in progress, 2026-08-10.
+
+**Non-goals reaffirmed (still not authorised by this decision):**
 
 ---
 

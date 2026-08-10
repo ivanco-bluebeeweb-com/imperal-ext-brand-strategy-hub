@@ -32,6 +32,7 @@ from schemas import (
     AddCompetitorParams, ActivateVisualBrandSystemParams, ActivateVisualProfileParams,
     BuildApprovedVisualMediaHandoffParams, BuildApprovedVisualProfileHandoffParams, BuildContentStrategyHandoffParams, CreateBrandProfileParams, CreateVisualProfileParams,
     InitializeVisualBrandWorkspaceParams, MigrateVisualBrandAccessParams,
+    MediaConformanceRecord, MediaConformanceRecordList, RecordMediaConformanceParams, ListMediaConformanceParams,
     CreateTargetSegmentParams, CreateVisualBrandSystemParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
     ListSWOTResultsParams, ListTargetSegmentsParams, ListVisualBrandAuditEventsParams,
@@ -75,6 +76,9 @@ VBS_AUDIT_INCIDENTS = "visual_brand_audit_integrity_incidents"
 VBS_EVIDENCE = "visual_evidence"
 VBS_PROFILES = "visual_profiles"
 VBS_MEMBERSHIPS = "vbs_brand_memberships"
+VBS_MEDIA_CONFORMANCE = "vbs_media_conformance"
+
+MEDIA_CONFORMANCE_VERDICTS = {"conforms", "drifted", "inconclusive"}
 
 
 def _actor(ctx) -> tuple[str, str]:
@@ -1333,6 +1337,86 @@ async def build_approved_visual_media_handoff(ctx, params: BuildApprovedVisualMe
 
 
 @chat.function(
+    "record_media_conformance",
+    description=(
+        "Record a human's own verdict on whether a Media Studio media package's actual images conform to the "
+        "approved Visual Profile guidance handed off to it. Stores a verdict only — never fetches the package, "
+        "inspects any image, or generates anything. Requires the same review permission as evidence review."
+    ),
+    action_type="write",
+    effects=["create:media_conformance_record"],
+    event="brand-strategy-hub.record_media_conformance",
+    data_model=MediaConformanceRecord,
+)
+async def record_media_conformance(ctx, params: RecordMediaConformanceParams) -> ActionResult[MediaConformanceRecord]:
+    """Append one human-authored conformance verdict against the current approved baseline."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "review")
+    if error:
+        return error
+    if params.verdict not in MEDIA_CONFORMANCE_VERDICTS:
+        return ActionResult.error(
+            f"verdict must be one of {sorted(MEDIA_CONFORMANCE_VERDICTS)}.",
+            retryable=False, code="VBS_CONFORMANCE_VERDICT_INVALID",
+        )
+    integrity_error = await _require_vbs_audit_integrity(ctx, workspace)
+    if integrity_error:
+        return integrity_error
+    profiles = await ctx.store.query(VBS_PROFILES, where={"brand_id": params.brand_id}, order_by="-created_at", limit=200)
+    profile = next((item for item in profiles.data if item.data.get("tenant_id") == workspace.data["tenant_id"] and item.data.get("status") == "approved_current"), None)
+    if not profile:
+        return ActionResult.error("An approved current Visual Profile is required before recording conformance.", retryable=False, code="VISUAL_PROFILE_CURRENT_REQUIRED")
+    vbs = await ctx.store.get(VBS_SYSTEMS, profile.data.get("vbs_id", ""))
+    if not vbs or vbs.data.get("tenant_id") != workspace.data["tenant_id"] or vbs.data.get("status") != "approved_current":
+        return ActionResult.error("The approved Visual Profile is not bound to an approved current VBS. Conformance recording is blocked.", retryable=False, code="VISUAL_PROFILE_BASELINE_STALE")
+    actor_id, tenant_id = _actor(ctx)
+    record = await ctx.store.create(VBS_MEDIA_CONFORMANCE, {
+        "brand_id": params.brand_id,
+        "profile_id": profile.id,
+        "profile_revision": profile.data.get("revision", 0),
+        "vbs_id": vbs.id,
+        "vbs_revision": vbs.data.get("revision", 0),
+        "snapshot_hash": profile.data.get("snapshot_hash", ""),
+        "media_package_id": params.media_package_id.strip(),
+        "verdict": params.verdict,
+        "reviewer_note": params.reviewer_note,
+        "created_by": actor_id,
+        "tenant_id": tenant_id,
+        "created_at": _now_iso(),
+    })
+    await _append_vbs_audit(
+        ctx,
+        brand_id=params.brand_id,
+        vbs_id=vbs.id,
+        event_type="media_conformance_recorded",
+        details=f"Package {params.media_package_id.strip()!r} recorded as {params.verdict}: {params.reviewer_note}",
+    )
+    return ActionResult.success(
+        MediaConformanceRecord(id=record.id, title=f"Conformance: {params.verdict}", **record.data),
+        f"Recorded '{params.verdict}' for media package against Visual Profile revision {profile.data.get('revision', 0)}.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "list_media_conformance",
+    description="List human-recorded conformance verdicts for one brand's media packages, newest first.",
+    action_type="read",
+    data_model=MediaConformanceRecordList,
+)
+async def list_media_conformance(ctx, params: ListMediaConformanceParams) -> ActionResult[MediaConformanceRecordList]:
+    """Return conformance records scoped to the caller's tenant and workspace."""
+    workspace, _membership, error = await _require_vbs_access(ctx, params.brand_id, "read")
+    if error:
+        return error
+    page = await ctx.store.query(VBS_MEDIA_CONFORMANCE, where={"brand_id": params.brand_id}, limit=200)
+    matching = [d for d in page.data if d.data.get("tenant_id") == workspace.data["tenant_id"]]
+    matching.sort(key=lambda d: d.data.get("created_at", ""), reverse=True)
+    matching = matching[: params.limit]
+    items = [MediaConformanceRecord(id=d.id, title=f"Conformance: {d.data.get('verdict', '')}", **d.data) for d in matching]
+    return ActionResult.success(MediaConformanceRecordList(items=items, total=len(items)), f"{len(items)} conformance record(s).")
+
+
+@chat.function(
     "register_visual_evidence",
     description=(
         "Register a private, unreviewed HTTPS reference for a VBS decision. "
@@ -2417,6 +2501,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     vbs_profile_page = None
     vbs_membership_page = None
     vbs_incident_page = None
+    vbs_conformance_page = None
     vbs_load_error = ""
     vbs_load_stage = ""
     if requested_tab == "visual_system":
@@ -2454,6 +2539,9 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 vbs_load_stage = "integrity incidents"
                 vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, limit=50)
                 vbs_incident_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
+                vbs_load_stage = "media conformance"
+                vbs_conformance_page = await ctx.store.query(VBS_MEDIA_CONFORMANCE, where={"brand_id": brand_id}, limit=50)
+                vbs_conformance_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
         except Exception as exc:  # keep VBS storage failures inside the VBS tab
             vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
@@ -2644,6 +2732,10 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         vbs_memberships = list(vbs_membership_page.data) if vbs_membership_page else []
         vbs_incidents = [
             item for item in (vbs_incident_page.data if vbs_incident_page else [])
+            if item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
+        ]
+        vbs_conformance_records = [
+            item for item in (vbs_conformance_page.data if vbs_conformance_page else [])
             if item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
         ]
         vbs_integrity = await _verify_vbs_audit_integrity(ctx, vbs_workspace)
@@ -3092,6 +3184,57 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         title="Approved Visual Profile required",
                         message="Handoffs remain unavailable until the current profile and its VBS evidence basis are approved and verified.",
                         type="info",
+                    ),
+                ),
+                ui.Card(
+                    title=f"Media conformance tracking ({len(vbs_conformance_records)})",
+                    subtitle=(
+                        "Record whether images actually produced by Media Studio for a package match this approved "
+                        "profile's guidance. A human verdict only — nothing here fetches the package or any image."
+                    ),
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Form(
+                                action="record_media_conformance",
+                                submit_label="Record conformance verdict",
+                                defaults={"brand_id": brand_id},
+                                children=[
+                                    ui.Input(
+                                        param_name="media_package_id",
+                                        placeholder="Required: Media Studio package id, e.g. from Media Studio's package list",
+                                    ),
+                                    ui.Select(
+                                        param_name="verdict",
+                                        options=[
+                                            {"value": "conforms", "label": "Conforms — matches the approved guidance"},
+                                            {"value": "drifted", "label": "Drifted — does not match, do not use"},
+                                            {"value": "inconclusive", "label": "Inconclusive — needs another look"},
+                                        ],
+                                        placeholder="Choose verdict",
+                                    ),
+                                    ui.TextArea(
+                                        param_name="reviewer_note",
+                                        placeholder="Required: what did you check, and why this verdict?",
+                                        rows=3,
+                                    ),
+                                ],
+                            ) if vbs_can_review else ui.Alert(
+                                title="Reviewer access required",
+                                message="Only workspace reviewers and owners can record a conformance verdict.",
+                                type="info",
+                            ),
+                        ] + ([
+                            ui.Divider(label="Past verdicts"),
+                        ] + [
+                            ui.KeyValue(columns=2, items=[
+                                {"key": "Package", "value": record.data.get("media_package_id", "")},
+                                {"key": "Verdict", "value": {"conforms": "Conforms", "drifted": "Drifted — do not use", "inconclusive": "Inconclusive"}.get(record.data.get("verdict", ""), record.data.get("verdict", ""))},
+                                {"key": "Note", "value": record.data.get("reviewer_note", "")},
+                                {"key": "Profile checked against", "value": f"Revision {record.data.get('profile_revision', '?')} (VBS r{record.data.get('vbs_revision', '?')})"},
+                            ])
+                            for record in vbs_conformance_records
+                        ] if vbs_conformance_records else [ui.Text("No conformance verdicts recorded yet.", variant="caption")]),
                     ),
                 ),
                                 ],

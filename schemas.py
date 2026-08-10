@@ -212,6 +212,50 @@ class ApprovedVisualMediaHandoff(sdl.Entity):
     generation_boundary: str = "No generation is performed by this handoff."
 
 
+class MediaConformanceRecord(sdl.Entity):
+    """A human's own recorded verdict on whether a Media Studio media package's
+    actual images conform to the approved Visual Profile guidance handed off to it.
+
+    P2-A stores a verdict only. It never fetches the package, inspects any
+    image, or generates anything — the human states what they themselves saw.
+    """
+    brand_id: str = ""
+    profile_id: str = ""
+    profile_revision: int = 0
+    vbs_id: str = ""
+    vbs_revision: int = 0
+    snapshot_hash: str = ""
+    media_package_id: str = ""
+    verdict: str = "conforms"
+    reviewer_note: str = ""
+    created_by: str = ""
+    tenant_id: str = ""
+
+
+class MediaConformanceRecordList(sdl.EntityList[MediaConformanceRecord]):
+    pass
+
+
+class RecordMediaConformanceParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    media_package_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Media Studio package id being reviewed (from Media Studio's own list) — pasted, never fetched",
+    )
+    verdict: str = Field(description="One of: conforms, drifted, inconclusive")
+    reviewer_note: str = Field(
+        min_length=1,
+        max_length=2000,
+        description="What the human actually checked and why this verdict — required, never empty",
+    )
+
+
+class ListMediaConformanceParams(BaseModel):
+    brand_id: str = Field(description="UUID of an initialized VBS workspace — never invented")
+    limit: int = Field(50, description="Max records to return (1-100)")
+
+
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
     brand_id: str = ""

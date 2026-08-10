@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "imperal-sdk" }]
+requires-dist = [{ name = "imperal-sdk", specifier = ">=5.9.13" }]
 
 [[package]]
 name = "certifi"
