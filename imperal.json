@@ -6874,7 +6874,7 @@
     },
     {
       "name": "delete_brand_profile",
-      "description": "Permanently delete a brand profile AND cascade-delete everything anchored to it: its tracked competitors, target segments, SWOT snapshots (current + superseded), and gap analyses. Requires confirm_cascade=true. Irreversible.",
+      "description": "Permanently delete a brand profile AND cascade-delete everything anchored to it: its tracked competitors, target segments, SWOT snapshots (current + superseded), gap analyses, and -- if a private Visual Brand System workspace was ever set up for this brand -- that entire workspace: every style revision, saved reference, Visual Profile, team member, audit-trail event, reviewed integrity incident, and media-conformance verdict. Requires confirm_cascade=true. Irreversible.",
       "action_type": "destructive",
       "chain_callable": true,
       "effects": [
@@ -6882,7 +6882,15 @@
         "delete:competitor_profile",
         "delete:target_segment",
         "delete:swot_result",
-        "delete:gap_analysis_result"
+        "delete:gap_analysis_result",
+        "delete:vbs_workspace",
+        "delete:visual_brand_system",
+        "delete:visual_evidence",
+        "delete:visual_profile",
+        "delete:vbs_brand_membership",
+        "delete:visual_brand_audit_event",
+        "delete:visual_brand_audit_incident",
+        "delete:vbs_media_conformance"
       ],
       "id_projection": "",
       "params_schema": {

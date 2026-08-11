@@ -2028,24 +2028,36 @@ async def delete_target_segment(ctx, params: DeleteTargetSegmentParams) -> Actio
     description=(
         "Permanently delete a brand profile AND cascade-delete everything "
         "anchored to it: its tracked competitors, target segments, SWOT "
-        "snapshots (current + superseded), and gap analyses. Requires "
-        "confirm_cascade=true. Irreversible."
+        "snapshots (current + superseded), gap analyses, and -- if a "
+        "private Visual Brand System workspace was ever set up for this "
+        "brand -- that entire workspace: every style revision, saved "
+        "reference, Visual Profile, team member, audit-trail event, "
+        "reviewed integrity incident, and media-conformance verdict. "
+        "Requires confirm_cascade=true. Irreversible."
     ),
     action_type="destructive",
     chain_callable=True,
-    effects=["delete:brand_profile", "delete:competitor_profile", "delete:target_segment", "delete:swot_result", "delete:gap_analysis_result"],
+    effects=[
+        "delete:brand_profile", "delete:competitor_profile", "delete:target_segment",
+        "delete:swot_result", "delete:gap_analysis_result", "delete:vbs_workspace",
+        "delete:visual_brand_system", "delete:visual_evidence", "delete:visual_profile",
+        "delete:vbs_brand_membership", "delete:visual_brand_audit_event",
+        "delete:visual_brand_audit_incident", "delete:vbs_media_conformance",
+    ],
     event="deleted",
     data_model=DeleteResult,
 )
 async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionResult:
-    """Delete a brand profile and cascade-delete its dependents."""
+    """Delete a brand profile and cascade-delete its dependents, including any VBS workspace."""
     doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
     if not params.confirm_cascade:
         return ActionResult.error(
             "Deleting a brand profile cascades to ALL of its competitors, "
-            "target segments, SWOT snapshots, and gap analyses. Pass "
+            "target segments, SWOT snapshots, gap analyses, and -- if set "
+            "up -- its entire visual brand system (style versions, "
+            "references, profiles, team access, and audit history). Pass "
             "confirm_cascade=true to proceed.",
             retryable=False, code="CONFIRM_CASCADE_REQUIRED",
         )
@@ -2055,10 +2067,27 @@ async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionR
         for d in page.data:
             await ctx.store.delete(collection, d.id)
 
+    # Cascade the private VBS workspace, if one was ever initialized for this brand.
+    # These collections are keyed by brand_id the same way the tab above reads them.
+    for collection in (
+        VBS_SYSTEMS, VBS_EVIDENCE, VBS_PROFILES, VBS_MEMBERSHIPS,
+        VBS_AUDIT_EVENTS, VBS_AUDIT_INCIDENTS, VBS_MEDIA_CONFORMANCE,
+    ):
+        page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=1000)
+        for d in page.data:
+            await ctx.store.delete(collection, d.id)
+
+    vbs_workspace = await _workspace_for_brand(ctx, params.brand_id)
+    if vbs_workspace:
+        await ctx.store.delete(VBS_WORKSPACES, vbs_workspace.id)
+
     await ctx.store.delete("brand_profiles", params.brand_id)
     return ActionResult.success(
         DeleteResult(id=params.brand_id, title="Brand profile deleted", deleted=True),
-        summary=f"Brand profile '{doc.data.get('brand_name', params.brand_id)}' and all its dependents deleted.",
+        summary=(
+            f"Brand profile '{doc.data.get('brand_name', params.brand_id)}' and all its "
+            "dependents deleted" + (", including its visual brand system." if vbs_workspace else ".")
+        ),
         refresh_panels=["brands", "brand_detail"],
     )
 

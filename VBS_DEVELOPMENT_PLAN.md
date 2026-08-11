@@ -334,6 +334,46 @@ action, without weakening any safety/audit semantics underneath.
 
 ---
 
+## Brand-deletion gap closed — VBS now cascade-deletes with the brand
+
+**Why:** `delete_brand_profile` cascaded competitors/segments/SWOT/gap-analysis,
+but never touched a brand's private VBS workspace. `purge_brand_strategy_data`
+deliberately excludes VBS too (by design — a VBS workspace is an anchor record,
+not disposable pipeline output). Together this meant a brand with a VBS
+workspace could never be fully deleted: the workspace, its revisions,
+evidence, Visual Profiles, memberships, audit events, audit incidents and
+media-conformance verdicts were left orphaned forever with no path to remove
+them.
+
+**Status:** delivered, 2026-08-11.
+
+**Delivery record:**
+
+1. `delete_brand_profile` now also deletes, when a VBS workspace exists for
+   the brand being deleted: the workspace record itself plus every row in
+   `visual_brand_systems`, `visual_evidence`, `visual_profiles`,
+   `vbs_brand_memberships`, `visual_brand_audit_events`,
+   `visual_brand_audit_integrity_incidents`, and `vbs_media_conformance` for
+   that brand_id. A brand with no VBS workspace deletes exactly as before —
+   no behaviour change for the common case. The success summary now says
+   "...including its visual brand system" when that cascade ran.
+2. Where to see it: same place as before — `delete_brand_profile` (chat/API,
+   `confirm_cascade=true` still required); no new panel surface, this closes
+   a data-integrity gap in an existing destructive action, not a new feature.
+3. Commit pushed: see `git log` for this change; deployed live.
+4. Tests: 105/105 passing (2 new — full cascade with every VBS collection
+   populated proven empty after deletion by direct store query, plus a
+   no-VBS-workspace regression check). `imperal validate`: 0 errors / 0
+   warnings / 1 pre-existing info. `imperal build` re-run — manifest updated
+   (new `effects` entries on `delete_brand_profile`, no new tools).
+5. Next single visible slice: none currently queued for VBS — feature is
+   considered complete for its authorised scope; the only remaining
+   documented gaps are pre-authorised non-goals (image gen, personal
+   imagery, auto-approval) which each need an explicit separate owner
+   decision before any code is written.
+
+---
+
 ## Reporting standard for each slice
 
 Every report must say only:
