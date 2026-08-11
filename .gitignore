@@ -7,3 +7,4 @@ __pycache__/
 .env
 .imperal/
 .DS_Store
+manifest.json
