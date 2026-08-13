@@ -485,6 +485,44 @@ async def health_check(ctx) -> dict:
     return {"status": "ok"}
 
 
+@ext.expose("register_project", action_type="write")
+async def expose_register_project(ctx, site_id: str = "", domain: str = "",
+                                   name: str = "", **kwargs) -> dict:
+    """Inter-extension IPC surface (ctx.extensions.call) for Sites Registry:
+    called automatically whenever a site is registered there (manually,
+    via WordPress Hub's connect, or via a registry sync/backfill), so it
+    shows up here as an existing brand profile without the user re-adding
+    it by hand.
+
+    Idempotent by design -- a site_id that already has a brand profile is
+    left completely untouched; only a genuinely new site_id gets a fresh,
+    minimal profile (mission/vision/USPs empty, ready to be filled in later
+    with update_brand_profile). Returns a plain dict (never surfaced to the
+    LLM/user directly).
+    """
+    sid = (site_id or domain).strip()
+    if not sid:
+        return {"ok": False, "error": "site_id or domain is required.", "retryable": False}
+    existing = await ctx.store.query("brand_profiles", where={"site_id": sid}, limit=1)
+    if existing.data:
+        return {"ok": True, "site_id": sid, "created": False}
+    await ctx.store.create(
+        "brand_profiles",
+        {
+            "site_id": sid,
+            "brand_name": name or sid,
+            "mission": "",
+            "vision": "",
+            "value_proposition": "",
+            "tone_of_voice": "",
+            "unique_selling_points": [],
+            "industry": "",
+            "content_topics": [],
+        },
+    )
+    return {"ok": True, "site_id": sid, "created": True}
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Cross-app site discovery for Quick Add -- not just WordPress, on purpose.
 # ──────────────────────────────────────────────────────────────────────────
