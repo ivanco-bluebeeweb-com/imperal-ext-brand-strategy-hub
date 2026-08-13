@@ -7906,7 +7906,12 @@
     }
   ],
   "signals": [],
-  "schedules": [],
+  "schedules": [
+    {
+      "name": "bsh_connected_sites_refresh",
+      "cron": "10 * * * *"
+    }
+  ],
   "required_scopes": [],
   "icon_size_bytes": 299,
   "lifecycle": {

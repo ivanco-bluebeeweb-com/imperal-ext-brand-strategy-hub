@@ -553,8 +553,9 @@ async def test_fetch_connected_sites_reports_unreachable_provider_instead_of_hid
 @pytest.mark.asyncio
 async def test_brands_panel_shows_not_loaded_yet_before_first_refresh():
     """Panel RENDER never calls the flaky IPC path directly -- before the
-    cache is warmed by a real list_connected_sites call, the card says so
-    honestly instead of erroring or vanishing."""
+    cache is warmed by the automatic schedule tick, the card says so
+    honestly instead of erroring or vanishing, and carries NO Refresh
+    button: the refresh is automatic (bsh_connected_sites_refresh)."""
     ctx = MockContext()
     ctx.extensions.register(
         "wordpress-hub", "list_connected_sites",
@@ -564,7 +565,7 @@ async def test_brands_panel_shows_not_loaded_yet_before_first_refresh():
     rendered = repr(node)
     assert "Quick Add" in rendered
     assert "Not loaded yet" in rendered
-    assert "Refresh" in rendered
+    assert "Refresh" not in rendered
 
 
 @pytest.mark.asyncio
@@ -605,7 +606,8 @@ async def test_brands_panel_quick_add_card_stays_visible_when_all_sites_tracked(
 @pytest.mark.asyncio
 async def test_brands_panel_quick_add_card_explains_unreachable_provider():
     """No provider reachable -> the card is still rendered and names the
-    reason, instead of disappearing without a trace."""
+    reason, instead of disappearing without a trace, and carries NO Refresh
+    button: the refresh is automatic (bsh_connected_sites_refresh)."""
     ctx = MockContext()  # no providers registered
     await m.list_connected_sites(ctx, ListConnectedSitesParams())  # warms the cache with the failure
     node = await m.brands_panel(ctx)
@@ -613,7 +615,7 @@ async def test_brands_panel_quick_add_card_explains_unreachable_provider():
     assert "Quick Add" in rendered
     assert "Could not read connected sites" in rendered
     assert "wordpress-hub" in rendered
-    assert "Refresh" in rendered
+    assert "Refresh" not in rendered
 
 
 @pytest.mark.asyncio
