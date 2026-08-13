@@ -523,6 +523,106 @@ async def expose_register_project(ctx, site_id: str = "", domain: str = "",
     return {"ok": True, "site_id": sid, "created": True}
 
 
+@ext.expose("check_brand_readiness", action_type="read")
+async def expose_check_brand_readiness(ctx, site_id: str = "", **kwargs) -> dict:
+    """Inter-extension IPC surface for Content Strategy Hub's mandatory
+    pre-draft gate: whenever a user asks for an article, Content Strategy
+    must check whether real brand/strategy data exists for that site BEFORE
+    creating a brief, instead of drafting blind off a bare site profile.
+
+    Reports presence/absence/mismatch across three layers so the caller can
+    give an honest, specific answer to the user rather than a generic
+    "brand not found":
+      1. a brand profile exists at all for this site_id
+      2. that profile has real positioning (mission/value_proposition/
+         tone_of_voice/USPs) -- not just the empty stub register_project's
+         fan-out creates the moment a site is merely connected
+      3. at least one target segment and one current SWOT snapshot exist,
+         so a brief can ground itself in a real audience/strategy, not a guess
+
+    Returns a plain dict (never surfaced to the LLM/user directly):
+    {"brand_exists", "brand_id", "brand_name", "positioning_complete",
+     "missing_positioning_fields", "content_topics", "has_target_segments",
+     "target_segment_count", "has_current_swot", "ready", "reasons"}
+    `ready` is the overall gate: True only when a real profile with
+    positioning exists (segments/SWOT are surfaced as reasons/warnings but
+    do not hard-block -- a brand can be real before it has a documented
+    audience or SWOT snapshot).
+    """
+    sid = (site_id or "").strip()
+    reasons: list[str] = []
+    if not sid:
+        return {
+            "brand_exists": False, "brand_id": "", "brand_name": "",
+            "positioning_complete": False, "missing_positioning_fields": [],
+            "content_topics": [], "has_target_segments": False,
+            "target_segment_count": 0, "has_current_swot": False,
+            "ready": False, "reasons": ["No site_id given."],
+        }
+
+    brand_page = await ctx.store.query("brand_profiles", where={"site_id": sid}, limit=1)
+    if not brand_page.data:
+        return {
+            "brand_exists": False, "brand_id": "", "brand_name": "",
+            "positioning_complete": False, "missing_positioning_fields": [],
+            "content_topics": [], "has_target_segments": False,
+            "target_segment_count": 0, "has_current_swot": False,
+            "ready": False,
+            "reasons": [f"No brand profile exists for '{sid}' in Brand Strategy Hub."],
+        }
+
+    brand_doc = brand_page.data[0]
+    brand = brand_doc.data
+    brand_id = brand_doc.id
+
+    missing_fields = []
+    if not brand.get("mission", "").strip():
+        missing_fields.append("mission")
+    if not brand.get("value_proposition", "").strip():
+        missing_fields.append("value_proposition")
+    if not brand.get("tone_of_voice", "").strip():
+        missing_fields.append("tone_of_voice")
+    if not brand.get("unique_selling_points"):
+        missing_fields.append("unique_selling_points")
+    positioning_complete = not missing_fields
+    if not positioning_complete:
+        reasons.append(
+            f"Brand profile for '{sid}' exists but is missing: {', '.join(missing_fields)}. "
+            "This looks like an empty stub (e.g. auto-created when the site was connected), "
+            "not a filled-in brand strategy."
+        )
+
+    content_topics = list(brand.get("content_topics", []))
+    if not content_topics:
+        reasons.append(f"Brand profile for '{sid}' has no content_topics -- no declared content plan to draft against.")
+
+    segments_page = await ctx.store.query("target_segments", where={"brand_id": brand_id}, limit=1)
+    has_segments = bool(segments_page.data)
+    segments_count_page = await ctx.store.query("target_segments", where={"brand_id": brand_id}, limit=500)
+    segment_count = len(segments_count_page.data)
+    if not has_segments:
+        reasons.append(f"No target audience segments defined yet for '{sid}'.")
+
+    swot_page = await ctx.store.query("swot_results", where={"brand_id": brand_id}, limit=500)
+    has_current_swot = any(d.data.get("is_current") for d in swot_page.data)
+    if not has_current_swot:
+        reasons.append(f"No current SWOT snapshot exists yet for '{sid}'.")
+
+    return {
+        "brand_exists": True,
+        "brand_id": brand_id,
+        "brand_name": brand.get("brand_name", sid),
+        "positioning_complete": positioning_complete,
+        "missing_positioning_fields": missing_fields,
+        "content_topics": content_topics,
+        "has_target_segments": has_segments,
+        "target_segment_count": segment_count,
+        "has_current_swot": has_current_swot,
+        "ready": positioning_complete,
+        "reasons": reasons,
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Cross-app site discovery for Quick Add -- not just WordPress, on purpose.
 # ──────────────────────────────────────────────────────────────────────────
