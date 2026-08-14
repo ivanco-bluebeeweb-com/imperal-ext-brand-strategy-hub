@@ -653,6 +653,34 @@ def _bare_domain(url: str) -> str:
     return (url or "").strip().split("://", 1)[-1].rstrip("/") or url
 
 
+_DESC_MAX_LEN = 40  # sidebar row 2 is a one-line business summary, never a raw domain
+
+
+def _business_description(data: dict) -> str:
+    """Always produce a short (<=40 char) one-line business description for
+    the brand list's second row -- never the site domain. Built from the
+    most concrete real field available (value_proposition > mission >
+    industry > USPs), truncated with an ellipsis rather than cut mid-word
+    where possible. Returns '' only if the brand has genuinely no
+    descriptive field set yet (a brand-new, still-empty profile)."""
+    candidates = [
+        data.get("value_proposition", ""),
+        data.get("mission", ""),
+        data.get("industry", ""),
+        ", ".join(data.get("unique_selling_points") or []),
+    ]
+    text = next((c.strip() for c in candidates if c and c.strip()), "")
+    if not text:
+        return ""
+    if len(text) <= _DESC_MAX_LEN:
+        return text
+    cut = text[:_DESC_MAX_LEN - 1]
+    last_space = cut.rfind(" ")
+    if last_space > 20:  # keep a whole word only if it doesn't waste too much room
+        cut = cut[:last_space]
+    return cut.rstrip(",.;: ") + "…"
+
+
 def _canonical_site_id(row: dict) -> str:
     """Normalise a provider's site identifier to its bare domain.
 
@@ -2523,87 +2551,6 @@ async def bsh_connected_sites_refresh(ctx) -> None:
 # Panels
 # ──────────────────────────────────────────────────────────────────────────
 
-def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str],
-                     problems: list[dict] | None = None, has_cache: bool = True) -> object:
-    """Quick Add: one real button per connected site not yet tracked as a
-    brand here, pre-filling create_brand_profile's site_id/brand_name via
-    ui.Call so a brand can be started in one click straight from whatever
-    is already connected in WordPress Hub (or any future site provider in
-    SITE_PROVIDER_APP_IDS) -- no retyping the domain, no chat message.
-
-    ALWAYS returns a card, never None: if there is nothing to offer, the card
-    says WHY (no provider reachable / nothing connected / all already added /
-    not loaded yet). The cache behind this is kept warm automatically by the
-    bsh_connected_sites_refresh schedule tick -- no Refresh button: a live
-    ctx.extensions.call from inside a panel render is unreliable (see
-    _cache_connected_sites), so a manual retry button would just be a coin
-    flip.
-    """
-    problems = problems or []
-    candidates = [s for s in connected_sites if s.get("site_id") not in existing_site_ids]
-
-    if not has_cache and not connected_sites and not problems:
-        return ui.Card(
-            title="Quick Add — from connected sites",
-            content=ui.Stack(direction="v", gap=2, children=[
-                ui.Text(
-                    "Not loaded yet — sites connected in WordPress Hub (or any "
-                    "future site provider) appear here automatically within the hour.",
-                    variant="caption",
-                ),
-            ]),
-        )
-
-    if candidates:
-        body: list = [
-            ui.Text(
-                f"{len(candidates)} connected site(s) not tracked as a brand yet — "
-                "click one to create its brand profile.",
-                variant="caption",
-            ),
-            ui.Stack(direction="h", gap=2, wrap=True, children=[
-                ui.Stack(direction="v", gap=0, children=[
-                    ui.Button(
-                        _bare_domain(s.get("url") or s.get("name") or s["site_id"]),
-                        variant="secondary", size="sm", icon="Plus",
-                        on_click=ui.Call(
-                            "create_brand_profile",
-                            brand_name=s.get("name") or s["site_id"],
-                            site_id=s["site_id"],
-                        ),
-                    ),
-                    ui.Text(provider_display_name(s.get("provider", "")), variant="caption"),
-                ])
-                for s in candidates
-            ]),
-        ]
-    elif problems:
-        body = [
-            ui.Text(
-                "Could not read connected sites from: "
-                + ", ".join(p["provider"] for p in problems),
-                variant="body",
-            ),
-            ui.Text(problems[0]["reason"], variant="caption"),
-        ]
-    elif connected_sites:
-        body = [ui.Text(
-            "Every connected site already has a brand profile.",
-            variant="caption",
-        )]
-    else:
-        body = [ui.Text(
-            "No sites connected yet — connect one in WordPress Hub and it "
-            "will appear here.",
-            variant="caption",
-        )]
-
-    return ui.Card(
-        title="Quick Add — from connected sites",
-        content=ui.Stack(direction="v", gap=2, children=body),
-    )
-
-
 @ext.panel(
     "brands",
     slot="left",
@@ -2614,26 +2561,19 @@ def _quick_add_block(connected_sites: list[dict], existing_site_ids: set[str],
     max_width=420,
 )
 async def brands_panel(ctx, **kwargs) -> object:
-    """Sidebar list of tracked brand profiles -> opens the detail overlay.
-    Always carries its own 'New brand' ui.Form so the very first brand
-    (and every one after) can be created directly from the panel --
-    no chat message required. Also offers Quick Add buttons for any site
-    already connected elsewhere (WordPress Hub today, more providers later
-    via SITE_PROVIDER_APP_IDS)."""
+    """Sidebar: bare 'New brand' form first (no Card wrapper -- no padding,
+    background, border or rounding, per the sidebar-block style rule), a
+    divider, then the brand list -> opens the detail overlay. Always carries
+    its own 'New brand' ui.Form so the very first brand (and every one
+    after) can be created directly from the panel -- no chat message
+    required. No Quick Add card and no list search box: this sidebar is
+    just the create-new-brand affordance plus a plain browsing list."""
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
-    existing_site_ids = {d.data.get("site_id") for d in docs if d.data.get("site_id")}
-    # Read from cache, NOT a live ctx.extensions.call here: a panel render
-    # runs in a context where inter-extension IPC has been observed to fail
-    # (empty user context downstream), while the same call from a real
-    # chat/tool invocation (list_connected_sites itself) works and refreshes
-    # this cache. See _cache_connected_sites for the full explanation.
-    connected_sites, site_problems, has_cache = await _read_cached_connected_sites(ctx)
-    quick_add = _quick_add_block(connected_sites, existing_site_ids, site_problems, has_cache)
 
-    new_brand_form = ui.Card(
-        title="New brand",
-        content=ui.Form(
+    new_brand_form = ui.Stack(direction="v", gap=2, children=[
+        ui.Header("New brand", level=3),
+        ui.Form(
             action="create_brand_profile",
             submit_label="Create brand",
             children=[
@@ -2642,18 +2582,17 @@ async def brands_panel(ctx, **kwargs) -> object:
                 ui.Input(param_name="site_id", placeholder="Content Strategy Hub site_id (optional)"),
             ],
         ),
-    )
+    ])
 
     if not docs:
-        empty_children = [
+        return ui.Stack(direction="v", gap=3, children=[
+            new_brand_form,
+            ui.Divider(),
             ui.Empty(
-                message="No brands yet — create one below to start a SWOT / gap analysis.",
+                message="No brands yet — create one above to start a SWOT / gap analysis.",
                 icon="🎯",
             ),
-        ]
-        empty_children.append(quick_add)
-        empty_children.append(new_brand_form)
-        return ui.Stack(direction="v", gap=3, children=empty_children)
+        ])
 
     items = []
     for d in docs:
@@ -2662,14 +2601,16 @@ async def brands_panel(ctx, **kwargs) -> object:
             ui.ListItem(
                 id=d.id,
                 title=data.get("brand_name", "") or d.id,
-                subtitle=data.get("industry", "") or data.get("site_id", ""),
+                subtitle=_business_description(data),
                 on_click=ui.Call("__panel__brand_detail", brand_id=d.id),
             )
         )
 
-    children = [ui.List(items=items, searchable=True), quick_add, new_brand_form]
-
-    return ui.Stack(direction="v", gap=3, children=children)
+    return ui.Stack(direction="v", gap=3, children=[
+        new_brand_form,
+        ui.Divider(),
+        ui.List(items=items, searchable=False),
+    ])
 
 
 async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:

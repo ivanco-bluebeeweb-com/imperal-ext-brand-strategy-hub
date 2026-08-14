@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "imperal-sdk", specifier = ">=5.9.13" }]
+requires-dist = [{ name = "imperal-sdk", specifier = ">=5.9.19" }]
 
 [[package]]
 name = "certifi"
@@ -267,7 +267,7 @@ wheels = [
 
 [[package]]
 name = "imperal-sdk"
-version = "5.9.13"
+version = "5.9.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -275,9 +275,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/31/129cfa7d6d65f99a93becd42c45de5cb4961ce79710b843ef0085679aafe/imperal_sdk-5.9.13.tar.gz", hash = "sha256:2988ea14a3dba1a1c4e2ae7cb0a3107b967de31b280ccb4511a6e7f7cd9185ec", size = 730405, upload-time = "2026-07-27T06:43:39.529Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/87/89c29f7289fbf05bab3302f77199e7e88949e4dbf47eea2bee3878933211/imperal_sdk-5.9.19.tar.gz", hash = "sha256:d6d9865e6a65f7033c1d65e8c8849fec9846ceebb6db1f19031b3b108a9be27d", size = 755211, upload-time = "2026-08-13T22:45:09.615Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/52/38155a56dc46c3a8cc2955b54abe145fdf6c9678be4a2cb55f618aad4446/imperal_sdk-5.9.13-py3-none-any.whl", hash = "sha256:c1a9e66e8c6001378278d51d86f9463768daa7ad7ff3a2972ef8913a361f6165", size = 302915, upload-time = "2026-07-27T06:43:37.875Z" },
+    { url = "https://files.pythonhosted.org/packages/80/aa/dd8519213aa1787471d3c05ef12c1856d795263334efd840fa447e2252d3/imperal_sdk-5.9.19-py3-none-any.whl", hash = "sha256:27368473639840316060a6e8c016727840e7ea63c5c898034cbc303714e2045e", size = 314628, upload-time = "2026-08-13T22:45:07.901Z" },
 ]
 
 [[package]]

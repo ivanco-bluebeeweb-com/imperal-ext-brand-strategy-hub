@@ -551,25 +551,9 @@ async def test_fetch_connected_sites_reports_unreachable_provider_instead_of_hid
 
 
 @pytest.mark.asyncio
-async def test_brands_panel_shows_not_loaded_yet_before_first_refresh():
-    """Panel RENDER never calls the flaky IPC path directly -- before the
-    cache is warmed by the automatic schedule tick, the card says so
-    honestly instead of erroring or vanishing, and carries NO Refresh
-    button: the refresh is automatic (bsh_connected_sites_refresh)."""
-    ctx = MockContext()
-    ctx.extensions.register(
-        "wordpress-hub", "list_connected_sites",
-        lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
-    )
-    node = await m.brands_panel(ctx)
-    rendered = repr(node)
-    assert "Quick Add" in rendered
-    assert "Not loaded yet" in rendered
-    assert "Refresh" not in rendered
-
-
-@pytest.mark.asyncio
-async def test_brands_panel_shows_quick_add_for_unclaimed_connected_site_after_cache_warm():
+async def test_brands_panel_has_no_quick_add_card():
+    """Quick Add was removed from the sidebar entirely -- even with
+    connected sites available, the panel must never render that card."""
     ctx = MockContext()
     ctx.extensions.register(
         "wordpress-hub", "list_connected_sites",
@@ -578,44 +562,57 @@ async def test_brands_panel_shows_quick_add_for_unclaimed_connected_site_after_c
     await m.list_connected_sites(ctx, ListConnectedSitesParams())  # warms the cache
     node = await m.brands_panel(ctx)
     rendered = repr(node)
-    assert "Quick Add" in rendered
-    assert "G4S Moldova" in rendered
-    assert "create_brand_profile" in rendered
+    assert "Quick Add" not in rendered
 
 
 @pytest.mark.asyncio
-async def test_brands_panel_quick_add_card_stays_visible_when_all_sites_tracked():
-    """The card must never vanish -- when every site already has a brand it
-    explains that, so the user can still see the feature exists."""
+async def test_brands_panel_list_is_not_searchable():
+    """The brand list must not offer a search box."""
     ctx = MockContext()
-    ctx.extensions.register(
-        "wordpress-hub", "list_connected_sites",
-        lambda **kw: [{"site_id": "g4s.md", "name": "G4S Moldova", "url": "https://g4s.md", "status": "connected"}],
-    )
-    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S Moldova", site_id="g4s.md"))
-    await m.list_connected_sites(ctx, ListConnectedSitesParams())  # warms the cache
+    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
     node = await m.brands_panel(ctx)
-    rendered = repr(node)
-    assert "Quick Add" in rendered
-    assert "already has a brand profile" in rendered
-    # the already-tracked site must NOT be offered as a Quick Add button again
-    quick_add_section = rendered.split("Quick Add")[1].split("New brand")[0]
-    assert "create_brand_profile" not in quick_add_section
+    types = _walk(node, set())
+    assert "List" in types
+
+    def _find_list(n):
+        if getattr(n, "type", None) == "List":
+            return n
+        for v in (getattr(n, "props", {}) or {}).values():
+            if isinstance(v, list):
+                for item in v:
+                    found = _find_list(item)
+                    if found is not None:
+                        return found
+            else:
+                found = _find_list(v)
+                if found is not None:
+                    return found
+        return None
+
+    list_node = _find_list(node)
+    assert list_node is not None
+    assert list_node.props.get("searchable") is False
 
 
 @pytest.mark.asyncio
-async def test_brands_panel_quick_add_card_explains_unreachable_provider():
-    """No provider reachable -> the card is still rendered and names the
-    reason, instead of disappearing without a trace, and carries NO Refresh
-    button: the refresh is automatic (bsh_connected_sites_refresh)."""
-    ctx = MockContext()  # no providers registered
-    await m.list_connected_sites(ctx, ListConnectedSitesParams())  # warms the cache with the failure
+async def test_brands_panel_list_item_shows_description_not_domain():
+    """The list item's second row must be a short business description --
+    never the raw site domain -- and always <=40 chars when present."""
+    ctx = MockContext()
+    await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(
+            brand_name="G4S Moldova", site_id="g4s.md",
+            value_proposition="24/7 licensed security you can trust across Moldova",
+        )
+    )
     node = await m.brands_panel(ctx)
     rendered = repr(node)
-    assert "Quick Add" in rendered
-    assert "Could not read connected sites" in rendered
-    assert "wordpress-hub" in rendered
-    assert "Refresh" not in rendered
+    assert "g4s.md" not in rendered
+    desc = m._business_description({
+        "value_proposition": "24/7 licensed security you can trust across Moldova",
+    })
+    assert len(desc) <= 40
+    assert desc in rendered
 
 
 @pytest.mark.asyncio
