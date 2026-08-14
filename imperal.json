@@ -1,6 +1,6 @@
 {
   "manifest_schema_version": 3,
-  "sdk_version": "5.9.13",
+  "sdk_version": "5.9.19",
   "app_id": "brand-strategy-hub",
   "version": "1.0.0",
   "name": "Brand Strategy Hub",
@@ -7914,6 +7914,16 @@
   ],
   "required_scopes": [],
   "icon_size_bytes": 299,
+  "exposed": [
+    {
+      "name": "register_project",
+      "action_type": "write"
+    },
+    {
+      "name": "check_brand_readiness",
+      "action_type": "read"
+    }
+  ],
   "lifecycle": {
     "health_check": {
       "interval_sec": 60
