@@ -616,6 +616,22 @@ async def test_brands_panel_list_item_shows_description_not_domain():
 
 
 @pytest.mark.asyncio
+async def test_brands_panel_has_existing_brands_header_above_list():
+    """The brand list must be introduced by an 'Existing Brands' header,
+    both when brands exist and in the empty state."""
+    ctx = MockContext()
+    empty_node = await m.brands_panel(ctx)
+    assert "Existing Brands" in repr(empty_node)
+
+    await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="Climtec"))
+    node = await m.brands_panel(ctx)
+    rendered = repr(node)
+    assert "Existing Brands" in rendered
+    # the header must come before the list itself, not after
+    assert rendered.index("Existing Brands") < rendered.index("Climtec")
+
+
+@pytest.mark.asyncio
 async def test_list_connected_sites_flags_already_tracked_sites():
     ctx = MockContext()
     ctx.extensions.register(

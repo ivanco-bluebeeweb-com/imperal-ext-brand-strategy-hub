@@ -2563,11 +2563,12 @@ async def bsh_connected_sites_refresh(ctx) -> None:
 async def brands_panel(ctx, **kwargs) -> object:
     """Sidebar: bare 'New brand' form first (no Card wrapper -- no padding,
     background, border or rounding, per the sidebar-block style rule), a
-    divider, then the brand list -> opens the detail overlay. Always carries
-    its own 'New brand' ui.Form so the very first brand (and every one
-    after) can be created directly from the panel -- no chat message
-    required. No Quick Add card and no list search box: this sidebar is
-    just the create-new-brand affordance plus a plain browsing list."""
+    divider, then an 'Existing Brands' header above the brand list ->
+    opens the detail overlay. Always carries its own 'New brand' ui.Form
+    so the very first brand (and every one after) can be created directly
+    from the panel -- no chat message required. No Quick Add card and no
+    list search box: this sidebar is just the create-new-brand affordance
+    plus a plain, clearly-labelled browsing list."""
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
 
@@ -2588,6 +2589,7 @@ async def brands_panel(ctx, **kwargs) -> object:
         return ui.Stack(direction="v", gap=3, children=[
             new_brand_form,
             ui.Divider(),
+            ui.Header("Existing Brands", level=3),
             ui.Empty(
                 message="No brands yet — create one above to start a SWOT / gap analysis.",
                 icon="🎯",
@@ -2609,6 +2611,7 @@ async def brands_panel(ctx, **kwargs) -> object:
     return ui.Stack(direction="v", gap=3, children=[
         new_brand_form,
         ui.Divider(),
+        ui.Header("Existing Brands", level=3),
         ui.List(items=items, searchable=False),
     ])
 
