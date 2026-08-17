@@ -176,4 +176,10 @@ P0-A должен быть `live verified` (реально вызван на р�
 
 ## 14. Live verification log
 
-Пусто — ничего не задеплоено и не проверено в live panel. Заполняется только после реального прохождения P0-A в Imperal panel.
+| Date | What was verified | Result |
+|---|---|---|
+| 2026-08-17 | Код смёржен (commit `c7655a8`, запушен в `main`), `imperal_sdk validate` → 0 errors/0 warnings, `pytest` → 62/62 passed, `deploy_app` → задеплоено на коммит `c7655a87` (46 tools синхронизировано). | OK |
+| 2026-08-17 | Live-вызов `run_market_research` через реальный задеплоенный IPC (не MockContext) для бренда `g4s.md` (industry: инженерные системы HVAC) с 6 реальными signals, собранными самой Webbee через `web_search` (romvent.md, ditrade.md, climatlux.md, laiola.md, ecoventexpert.md, conditionere.md). | Снапшот создан, `is_current=true`, 6 candidate_competitors, полный sourcing trail из 6 реальных URL — никаких выдуманных конкурентов. |
+| 2026-08-17 | `list_market_research_results(brand_id=g4s.md)` живьём после создания. | Возвращает ровно тот снапшот, `is_current=true`, тело в Markdown корректно рендерится. |
+
+P0 для Market Research (создание снапшота, gate на пустой industry/signals, list, archive, cascade delete/purge, панель) — **live verified**. Не проверено вживую в этом проходе: `archive_market_research_result` (логика идентична уже проверенному `archive_swot_result`, локально протестирована) и панельная вкладка Market Research в самом Imperal panel UI (проверена только по коду/паттерну, не кликом в браузере).
