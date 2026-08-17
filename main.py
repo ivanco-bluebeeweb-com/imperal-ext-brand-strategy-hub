@@ -40,6 +40,7 @@ from schemas import (
     VerifyVisualBrandApprovalEvidenceBasisParams, ListVisualBrandAuditIncidentsParams,
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
+    RunMarketResearchParams, ListMarketResearchResultsParams, ArchiveMarketResearchResultParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
     ApprovalEvidenceBasisIntegrity, ApprovedVisualMediaHandoff, ApprovedVisualProfileHandoff, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
@@ -49,6 +50,7 @@ from schemas import (
     CompetitorProfile, CompetitorProfileList,
     GapAnalysisResult, GapAnalysisResultList,
     SWOTResult, SWOTResultList,
+    MarketResearchSnapshot, MarketResearchSnapshotList,
     TargetSegment, TargetSegmentList,
     DeleteResult, DeleteBrandProfileParams, DeleteCompetitorParams,
     DeleteTargetSegmentParams, ArchiveSWOTResultParams,
@@ -61,6 +63,7 @@ from converters import (
     to_content_handoff as _to_content_handoff,
     to_gap_analysis_result as _to_gap_analysis_result,
     to_swot_result as _to_swot_result,
+    to_market_research_snapshot as _to_market_research_snapshot,
     to_target_segment as _to_target_segment,
 )
 
@@ -2073,6 +2076,146 @@ async def list_swot_results(ctx, params: ListSWOTResultsParams) -> ActionResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Market research -- unlike SWOT/gap analysis (which reason purely over data
+# already in the store), this grounds a brand's landscape in REAL, cited
+# web sources. Webbee gathers those sources herself via her own chat-level
+# web_search/read_url (a system app with owner_chat_tool, NOT IPC-callable
+# from this backend the way wordpress-hub/google-search-console-connector
+# are) and passes them in as `signals` -- the same division of labour
+# Content Strategy Hub's discover_opportunities already uses for GSC
+# QuerySignal. This tool never invents a competitor with no cited source.
+# ──────────────────────────────────────────────────────────────────────────
+
+@chat.function(
+    "run_market_research",
+    description=(
+        "Run a market-research snapshot for a brand: a landscape summary "
+        "plus candidate competitors, grounded ONLY in signals you already "
+        "gathered yourself via web_search/read_url and pass in as "
+        "'signals' -- this tool does not fetch web data itself. Candidates "
+        "are NOT auto-added as tracked competitors; review the snapshot "
+        "and promote relevant ones via add_brand_competitor."
+    ),
+    action_type="write",
+    chain_callable=True,
+    effects=["create:market_research_snapshot"],
+    event="created",
+    data_model=MarketResearchSnapshot,
+)
+async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionResult:
+    """Store a market-research snapshot built from caller-supplied signals,
+    superseding any previous current snapshot for this brand."""
+    brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand_doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    brand = brand_doc.data
+    industry = brand.get("industry", "")
+    if not industry:
+        return ActionResult.error(
+            f"Brand profile '{params.brand_id}' has no industry set — running "
+            "market research blind to what market this brand is even in "
+            "would just guess. Set industry (update_brand_profile) first.",
+            retryable=False, code="EMPTY_INDUSTRY",
+        )
+    if not params.signals:
+        return ActionResult.error(
+            "No signals provided. Gather market evidence yourself via "
+            "web_search/read_url first (competitor sites, market reports, "
+            "directory listings for this brand's industry), then pass what "
+            "you found in as 'signals' — this tool refuses to fabricate a "
+            "market snapshot with zero cited sources.",
+            retryable=False, code="NO_SIGNALS",
+        )
+
+    sourcing_trail = [s.url for s in params.signals]
+    candidate_competitors = sorted({
+        s.candidate_competitor_name for s in params.signals if s.candidate_competitor_name
+    })
+    landscape_summary = "\n\n".join(
+        f"**{s.title or s.url}**: {s.summary}" for s in params.signals
+    )
+
+    # Supersede the previous current snapshot for this brand -- same
+    # "exactly one current" rule as SWOT/gap analysis.
+    prev_page = await ctx.store.query("market_research_snapshots", where={"brand_id": params.brand_id}, limit=500)
+    prev_current = [d for d in prev_page.data if d.data.get("is_current", True)]
+    superseded_at = _now_iso()
+    for prev in prev_current:
+        await ctx.store.update("market_research_snapshots", prev.id, {"is_current": False, "superseded_at": superseded_at})
+
+    doc = await ctx.store.create(
+        "market_research_snapshots",
+        {
+            "brand_id": params.brand_id,
+            "industry": industry,
+            "landscape_summary": landscape_summary,
+            "candidate_competitors": candidate_competitors,
+            "sourcing_trail": sourcing_trail,
+            "is_current": True,
+            "superseded_at": "",
+        },
+    )
+    return ActionResult.success(
+        _to_market_research_snapshot(doc),
+        summary=(
+            f"Market research snapshot created from {len(params.signals)} source(s) — "
+            f"{len(candidate_competitors)} candidate competitor(s) surfaced. "
+            "Review and promote relevant ones via add_brand_competitor."
+        ),
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "list_market_research_results",
+    description="List past market-research snapshots, optionally filtered by brand.",
+    action_type="read",
+    data_model=MarketResearchSnapshotList,
+)
+async def list_market_research_results(ctx, params: ListMarketResearchResultsParams) -> ActionResult:
+    """List market-research snapshots, optionally filtered by brand.
+    Defaults to only the CURRENT snapshot per brand -- pass
+    include_superseded=true for history."""
+    page = await ctx.store.query("market_research_snapshots", order_by="-created_at", limit=500)
+    items = list(page.data)
+    if params.brand_id:
+        items = [d for d in items if d.data.get("brand_id") == params.brand_id]
+    if not params.include_superseded:
+        items = [d for d in items if d.data.get("is_current", True)]
+    items = items[: params.limit]
+    entities = [_to_market_research_snapshot(d) for d in items]
+    current_note = "" if params.include_superseded else " (current only)"
+    return ActionResult.success(
+        MarketResearchSnapshotList(items=entities, total=len(entities)),
+        summary=f"{len(entities)} market research snapshot(s){current_note}.",
+    )
+
+
+@chat.function(
+    "archive_market_research_result",
+    description="Mark one market-research snapshot as superseded (outdated) without deleting it, so its history stays inspectable but it stops showing as current.",
+    action_type="write",
+    chain_callable=True,
+    effects=["update:market_research_snapshot"],
+    event="updated",
+    data_model=MarketResearchSnapshot,
+)
+async def archive_market_research_result(ctx, params: ArchiveMarketResearchResultParams) -> ActionResult:
+    """Manually mark one market-research snapshot as superseded."""
+    doc = await ctx.store.get("market_research_snapshots", params.snapshot_id)
+    if not doc:
+        return ActionResult.error(f"Market research snapshot '{params.snapshot_id}' not found.", retryable=False)
+    updated = await ctx.store.update(
+        "market_research_snapshots", params.snapshot_id, {"is_current": False, "superseded_at": _now_iso()}
+    )
+    return ActionResult.success(
+        _to_market_research_snapshot(updated), summary="Market research snapshot marked as superseded.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # Brand-vs-audience gap analysis
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -2225,7 +2368,7 @@ async def delete_target_segment(ctx, params: DeleteTargetSegmentParams) -> Actio
     chain_callable=True,
     effects=[
         "delete:brand_profile", "delete:competitor_profile", "delete:target_segment",
-        "delete:swot_result", "delete:gap_analysis_result", "delete:vbs_workspace",
+        "delete:swot_result", "delete:gap_analysis_result", "delete:market_research_snapshot", "delete:vbs_workspace",
         "delete:visual_brand_system", "delete:visual_evidence", "delete:visual_profile",
         "delete:vbs_brand_membership", "delete:visual_brand_audit_event",
         "delete:visual_brand_audit_incident", "delete:vbs_media_conformance",
@@ -2241,14 +2384,14 @@ async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionR
     if not params.confirm_cascade:
         return ActionResult.error(
             "Deleting a brand profile cascades to ALL of its competitors, "
-            "target segments, SWOT snapshots, gap analyses, and -- if set "
-            "up -- its entire visual brand system (style versions, "
-            "references, profiles, team access, and audit history). Pass "
-            "confirm_cascade=true to proceed.",
+            "target segments, SWOT snapshots, gap analyses, market research "
+            "snapshots, and -- if set up -- its entire visual brand system "
+            "(style versions, references, profiles, team access, and audit "
+            "history). Pass confirm_cascade=true to proceed.",
             retryable=False, code="CONFIRM_CASCADE_REQUIRED",
         )
 
-    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results"):
+    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
         page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=500)
         for d in page.data:
             await ctx.store.delete(collection, d.id)
@@ -2329,15 +2472,15 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
     description=(
         "Wipe ALL brand strategy WORKING data derived from a brand -- "
         "tracked competitors, target segments, SWOT snapshots (current + "
-        "superseded), and gap analyses. Brand profiles themselves are NEVER "
-        "touched, mirroring Content Strategy Hub's purge_pipeline_data "
-        "(which keeps site profiles): a brand profile is the anchor "
-        "record, equivalent to a connected site, not disposable pipeline "
-        "output. Requires confirm_wipe=true."
+        "superseded), gap analyses, and market research snapshots. Brand "
+        "profiles themselves are NEVER touched, mirroring Content Strategy "
+        "Hub's purge_pipeline_data (which keeps site profiles): a brand "
+        "profile is the anchor record, equivalent to a connected site, not "
+        "disposable pipeline output. Requires confirm_wipe=true."
     ),
     action_type="destructive",
     chain_callable=True,
-    effects=["delete:competitor_profile", "delete:target_segment", "delete:swot_result", "delete:gap_analysis_result"],
+    effects=["delete:competitor_profile", "delete:target_segment", "delete:swot_result", "delete:gap_analysis_result", "delete:market_research_snapshot"],
     event="brand_strategy_purged",
     data_model=PurgeResult,
 )
@@ -2346,13 +2489,14 @@ async def purge_brand_strategy_data(ctx, params: PurgeBrandStrategyDataParams) -
     if not params.confirm_wipe:
         return ActionResult.error(
             "This permanently deletes ALL tracked competitors, target "
-            "segments, SWOT snapshots, and gap analyses for every brand. "
-            "Brand profiles themselves are kept. Pass confirm_wipe=true to proceed.",
+            "segments, SWOT snapshots, gap analyses, and market research "
+            "snapshots for every brand. Brand profiles themselves are kept. "
+            "Pass confirm_wipe=true to proceed.",
             retryable=False, code="CONFIRM_WIPE_REQUIRED",
         )
 
     counts = {}
-    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results"):
+    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
         page = await ctx.store.query(collection, limit=1000)
         counts[collection] = len(page.data)
         for d in page.data:
@@ -2369,13 +2513,15 @@ async def purge_brand_strategy_data(ctx, params: PurgeBrandStrategyDataParams) -
             segments_removed=counts.get("target_segments", 0),
             swot_results_removed=counts.get("swot_results", 0),
             gap_analyses_removed=counts.get("gap_analysis_results", 0),
+            market_research_snapshots_removed=counts.get("market_research_snapshots", 0),
             kept_brand_ids=kept_brand_ids,
         ),
         summary=(
             f"Purged {counts.get('competitor_profiles', 0)} competitor(s), "
             f"{counts.get('target_segments', 0)} segment(s), "
             f"{counts.get('swot_results', 0)} SWOT result(s), "
-            f"{counts.get('gap_analysis_results', 0)} gap analysis(es). "
+            f"{counts.get('gap_analysis_results', 0)} gap analysis(es), "
+            f"{counts.get('market_research_snapshots', 0)} market research snapshot(s). "
             f"Kept {len(kept_brand_ids)} brand profile(s)."
         ),
         refresh_panels=["brands", "brand_detail"],
@@ -2632,7 +2778,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
 
     data = brand_doc.data
     brand_name = data.get("brand_name", "") or brand_id
-    requested_tab = tab if tab in {"profile", "visual_system", "swot", "gap", "competitors", "segments"} else "profile"
+    requested_tab = tab if tab in {"profile", "visual_system", "swot", "gap", "market", "competitors", "segments"} else "profile"
 
     # P0 manual UI spike: this is intentionally a local projection only.
     # It must not call downstream apps while rendering because renderer-time
@@ -2713,6 +2859,11 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     current_gap_docs = [d for d in gap_page.data if d.data.get("is_current", True)]
     latest_gap = current_gap_docs[0].data if current_gap_docs else None
     latest_gap_id = current_gap_docs[0].id if current_gap_docs else ""
+
+    market_page = await ctx.store.query("market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500)
+    current_market_docs = [d for d in market_page.data if d.data.get("is_current", True)]
+    latest_market = current_market_docs[0].data if current_market_docs else None
+    latest_market_id = current_market_docs[0].id if current_market_docs else ""
 
     header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
 
@@ -3591,11 +3742,54 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     )
     segments_tab = ui.Stack(direction="v", gap=3, children=[segments_list, add_segment_form])
 
+    # ── Market research tab ──────────────────────────────────────────
+    # run_market_research takes `signals: list[MarketSignal]` -- a nested
+    # object list Webbee gathers herself via web_search/read_url first.
+    # No ui.Form precedent in this codebase builds a repeatable nested-list
+    # form (Content Strategy Hub's equivalent QuerySignal input hits the
+    # same wall and instead says "Ask Webbee" -- see its brief empty state).
+    # So the action here is conversational, not a button doing IPC the
+    # renderer can't safely do anyway (see the VBS IPC-at-render-time note
+    # above this function).
+    ask_webbee_market_card = ui.Card(
+        title="Run market research",
+        content=ui.Text(
+            "Ask Webbee to research this brand's market (run_market_research) "
+            "-- she'll search the web, cite her sources, and surface candidate "
+            "competitors for you to review."
+        ),
+    )
+    if latest_market:
+        archive_market_button = ui.Button(
+            "Mark as outdated", variant="secondary", icon="Archive",
+            on_click=ui.Call("archive_market_research_result", snapshot_id=latest_market_id),
+        )
+        market_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Badge(label="Current", color="green"),
+                ui.Card(title=f"Market landscape ({latest_market.get('industry', '')})", content=ui.Text(latest_market.get("landscape_summary", "") or "(no summary)")),
+                ui.Card(title="Candidate competitors", content=_swot_list(latest_market.get("candidate_competitors", []))),
+                ui.Card(title="Sourcing trail", content=_swot_list(latest_market.get("sourcing_trail", []))),
+                ask_webbee_market_card,
+                ui.Card(title="Or mark this one outdated by hand", content=archive_market_button),
+            ],
+        )
+    else:
+        market_tab = ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Empty(message="No market research yet.", icon="Globe"),
+                ask_webbee_market_card,
+            ],
+        )
+
     tab_defs = [
         ("profile", "Profile", profile_tab),
         ("visual_system", "Visual System", vbs_tab),
         ("swot", "SWOT", swot_tab),
         ("gap", "Gap Analysis", gap_tab),
+        ("market", "Market Research", market_tab),
         ("competitors", f"Competitors ({len(competitors)})", competitors_tab),
         ("segments", f"Segments ({len(segments)})", segments_tab),
     ]

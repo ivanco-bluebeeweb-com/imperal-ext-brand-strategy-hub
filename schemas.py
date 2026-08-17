@@ -307,6 +307,48 @@ class SWOTResultList(sdl.EntityList[SWOTResult]):
     pass
 
 
+class MarketSignal(BaseModel):
+    """One piece of market evidence Webbee already gathered via her own
+    web_search/read_url (chat-level, NOT IPC-callable from this backend --
+    web-search is a system app with owner_chat_tool, unlike
+    wordpress-hub/google-search-console-connector). Passed into
+    run_market_research the same way Content Strategy Hub's
+    discover_opportunities receives pre-fetched QuerySignal instead of
+    fetching GSC data itself."""
+    url: str = Field(description="Source URL Webbee read (a competitor site, a market report, a directory listing, etc.)")
+    title: str = Field("", description="Page title, if known")
+    summary: str = Field(description="What this source actually says, in Webbee's own words -- not a guess")
+    candidate_competitor_name: str = Field("", description="If this source points to a specific named competitor, its name -- empty if this source is general market context, not a competitor")
+
+
+class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
+    """One market-research snapshot for a brand: a landscape summary plus
+    candidate competitors surfaced from real, cited sources -- never
+    invented. `body` (from sdl.Bodied) renders the full snapshot as
+    Markdown for quick human reading.
+
+    is_current marks the ONE live snapshot per brand -- running a new
+    snapshot automatically supersedes the previous current one (sets its
+    is_current to False and stamps superseded_at), same pattern as
+    SWOTResult/GapAnalysisResult.
+
+    Candidates here are NOT auto-written into competitor_profiles --
+    promoting one to a tracked competitor is a deliberate human action via
+    add_brand_competitor (human-in-the-loop, same principle as VBS
+    evidence review)."""
+    brand_id: str = ""
+    industry: str = ""
+    landscape_summary: str = ""
+    candidate_competitors: list[str] = []  # names only -- human decides which to promote via add_brand_competitor
+    sourcing_trail: list[str] = []  # every source URL used, in order -- never a candidate without a cited source
+    is_current: bool = True
+    superseded_at: str = ""
+
+
+class MarketResearchSnapshotList(sdl.EntityList[MarketResearchSnapshot]):
+    pass
+
+
 class GapAnalysisResult(sdl.Entity, sdl.Bodied):
     """One brand-vs-audience gap analysis: what a target segment needs that
     the brand's current positioning does not yet address, plus concrete
@@ -562,6 +604,35 @@ class ListTargetSegmentsParams(BaseModel):
     limit: int = Field(20, description="Max items to return (1-100)")
 
 
+class RunMarketResearchParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+    signals: list[MarketSignal] = Field(
+        default_factory=list,
+        description=(
+            "Market evidence Webbee already gathered via her own web_search/read_url "
+            "calls (this tool does not fetch web data itself). At least one signal "
+            "required -- a snapshot with no cited sources is refused, never invented."
+        ),
+    )
+
+
+class ListMarketResearchResultsParams(BaseModel):
+    brand_id: str = Field("", description="Optional brand filter. Empty = all.")
+    limit: int = Field(20, description="Max items to return (1-100)")
+    include_superseded: bool = Field(
+        False,
+        description=(
+            "False (default) returns only the CURRENT snapshot per brand -- "
+            "what a reader should actually act on. Set true to also see "
+            "superseded (outdated) market-research history."
+        ),
+    )
+
+
+class ArchiveMarketResearchResultParams(BaseModel):
+    snapshot_id: str = Field(description="UUID of an existing market-research snapshot — from list_market_research_results, never invented")
+
+
 class RunSWOTAnalysisParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
 
@@ -660,6 +731,7 @@ class PurgeResult(sdl.Entity):
     segments_removed: int = 0
     swot_results_removed: int = 0
     gap_analyses_removed: int = 0
+    market_research_snapshots_removed: int = 0
     kept_brand_ids: list[str] = Field(default_factory=list)
 
 

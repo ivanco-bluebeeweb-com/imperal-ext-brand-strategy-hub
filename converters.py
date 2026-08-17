@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from schemas import (
     BrandContentHandoff, BrandProfile, CompetitorProfile,
-    GapAnalysisResult, SWOTResult, TargetSegment,
+    GapAnalysisResult, MarketResearchSnapshot, SWOTResult, TargetSegment,
 )
 
 
@@ -115,6 +115,39 @@ def _swot_markdown(strengths, weaknesses, opportunities, threats) -> str:
         _section("Opportunities", opportunities),
         _section("Threats", threats),
     ])
+
+
+def _market_research_markdown(industry: str, landscape_summary: str, candidates: list[str], sourcing_trail: list[str]) -> str:
+    lines = [f"## Market landscape ({industry})" if industry else "## Market landscape"]
+    lines.append(landscape_summary or "_(no summary)_")
+    lines.append("\n## Candidate competitors")
+    lines += [f"- {c}" for c in candidates] if candidates else ["- (none surfaced from the given sources)"]
+    lines.append("\n## Sourcing trail")
+    lines += [f"- {u}" for u in sourcing_trail] if sourcing_trail else ["- (none)"]
+    return "\n".join(lines)
+
+
+def to_market_research_snapshot(d) -> MarketResearchSnapshot:
+    data = d.data
+    is_current = data.get("is_current", True)
+    body = _market_research_markdown(
+        data.get("industry", ""), data.get("landscape_summary", ""),
+        data.get("candidate_competitors", []), data.get("sourcing_trail", []),
+    )
+    if not is_current:
+        body = "_⚠ SUPERSEDED — a newer market-research snapshot exists for this brand._\n\n" + body
+    return MarketResearchSnapshot(
+        id=d.id,
+        title=f"Market research — {data.get('brand_id', d.id)}" + ("" if is_current else " (superseded)"),
+        brand_id=data.get("brand_id", ""),
+        industry=data.get("industry", ""),
+        landscape_summary=data.get("landscape_summary", ""),
+        candidate_competitors=data.get("candidate_competitors", []),
+        sourcing_trail=data.get("sourcing_trail", []),
+        is_current=is_current,
+        superseded_at=data.get("superseded_at", ""),
+        body=body,
+    )
 
 
 def _gap_markdown(gaps, recommendations) -> str:

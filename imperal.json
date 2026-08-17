@@ -6203,6 +6203,690 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
+      "name": "run_market_research",
+      "description": "Run a market-research snapshot for a brand: a landscape summary plus candidate competitors, grounded ONLY in signals you already gathered yourself via web_search/read_url and pass in as 'signals' -- this tool does not fetch web data itself. Candidates are NOT auto-added as tracked competitors; review the snapshot and promote relevant ones via add_brand_competitor.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:market_research_snapshot"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "$defs": {
+          "MarketSignal": {
+            "description": "One piece of market evidence Webbee already gathered via her own\nweb_search/read_url (chat-level, NOT IPC-callable from this backend --\nweb-search is a system app with owner_chat_tool, unlike\nwordpress-hub/google-search-console-connector). Passed into\nrun_market_research the same way Content Strategy Hub's\ndiscover_opportunities receives pre-fetched QuerySignal instead of\nfetching GSC data itself.",
+            "properties": {
+              "url": {
+                "description": "Source URL Webbee read (a competitor site, a market report, a directory listing, etc.)",
+                "title": "Url",
+                "type": "string"
+              },
+              "title": {
+                "default": "",
+                "description": "Page title, if known",
+                "title": "Title",
+                "type": "string"
+              },
+              "summary": {
+                "description": "What this source actually says, in Webbee's own words -- not a guess",
+                "title": "Summary",
+                "type": "string"
+              },
+              "candidate_competitor_name": {
+                "default": "",
+                "description": "If this source points to a specific named competitor, its name -- empty if this source is general market context, not a competitor",
+                "title": "Candidate Competitor Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "summary"
+            ],
+            "title": "MarketSignal",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "signals": {
+            "description": "Market evidence Webbee already gathered via her own web_search/read_url calls (this tool does not fetch web data itself). At least one signal required -- a snapshot with no cited sources is refused, never invented.",
+            "items": {
+              "$ref": "#/$defs/MarketSignal"
+            },
+            "title": "Signals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "RunMarketResearchParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One market-research snapshot for a brand: a landscape summary plus\ncandidate competitors surfaced from real, cited sources -- never\ninvented. `body` (from sdl.Bodied) renders the full snapshot as\nMarkdown for quick human reading.\n\nis_current marks the ONE live snapshot per brand -- running a new\nsnapshot automatically supersedes the previous current one (sets its\nis_current to False and stamps superseded_at), same pattern as\nSWOTResult/GapAnalysisResult.\n\nCandidates here are NOT auto-written into competitor_profiles --\npromoting one to a tracked competitor is a deliberate human action via\nadd_brand_competitor (human-in-the-loop, same principle as VBS\nevidence review).",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "industry": {
+            "default": "",
+            "title": "Industry",
+            "type": "string"
+          },
+          "landscape_summary": {
+            "default": "",
+            "title": "Landscape Summary",
+            "type": "string"
+          },
+          "candidate_competitors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Competitors",
+            "type": "array"
+          },
+          "sourcing_trail": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sourcing Trail",
+            "type": "array"
+          },
+          "is_current": {
+            "default": true,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "superseded_at": {
+            "default": "",
+            "title": "Superseded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "MarketResearchSnapshot",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "list_market_research_results",
+      "description": "List past market-research snapshots, optionally filtered by brand.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "default": "",
+            "description": "Optional brand filter. Empty = all.",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max items to return (1-100)",
+            "title": "Limit",
+            "type": "integer"
+          },
+          "include_superseded": {
+            "default": false,
+            "description": "False (default) returns only the CURRENT snapshot per brand -- what a reader should actually act on. Set true to also see superseded (outdated) market-research history.",
+            "title": "Include Superseded",
+            "type": "boolean"
+          }
+        },
+        "title": "ListMarketResearchResultsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "MarketResearchSnapshot": {
+            "description": "One market-research snapshot for a brand: a landscape summary plus\ncandidate competitors surfaced from real, cited sources -- never\ninvented. `body` (from sdl.Bodied) renders the full snapshot as\nMarkdown for quick human reading.\n\nis_current marks the ONE live snapshot per brand -- running a new\nsnapshot automatically supersedes the previous current one (sets its\nis_current to False and stamps superseded_at), same pattern as\nSWOTResult/GapAnalysisResult.\n\nCandidates here are NOT auto-written into competitor_profiles --\npromoting one to a tracked competitor is a deliberate human action via\nadd_brand_competitor (human-in-the-loop, same principle as VBS\nevidence review).",
+            "properties": {
+              "body": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Body",
+                "x-sdl-role": "content.body"
+              },
+              "body_format": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "md",
+                      "html",
+                      "plain",
+                      "rich"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Body Format",
+                "x-sdl-role": "content.body_format"
+              },
+              "raw_body": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Raw Body",
+                "x-sdl-role": "content.raw_body"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "industry": {
+                "default": "",
+                "title": "Industry",
+                "type": "string"
+              },
+              "landscape_summary": {
+                "default": "",
+                "title": "Landscape Summary",
+                "type": "string"
+              },
+              "candidate_competitors": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Candidate Competitors",
+                "type": "array"
+              },
+              "sourcing_trail": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Sourcing Trail",
+                "type": "array"
+              },
+              "is_current": {
+                "default": true,
+                "title": "Is Current",
+                "type": "boolean"
+              },
+              "superseded_at": {
+                "default": "",
+                "title": "Superseded At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ],
+            "title": "MarketResearchSnapshot",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/MarketResearchSnapshot"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MarketResearchSnapshotList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "archive_market_research_result",
+      "description": "Mark one market-research snapshot as superseded (outdated) without deleting it, so its history stays inspectable but it stops showing as current.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:market_research_snapshot"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "snapshot_id": {
+            "description": "UUID of an existing market-research snapshot — from list_market_research_results, never invented",
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id"
+        ],
+        "title": "ArchiveMarketResearchResultParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One market-research snapshot for a brand: a landscape summary plus\ncandidate competitors surfaced from real, cited sources -- never\ninvented. `body` (from sdl.Bodied) renders the full snapshot as\nMarkdown for quick human reading.\n\nis_current marks the ONE live snapshot per brand -- running a new\nsnapshot automatically supersedes the previous current one (sets its\nis_current to False and stamps superseded_at), same pattern as\nSWOTResult/GapAnalysisResult.\n\nCandidates here are NOT auto-written into competitor_profiles --\npromoting one to a tracked competitor is a deliberate human action via\nadd_brand_competitor (human-in-the-loop, same principle as VBS\nevidence review).",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body",
+            "x-sdl-role": "content.body"
+          },
+          "body_format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "md",
+                  "html",
+                  "plain",
+                  "rich"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body Format",
+            "x-sdl-role": "content.body_format"
+          },
+          "raw_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Raw Body",
+            "x-sdl-role": "content.raw_body"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "industry": {
+            "default": "",
+            "title": "Industry",
+            "type": "string"
+          },
+          "landscape_summary": {
+            "default": "",
+            "title": "Landscape Summary",
+            "type": "string"
+          },
+          "candidate_competitors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Competitors",
+            "type": "array"
+          },
+          "sourcing_trail": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sourcing Trail",
+            "type": "array"
+          },
+          "is_current": {
+            "default": true,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "superseded_at": {
+            "default": "",
+            "title": "Superseded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "MarketResearchSnapshot",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "updated",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
       "name": "run_gap_analysis",
       "description": "Run a gap analysis between a brand's current positioning and one target segment's needs/pain points -- what the segment needs that the brand doesn't yet address, plus concrete recommendations to fill the gap.",
       "action_type": "write",
@@ -6883,6 +7567,7 @@
         "delete:target_segment",
         "delete:swot_result",
         "delete:gap_analysis_result",
+        "delete:market_research_snapshot",
         "delete:vbs_workspace",
         "delete:visual_brand_system",
         "delete:visual_evidence",
@@ -7397,14 +8082,15 @@
     },
     {
       "name": "purge_brand_strategy_data",
-      "description": "Wipe ALL brand strategy WORKING data derived from a brand -- tracked competitors, target segments, SWOT snapshots (current + superseded), and gap analyses. Brand profiles themselves are NEVER touched, mirroring Content Strategy Hub's purge_pipeline_data (which keeps site profiles): a brand profile is the anchor record, equivalent to a connected site, not disposable pipeline output. Requires confirm_wipe=true.",
+      "description": "Wipe ALL brand strategy WORKING data derived from a brand -- tracked competitors, target segments, SWOT snapshots (current + superseded), gap analyses, and market research snapshots. Brand profiles themselves are NEVER touched, mirroring Content Strategy Hub's purge_pipeline_data (which keeps site profiles): a brand profile is the anchor record, equivalent to a connected site, not disposable pipeline output. Requires confirm_wipe=true.",
       "action_type": "destructive",
       "chain_callable": true,
       "effects": [
         "delete:competitor_profile",
         "delete:target_segment",
         "delete:swot_result",
-        "delete:gap_analysis_result"
+        "delete:gap_analysis_result",
+        "delete:market_research_snapshot"
       ],
       "id_projection": "",
       "params_schema": {
@@ -7508,6 +8194,11 @@
           "gap_analyses_removed": {
             "default": 0,
             "title": "Gap Analyses Removed",
+            "type": "integer"
+          },
+          "market_research_snapshots_removed": {
+            "default": 0,
+            "title": "Market Research Snapshots Removed",
             "type": "integer"
           },
           "kept_brand_ids": {
@@ -7913,7 +8604,7 @@
     }
   ],
   "required_scopes": [],
-  "icon_size_bytes": 299,
+  "icon_size_bytes": 3906,
   "exposed": [
     {
       "name": "register_project",

@@ -13,14 +13,14 @@ from imperal_sdk.testing import MockContext
 
 import main as m
 from schemas import (
-    AddCompetitorParams, ArchiveGapAnalysisParams, ArchiveSWOTResultParams,
+    AddCompetitorParams, ArchiveGapAnalysisParams, ArchiveMarketResearchResultParams, ArchiveSWOTResultParams,
     BuildContentStrategyHandoffParams,
     CreateBrandProfileParams, CreateTargetSegmentParams,
     DeleteBrandProfileParams, DeleteCompetitorParams, DeleteTargetSegmentParams,
     ListBrandProfilesParams, ListCompetitorsParams, ListGapAnalysesParams,
-    ListConnectedSitesParams,
-    ListSWOTResultsParams, ListTargetSegmentsParams, PurgeBrandStrategyDataParams,
-    RunGapAnalysisParams,
+    ListConnectedSitesParams, ListMarketResearchResultsParams,
+    ListSWOTResultsParams, ListTargetSegmentsParams, MarketSignal, PurgeBrandStrategyDataParams,
+    RunGapAnalysisParams, RunMarketResearchParams,
     RunSWOTAnalysisParams, UpdateBrandProfileParams,
 )
 
@@ -155,6 +155,109 @@ async def test_run_swot_analysis_missing_brand_errors():
     ctx = MockContext()
     result = await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id="nonexistent"))
     assert result.status == "error"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Market research -- grounded ONLY in caller-supplied signals (Webbee's own
+# prior web_search/read_url results), never invented. Same supersede
+# mechanism as SWOT/gap analysis.
+# ──────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_run_market_research_happy_path():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(brand_name="G4S Moldova", industry="private security services")
+    )
+    result = await m.run_market_research(
+        ctx, RunMarketResearchParams(
+            brand_id=brand.data.id,
+            signals=[
+                MarketSignal(
+                    url="https://example.md/security-directory",
+                    title="Security companies in Moldova",
+                    summary="Lists 5 licensed security providers operating in Chisinau.",
+                    candidate_competitor_name="Alarma SRL",
+                ),
+            ],
+        )
+    )
+    assert result.status == "success"
+    assert result.data.is_current is True
+    assert "Alarma SRL" in result.data.candidate_competitors
+    assert "https://example.md/security-directory" in result.data.sourcing_trail
+    assert "Sourcing trail" in result.data.body
+
+    listed = await m.list_market_research_results(ctx, ListMarketResearchResultsParams(brand_id=brand.data.id))
+    assert len(listed.data.items) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_market_research_missing_brand_errors():
+    ctx = MockContext()
+    result = await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id="nonexistent", signals=[MarketSignal(url="https://x.md", summary="x")])
+    )
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_run_market_research_requires_industry():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="No Industry Co"))
+    result = await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[MarketSignal(url="https://x.md", summary="x")])
+    )
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_run_market_research_requires_at_least_one_signal():
+    """Never fabricate a market snapshot with no cited source."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security"))
+    result = await m.run_market_research(ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[]))
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_rerunning_market_research_supersedes_the_previous_one():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security"))
+    first = await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[MarketSignal(url="https://a.md", summary="a")])
+    )
+    second = await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[MarketSignal(url="https://b.md", summary="b")])
+    )
+    assert second.data.id != first.data.id
+
+    current_only = await m.list_market_research_results(ctx, ListMarketResearchResultsParams(brand_id=brand.data.id))
+    assert len(current_only.data.items) == 1
+    assert current_only.data.items[0].id == second.data.id
+
+    with_history = await m.list_market_research_results(
+        ctx, ListMarketResearchResultsParams(brand_id=brand.data.id, include_superseded=True)
+    )
+    assert len(with_history.data.items) == 2
+    by_id = {i.id: i for i in with_history.data.items}
+    assert by_id[first.data.id].is_current is False
+    assert by_id[first.data.id].superseded_at != ""
+
+
+@pytest.mark.asyncio
+async def test_archive_market_research_result_marks_superseded():
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security"))
+    snap = await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[MarketSignal(url="https://a.md", summary="a")])
+    )
+    result = await m.archive_market_research_result(ctx, ArchiveMarketResearchResultParams(snapshot_id=snap.data.id))
+    assert result.status == "success"
+    assert result.data.is_current is False
+
+    current_only = await m.list_market_research_results(ctx, ListMarketResearchResultsParams(brand_id=brand.data.id))
+    assert len(current_only.data.items) == 0
 
 
 @pytest.mark.asyncio
@@ -828,6 +931,9 @@ async def test_delete_brand_profile_cascades_to_every_dependent():
     seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Seg"))
     await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
     await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg.data.id))
+    await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[MarketSignal(url="https://a.md", summary="a")])
+    )
 
     result = await m.delete_brand_profile(
         ctx, DeleteBrandProfileParams(brand_id=brand.data.id, confirm_cascade=True)
@@ -839,6 +945,7 @@ async def test_delete_brand_profile_cascades_to_every_dependent():
     assert (await m.list_target_segments(ctx, ListTargetSegmentsParams(brand_id=brand.data.id))).data.items == []
     assert (await m.list_swot_results(ctx, ListSWOTResultsParams(brand_id=brand.data.id, include_superseded=True))).data.items == []
     assert (await m.list_gap_analyses(ctx, ListGapAnalysesParams(brand_id=brand.data.id, include_superseded=True))).data.items == []
+    assert (await m.list_market_research_results(ctx, ListMarketResearchResultsParams(brand_id=brand.data.id, include_superseded=True))).data.items == []
 
 
 @pytest.mark.asyncio
@@ -851,11 +958,15 @@ async def test_purge_brand_strategy_data_requires_confirm_wipe():
 @pytest.mark.asyncio
 async def test_purge_brand_strategy_data_keeps_brand_profiles():
     ctx = MockContext()
-    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", value_proposition="X"))
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", value_proposition="X", industry="private security services"))
     seg = await m.create_target_segment(ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Seg"))
     await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo"))
     await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
     await m.run_gap_analysis(ctx, RunGapAnalysisParams(brand_id=brand.data.id, segment_id=seg.data.id))
+    market_result = await m.run_market_research(
+        ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[MarketSignal(url="https://a.md", summary="a")])
+    )
+    assert market_result.status == "success"
 
     result = await m.purge_brand_strategy_data(ctx, PurgeBrandStrategyDataParams(confirm_wipe=True))
     assert result.status == "success"
@@ -863,6 +974,7 @@ async def test_purge_brand_strategy_data_keeps_brand_profiles():
     assert result.data.segments_removed == 1
     assert result.data.swot_results_removed == 1
     assert result.data.gap_analyses_removed == 1
+    assert result.data.market_research_snapshots_removed == 1
     assert brand.data.id in result.data.kept_brand_ids
 
     # Brand profile itself survives the purge.
