@@ -25,6 +25,32 @@ from schemas import (
 )
 
 
+def test_create_brand_profile_params_accepts_json_string_lists():
+    """Task #1696: some dispatch paths deliver list[str] params as a JSON
+    string (e.g. '["a", "b"]') instead of a real list. Both create and
+    update must tolerate this the same way -- previously both failed with
+    a bare Pydantic 'Input should be a valid list' error."""
+    p = CreateBrandProfileParams(
+        brand_name="Test Co",
+        content_topics='["topic a", "topic b"]',
+        unique_selling_points='["usp a"]',
+    )
+    assert p.content_topics == ["topic a", "topic b"]
+    assert p.unique_selling_points == ["usp a"]
+
+    p2 = UpdateBrandProfileParams(
+        brand_id="x",
+        content_topics='["topic a", "topic b"]',
+        unique_selling_points='["usp a"]',
+    )
+    assert p2.content_topics == ["topic a", "topic b"]
+    assert p2.unique_selling_points == ["usp a"]
+
+    # Real lists still behave exactly as before.
+    p3 = CreateBrandProfileParams(brand_name="x", content_topics=["a", "b"])
+    assert p3.content_topics == ["a", "b"]
+
+
 @pytest.mark.asyncio
 async def test_create_brand_profile_happy_path():
     ctx = MockContext()
@@ -304,6 +330,7 @@ async def test_build_content_strategy_handoff_shapes_payload():
         ctx, CreateBrandProfileParams(
             brand_name="G4S Moldova", value_proposition="Trusted 24/7 security",
             unique_selling_points=["licensed guards", "24/7 response"],
+            content_topics=["security guidance", "compliance updates"],
         )
     )
     # Handoff now gates on a current SWOT existing -- run one first so
@@ -319,7 +346,31 @@ async def test_build_content_strategy_handoff_shapes_payload():
     assert result.data.domain == "g4s.md"
     assert result.data.brand_name == "G4S Moldova"
     assert result.data.target_languages == ["ru", "ro"]
-    assert "licensed guards" in result.data.content_categories
+    # content_categories reflects content_topics (topics), never USPs
+    # (differentiators) -- regression coverage for task #1891.
+    assert result.data.content_categories == ["security guidance", "compliance updates"]
+    assert "licensed guards" not in result.data.content_categories
+
+
+@pytest.mark.asyncio
+async def test_build_content_strategy_handoff_content_categories_empty_without_topics():
+    """Task #1891: content_categories must NOT silently fall back to
+    unique_selling_points when content_topics is empty -- USPs are
+    differentiators, not content topics, and mislabeling them broke the
+    handoff's own semantics."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(
+        ctx, CreateBrandProfileParams(
+            brand_name="Climtec", value_proposition="Fast HVAC installs",
+            unique_selling_points=["fast install", "24/7 support"],
+        )
+    )
+    await m.run_swot_analysis(ctx, RunSWOTAnalysisParams(brand_id=brand.data.id))
+    result = await m.build_content_strategy_handoff(
+        ctx, BuildContentStrategyHandoffParams(brand_id=brand.data.id, site_id="climtec.md")
+    )
+    assert result.status == "success"
+    assert result.data.content_categories == []
 
 
 @pytest.mark.asyncio

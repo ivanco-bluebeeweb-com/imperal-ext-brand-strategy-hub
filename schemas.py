@@ -7,8 +7,30 @@ bare dict wrapper.
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+
+from pydantic import BaseModel, Field, field_validator
 from imperal_sdk import sdl
+
+
+def _coerce_str_list(value):
+    """Tolerate a JSON-array-shaped string (e.g. '["a", "b"]') for list[str]
+    fields. Some dispatch paths deliver list params as a JSON string instead
+    of a real list before Pydantic ever sees it; without this, validation
+    fails with a bare 'Input should be a valid list' and the caller has no
+    way to tell what went wrong. Anything that isn't a string is passed
+    through unchanged so normal list/None inputs behave exactly as before.
+    """
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = json.loads(stripped)
+            except (ValueError, TypeError):
+                return value
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+    return value
 
 # ──────────────────────────────────────────────────────────────────────────
 # Domain entities
@@ -401,6 +423,9 @@ class CreateBrandProfileParams(BaseModel):
     industry: str = Field("", description="Industry/category, e.g. 'private security services'")
     content_topics: list[str] = Field(default_factory=list, description="Topics/categories this brand's content should cover, e.g. ['ventilation systems', 'heat recovery', 'installation guides'] -- distinct from unique_selling_points. Used by build_content_strategy_handoff to populate content_categories.")
 
+    _coerce_usps = field_validator("unique_selling_points", mode="before")(_coerce_str_list)
+    _coerce_topics = field_validator("content_topics", mode="before")(_coerce_str_list)
+
 
 class UpdateBrandProfileParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
@@ -412,6 +437,9 @@ class UpdateBrandProfileParams(BaseModel):
     unique_selling_points: list[str] | None = Field(default=None, description="Replace USPs; omit to keep")
     industry: str | None = Field(default=None, description="New industry; omit to keep")
     content_topics: list[str] | None = Field(default=None, description="Replace content topics/categories; omit to keep")
+
+    _coerce_usps = field_validator("unique_selling_points", mode="before")(_coerce_str_list)
+    _coerce_topics = field_validator("content_topics", mode="before")(_coerce_str_list)
 
 
 class ListBrandProfilesParams(BaseModel):

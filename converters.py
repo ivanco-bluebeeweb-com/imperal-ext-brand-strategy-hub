@@ -264,7 +264,11 @@ def to_content_handoff(brand: dict, brand_id: str, site_id: str, domain: str, ta
         domain=domain or site_id,
         brand_name=brand.get("brand_name", ""),
         business_description=brand.get("value_proposition", "") or brand.get("mission", ""),
-        content_categories=brand.get("content_topics", []) or brand.get("unique_selling_points", []),
+        # Honest mapping: content_categories reflects ONLY content_topics (what
+        # this brand's content should cover). It used to silently fall back to
+        # unique_selling_points (differentiators, not topics) when content_topics
+        # was empty, which mislabeled USPs as content categories -- see task #1891.
+        content_categories=brand.get("content_topics", []),
         cta_default="",
         target_languages=target_languages,
         body=body,
