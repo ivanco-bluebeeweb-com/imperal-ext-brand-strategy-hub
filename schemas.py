@@ -716,14 +716,6 @@ class DeleteResult(sdl.Entity):
 
 class DeleteBrandProfileParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
-    confirm_cascade: bool = Field(
-        False,
-        description=(
-            "Must be explicitly true. Deleting a brand profile cascades to ALL "
-            "of its competitors, target segments, SWOT snapshots, and gap "
-            "analyses — irreversible."
-        ),
-    )
 
 
 class DeleteCompetitorParams(BaseModel):
@@ -743,13 +735,13 @@ class ArchiveGapAnalysisParams(BaseModel):
 
 
 class PurgeBrandStrategyDataParams(BaseModel):
-    confirm_wipe: bool = Field(
-        False,
-        description=(
-            "Must be explicitly true to run the purge. Safety flag so this can "
-            "never fire by accident from a misread instruction."
-        ),
-    )
+    """No fields: this is a whole-tenant destructive wipe, gated purely by
+    the platform's action_type="destructive" KAV confirmation card (see
+    /Users/vladivanco/Documents/Imperal OS/POST_AUDIT_LOG_STANDARD.md and
+    Imperal's action-types doctrine) -- a manual confirm_wipe field here
+    would be a double-prompt anti-pattern, since the card already shows
+    the tool's own description before anything runs."""
+    pass
 
 
 class PurgeResult(sdl.Entity):

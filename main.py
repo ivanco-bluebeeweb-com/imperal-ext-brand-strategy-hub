@@ -2362,7 +2362,7 @@ async def delete_target_segment(ctx, params: DeleteTargetSegmentParams) -> Actio
         "brand -- that entire workspace: every style revision, saved "
         "reference, Visual Profile, team member, audit-trail event, "
         "reviewed integrity incident, and media-conformance verdict. "
-        "Requires confirm_cascade=true. Irreversible."
+        "Irreversible."
     ),
     action_type="destructive",
     chain_callable=True,
@@ -2381,15 +2381,6 @@ async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionR
     doc = await ctx.store.get("brand_profiles", params.brand_id)
     if not doc:
         return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
-    if not params.confirm_cascade:
-        return ActionResult.error(
-            "Deleting a brand profile cascades to ALL of its competitors, "
-            "target segments, SWOT snapshots, gap analyses, market research "
-            "snapshots, and -- if set up -- its entire visual brand system "
-            "(style versions, references, profiles, team access, and audit "
-            "history). Pass confirm_cascade=true to proceed.",
-            retryable=False, code="CONFIRM_CASCADE_REQUIRED",
-        )
 
     for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
         page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=500)
@@ -2476,7 +2467,7 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
         "profiles themselves are NEVER touched, mirroring Content Strategy "
         "Hub's purge_pipeline_data (which keeps site profiles): a brand "
         "profile is the anchor record, equivalent to a connected site, not "
-        "disposable pipeline output. Requires confirm_wipe=true."
+        "disposable pipeline output."
     ),
     action_type="destructive",
     chain_callable=True,
@@ -2486,15 +2477,6 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
 )
 async def purge_brand_strategy_data(ctx, params: PurgeBrandStrategyDataParams) -> ActionResult:
     """Delete every competitor/segment/SWOT/gap-analysis record, keeping brand profiles."""
-    if not params.confirm_wipe:
-        return ActionResult.error(
-            "This permanently deletes ALL tracked competitors, target "
-            "segments, SWOT snapshots, gap analyses, and market research "
-            "snapshots for every brand. Brand profiles themselves are kept. "
-            "Pass confirm_wipe=true to proceed.",
-            retryable=False, code="CONFIRM_WIPE_REQUIRED",
-        )
-
     counts = {}
     for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
         page = await ctx.store.query(collection, limit=1000)

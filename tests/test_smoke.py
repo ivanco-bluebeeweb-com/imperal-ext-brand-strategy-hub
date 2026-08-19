@@ -967,11 +967,14 @@ async def test_delete_target_segment_removes_it():
 
 
 @pytest.mark.asyncio
-async def test_delete_brand_profile_requires_confirm_cascade():
+async def test_delete_brand_profile_without_confirm_still_deletes():
+    """No manual confirm field: action_type="destructive" is the platform's
+    own KAV confirmation gate (adding a second, tool-level confirm check
+    would double-prompt and break the platform guarantee)."""
     ctx = MockContext()
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S"))
     result = await m.delete_brand_profile(ctx, DeleteBrandProfileParams(brand_id=brand.data.id))
-    assert result.status == "error"
+    assert result.status == "success"
 
 
 @pytest.mark.asyncio
@@ -987,7 +990,7 @@ async def test_delete_brand_profile_cascades_to_every_dependent():
     )
 
     result = await m.delete_brand_profile(
-        ctx, DeleteBrandProfileParams(brand_id=brand.data.id, confirm_cascade=True)
+        ctx, DeleteBrandProfileParams(brand_id=brand.data.id)
     )
     assert result.status == "success"
 
@@ -1000,10 +1003,12 @@ async def test_delete_brand_profile_cascades_to_every_dependent():
 
 
 @pytest.mark.asyncio
-async def test_purge_brand_strategy_data_requires_confirm_wipe():
+async def test_purge_brand_strategy_data_without_confirm_still_runs():
+    """No manual confirm field: action_type="destructive" is the platform's
+    own KAV confirmation gate."""
     ctx = MockContext()
     result = await m.purge_brand_strategy_data(ctx, PurgeBrandStrategyDataParams())
-    assert result.status == "error"
+    assert result.status == "success"
 
 
 @pytest.mark.asyncio
