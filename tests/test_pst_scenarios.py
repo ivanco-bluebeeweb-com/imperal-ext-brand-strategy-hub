@@ -19,6 +19,7 @@ from schemas import (
     CreateBrandProfileParams, UpdateBrandProfileParams, DeleteBrandProfileParams,
     AddCompetitorParams, CreateTargetSegmentParams, RunSWOTAnalysisParams,
     RunGapAnalysisParams, ListBrandProfilesParams,
+    DeleteCompetitorParams, DeleteTargetSegmentParams, PurgeBrandStrategyDataParams,
 )
 
 
@@ -137,3 +138,90 @@ async def test_adversarial_add_competitor_with_duplicate_name_rejected():
     assert first.error is None
     assert second.error is not None
     assert second.error_code == "DUPLICATE_COMPETITOR"
+
+
+# ── Part D2 (SCENARIO_TESTING_STANDARD.md): idempotency / double-invocation ─
+
+@pytest.mark.asyncio
+async def test_d2_double_delete_competitor_fails_clean_not_crash():
+    """delete_brand_competitor checks store.get before deleting -- a second,
+    identical delete call (retried chat turn) must return a clean 'not
+    found' error, never a crash or a silent no-op success."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="D2 Delete Co"))
+    added = await m.add_brand_competitor(
+        ctx, AddCompetitorParams(brand_id=brand.data.id, name="Rival Inc",
+                                  strengths=["price"], weaknesses=["support"]))
+    competitor_id = added.data.id
+
+    first = await m.delete_brand_competitor(ctx, DeleteCompetitorParams(competitor_id=competitor_id))
+    assert first.error is None
+    assert first.data.deleted is True
+
+    second = await m.delete_brand_competitor(ctx, DeleteCompetitorParams(competitor_id=competitor_id))
+    assert second.error is not None
+    assert "not found" in second.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_d2_double_delete_target_segment_fails_clean_not_crash():
+    """Same guarantee as delete_brand_competitor, for delete_target_segment."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="D2 Segment Co"))
+    seg = await m.create_target_segment(
+        ctx, CreateTargetSegmentParams(brand_id=brand.data.id, segment_name="Busy Parents"))
+    segment_id = seg.data.id
+
+    first = await m.delete_target_segment(ctx, DeleteTargetSegmentParams(segment_id=segment_id))
+    assert first.error is None
+
+    second = await m.delete_target_segment(ctx, DeleteTargetSegmentParams(segment_id=segment_id))
+    assert second.error is not None
+    assert "not found" in second.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_d2_double_purge_is_naturally_idempotent_second_call_finds_nothing():
+    """purge_brand_strategy_data wipes competitors/segments/SWOT/gap-analysis
+    for the WHOLE portfolio (no brand_id filter) by querying then deleting
+    each collection. A second, identical call must not error and must report
+    zero removed -- it is naturally idempotent (there's nothing left to
+    delete), not accidentally so."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="D2 Purge Co"))
+    await m.add_brand_competitor(
+        ctx, AddCompetitorParams(brand_id=brand.data.id, name="Rival Inc",
+                                  strengths=["price"], weaknesses=["support"]))
+
+    first = await m.purge_brand_strategy_data(ctx, PurgeBrandStrategyDataParams())
+    assert first.error is None
+    assert first.data.competitors_removed == 1
+
+    second = await m.purge_brand_strategy_data(ctx, PurgeBrandStrategyDataParams())
+    assert second.error is None
+    assert second.data.competitors_removed == 0
+    assert second.data.segments_removed == 0
+
+
+# ── Part D3 (SCENARIO_TESTING_STANDARD.md): security / SSRF surface ────────
+
+@pytest.mark.asyncio
+async def test_d3_competitor_url_field_is_stored_data_never_fetched():
+    """add_brand_competitor and register_visual_evidence accept a `url` field
+    (a competitor site, a market report, a directory listing) but this
+    backend NEVER fetches it -- grep across main.py confirms no
+    ctx.http/httpx/requests/urlopen call exists anywhere in this app. The
+    actual web reading happens at chat level via Webbee's own
+    web_search/read_url (a separate system app, not IPC-callable from here,
+    per this app's own docstrings). Feeding an adversarial internal address
+    must sail through as inert stored data, never attempted as a fetch
+    target from this app's own code."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="D3 SSRF Co"))
+    result = await m.add_brand_competitor(
+        ctx, AddCompetitorParams(
+            brand_id=brand.data.id, name="Metadata Rival",
+            strengths=["price"], weaknesses=["support"],
+            url="http://169.254.169.254/latest/meta-data/"))
+    assert result.error is None
+    assert result.data.url == "http://169.254.169.254/latest/meta-data/"
