@@ -40,6 +40,8 @@ def _coerce_str_list(value):
 class BrandProfile(sdl.Entity):
     """One brand under strategic analysis — the anchor every SWOT, segment,
     and gap-analysis result links back to via brand_id."""
+    id: str = ""
+    title: str = ""
     site_id: str = ""  # optional link to Content Strategy Hub's site_id
     brand_name: str = ""
     mission: str = ""
@@ -52,11 +54,15 @@ class BrandProfile(sdl.Entity):
 
 
 class BrandProfileList(sdl.EntityList[BrandProfile]):
+    id: str = ""
+    title: str = ""
     pass
 
 
 class VisualBrandWorkspace(sdl.Entity):
     """Private ownership boundary and optimistic-concurrency counter for one brand."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     owner_id: str = ""
     tenant_id: str = ""
@@ -70,6 +76,8 @@ class VisualBrandWorkspace(sdl.Entity):
 
 class BrandMembership(sdl.Entity):
     """One active tenant-local role assignment for a private VBS workspace."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     tenant_id: str = ""
     user_id: str = ""
@@ -80,6 +88,8 @@ class BrandMembership(sdl.Entity):
 
 
 class BrandMembershipList(sdl.EntityList[BrandMembership]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -90,6 +100,8 @@ class VisualBrandSystem(sdl.Entity):
     fields. People, consent, licenses and generation gates remain blocked
     until their separate privacy and storage spikes are complete.
     """
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     revision: int = 1
     status: str = "draft"
@@ -109,11 +121,15 @@ class VisualBrandSystem(sdl.Entity):
 
 
 class VisualBrandSystemList(sdl.EntityList[VisualBrandSystem]):
+    id: str = ""
+    title: str = ""
     pass
 
 
 class AuditEvent(sdl.Entity):
     """Append-only audit record for a VBS action in this application."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     vbs_id: str = ""
     event_type: str = ""
@@ -123,11 +139,15 @@ class AuditEvent(sdl.Entity):
 
 
 class AuditEventList(sdl.EntityList[AuditEvent]):
+    id: str = ""
+    title: str = ""
     pass
 
 
 class AuditIntegrity(sdl.Entity):
     """Read-only result of recomputing hashes for VBS audit entries."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     tenant_id: str = ""
     checked_events: int = 0
@@ -142,6 +162,8 @@ class AuditIntegrity(sdl.Entity):
 
 class ApprovalEvidenceBasisIntegrity(sdl.Entity):
     """Read-only integrity result for the evidence snapshot stored on an approved VBS."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     vbs_id: str = ""
     snapshot_hash: str = ""
@@ -153,6 +175,8 @@ class ApprovalEvidenceBasisIntegrity(sdl.Entity):
 
 class AuditIntegrityIncident(sdl.Entity):
     """Owner acknowledgement of a detected mismatch; it never clears the safety gate."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     tenant_id: str = ""
     invalid_event_id: str = ""
@@ -162,6 +186,8 @@ class AuditIntegrityIncident(sdl.Entity):
 
 
 class AuditIntegrityIncidentList(sdl.EntityList[AuditIntegrityIncident]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -171,6 +197,8 @@ class VisualEvidence(sdl.Entity):
     P0 stores a validated HTTPS reference only. It never downloads the URL,
     processes files, identifies people or treats a source as approved truth.
     """
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     source_url: str = ""
     source_title: str = ""
@@ -182,11 +210,15 @@ class VisualEvidence(sdl.Entity):
 
 
 class VisualEvidenceList(sdl.EntityList[VisualEvidence]):
+    id: str = ""
+    title: str = ""
     pass
 
 
 class VisualProfile(sdl.Entity):
     """Versioned, non-personal resolution of one approved VBS baseline."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     revision: int = 1
     status: str = "draft"
@@ -202,11 +234,15 @@ class VisualProfile(sdl.Entity):
 
 
 class VisualProfileList(sdl.EntityList[VisualProfile]):
+    id: str = ""
+    title: str = ""
     pass
 
 
 class ApprovedVisualProfileHandoff(sdl.Entity):
     """Read-only non-personal visual baseline for downstream content planning."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     profile_id: str = ""
     profile_revision: int = 0
@@ -224,6 +260,8 @@ class ApprovedVisualProfileHandoff(sdl.Entity):
 
 class ApprovedVisualMediaHandoff(sdl.Entity):
     """Read-only prompt guidance for Media Studio; never an asset or generation request."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     profile_id: str = ""
     profile_revision: int = 0
@@ -241,6 +279,8 @@ class MediaConformanceRecord(sdl.Entity):
     P2-A stores a verdict only. It never fetches the package, inspects any
     image, or generates anything — the human states what they themselves saw.
     """
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     profile_id: str = ""
     profile_revision: int = 0
@@ -255,6 +295,8 @@ class MediaConformanceRecord(sdl.Entity):
 
 
 class MediaConformanceRecordList(sdl.EntityList[MediaConformanceRecord]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -280,6 +322,8 @@ class ListMediaConformanceParams(BaseModel):
 
 class CompetitorProfile(sdl.Entity):
     """One named competitor tracked against a brand."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     name: str = ""
     url: str = ""
@@ -289,11 +333,15 @@ class CompetitorProfile(sdl.Entity):
 
 
 class CompetitorProfileList(sdl.EntityList[CompetitorProfile]):
+    id: str = ""
+    title: str = ""
     pass
 
 
 class TargetSegment(sdl.Entity):
     """One audience segment a brand is trying to reach."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     segment_name: str = ""
     demographics: str = ""
@@ -304,6 +352,8 @@ class TargetSegment(sdl.Entity):
 
 
 class TargetSegmentList(sdl.EntityList[TargetSegment]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -316,6 +366,8 @@ class SWOTResult(sdl.Entity, sdl.Bodied):
     automatically supersedes the previous current one (sets its is_current
     to False and stamps superseded_at) rather than leaving two snapshots
     both looking equally authoritative."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     strengths: list[str] = []
     weaknesses: list[str] = []
@@ -326,6 +378,8 @@ class SWOTResult(sdl.Entity, sdl.Bodied):
 
 
 class SWOTResultList(sdl.EntityList[SWOTResult]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -358,6 +412,8 @@ class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
     promoting one to a tracked competitor is a deliberate human action via
     add_brand_competitor (human-in-the-loop, same principle as VBS
     evidence review)."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     industry: str = ""
     landscape_summary: str = ""
@@ -368,6 +424,8 @@ class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
 
 
 class MarketResearchSnapshotList(sdl.EntityList[MarketResearchSnapshot]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -379,6 +437,8 @@ class GapAnalysisResult(sdl.Entity, sdl.Bodied):
     is_current marks the ONE live analysis per (brand_id, segment_id) pair --
     re-running for the same segment supersedes the previous current result
     instead of leaving two, so a reader never has to guess which is fresh."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     segment_id: str = ""
     gaps: list[str] = []
@@ -388,6 +448,8 @@ class GapAnalysisResult(sdl.Entity, sdl.Bodied):
 
 
 class GapAnalysisResultList(sdl.EntityList[GapAnalysisResult]):
+    id: str = ""
+    title: str = ""
     pass
 
 
@@ -398,6 +460,8 @@ class BrandContentHandoff(sdl.Entity, sdl.Bodied):
     There is no direct extension-to-extension call on this platform — Webbee
     relays this payload into Content Strategy Hub's own tool in the same
     chat turn."""
+    id: str = ""
+    title: str = ""
     brand_id: str = ""
     site_id: str = ""  # -> content-strategy-app.create_site_profile(site_id=...)
     domain: str = ""  # -> create_site_profile(domain=...)
@@ -711,6 +775,8 @@ class BuildContentStrategyHandoffParams(BaseModel):
 
 class DeleteResult(sdl.Entity):
     """Outcome of a single-record delete."""
+    id: str = ""
+    title: str = ""
     deleted: bool = False
 
 
@@ -747,6 +813,8 @@ class PurgeBrandStrategyDataParams(BaseModel):
 class PurgeResult(sdl.Entity):
     """Outcome of a full brand-strategy data wipe — counts removed per
     collection. Brand profiles themselves are never touched by this."""
+    id: str = ""
+    title: str = ""
     competitors_removed: int = 0
     segments_removed: int = 0
     swot_results_removed: int = 0
@@ -763,6 +831,8 @@ class PurgeResult(sdl.Entity):
 class ConnectedSite(sdl.Entity):
     """One site read from a site-provider extension (WordPress Hub today,
     more providers later) — the raw material behind the Quick Add list."""
+    id: str = ""
+    title: str = ""
     site_id: str = ""
     url: str = ""
     status: str = ""
@@ -771,6 +841,8 @@ class ConnectedSite(sdl.Entity):
 
 
 class ConnectedSiteList(sdl.EntityList[ConnectedSite]):
+    id: str = ""
+    title: str = ""
     pass
 
 
