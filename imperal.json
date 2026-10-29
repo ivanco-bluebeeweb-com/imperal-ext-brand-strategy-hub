@@ -1,6 +1,6 @@
 {
   "manifest_schema_version": 3,
-  "sdk_version": "5.9.19",
+  "sdk_version": "5.13.1",
   "app_id": "brand-strategy-hub",
   "version": "1.0.0",
   "name": "Brand Strategy Hub",
@@ -25,7 +25,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 never invented",
+            "description": "UUID of an existing brand profile — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -46,17 +46,12 @@
         "description": "Private ownership boundary and optimistic-concurrency counter for one brand.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -147,10 +142,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualBrandWorkspace",
         "type": "object",
         "x-sdl": "entity"
@@ -174,7 +165,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of a legacy initialized VBS workspace \u2014 never invented",
+            "description": "UUID of a legacy initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -196,17 +187,12 @@
         "description": "Private ownership boundary and optimistic-concurrency counter for one brand.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -297,10 +283,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualBrandWorkspace",
         "type": "object",
         "x-sdl": "entity"
@@ -321,7 +303,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -338,17 +320,12 @@
             "description": "One active tenant-local role assignment for a private VBS workspace.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -429,10 +406,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "BrandMembership",
             "type": "object",
             "x-sdl": "entity"
@@ -474,6 +447,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -501,7 +484,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -537,17 +520,12 @@
         "description": "One active tenant-local role assignment for a private VBS workspace.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -628,10 +606,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "BrandMembership",
         "type": "object",
         "x-sdl": "entity"
@@ -654,7 +628,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -684,17 +658,12 @@
         "description": "One active tenant-local role assignment for a private VBS workspace.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -775,10 +744,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "BrandMembership",
         "type": "object",
         "x-sdl": "entity"
@@ -801,7 +766,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 never invented",
+            "description": "UUID of an existing brand profile — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -858,17 +823,12 @@
         "description": "One versioned Visual Brand System draft or approved revision.\n\nThis first P0 slice deliberately contains only non-personal, non-media\nfields. People, consent, licenses and generation gates remain blocked\nuntil their separate privacy and storage spikes are complete.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -1004,10 +964,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualBrandSystem",
         "type": "object",
         "x-sdl": "entity"
@@ -1028,7 +984,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 never invented",
+            "description": "UUID of an existing brand profile — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -1051,17 +1007,12 @@
             "description": "One versioned Visual Brand System draft or approved revision.\n\nThis first P0 slice deliberately contains only non-personal, non-media\nfields. People, consent, licenses and generation gates remain blocked\nuntil their separate privacy and storage spikes are complete.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -1197,10 +1148,6 @@
                 "type": "integer"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "VisualBrandSystem",
             "type": "object",
             "x-sdl": "entity"
@@ -1242,6 +1189,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -1269,7 +1226,7 @@
       "params_schema": {
         "properties": {
           "vbs_id": {
-            "description": "UUID of a VBS draft or in-review revision \u2014 never invented",
+            "description": "UUID of a VBS draft or in-review revision — never invented",
             "title": "Vbs Id",
             "type": "string"
           },
@@ -1304,17 +1261,12 @@
         "description": "One versioned Visual Brand System draft or approved revision.\n\nThis first P0 slice deliberately contains only non-personal, non-media\nfields. People, consent, licenses and generation gates remain blocked\nuntil their separate privacy and storage spikes are complete.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -1450,10 +1402,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualBrandSystem",
         "type": "object",
         "x-sdl": "entity"
@@ -1474,7 +1422,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 never invented",
+            "description": "UUID of an existing brand profile — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -1497,17 +1445,12 @@
             "description": "Append-only audit record for a VBS action in this application.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -1595,10 +1538,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "AuditEvent",
             "type": "object",
             "x-sdl": "entity"
@@ -1640,6 +1579,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -1665,7 +1614,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -1680,17 +1629,12 @@
         "description": "Read-only result of recomputing hashes for VBS audit entries.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -1798,10 +1742,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "AuditIntegrity",
         "type": "object",
         "x-sdl": "entity"
@@ -1825,7 +1765,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -1855,17 +1795,12 @@
         "description": "Owner acknowledgement of a detected mismatch; it never clears the safety gate.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -1953,10 +1888,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "AuditIntegrityIncident",
         "type": "object",
         "x-sdl": "entity"
@@ -1977,7 +1908,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -2002,17 +1933,12 @@
             "description": "Owner acknowledgement of a detected mismatch; it never clears the safety gate.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -2100,10 +2026,6 @@
                 "type": "integer"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "AuditIntegrityIncident",
             "type": "object",
             "x-sdl": "entity"
@@ -2145,6 +2067,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -2170,7 +2102,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -2191,17 +2123,12 @@
         "description": "Read-only integrity result for the evidence snapshot stored on an approved VBS.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -2294,10 +2221,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "ApprovalEvidenceBasisIntegrity",
         "type": "object",
         "x-sdl": "entity"
@@ -2320,7 +2243,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -2373,17 +2296,12 @@
         "description": "Versioned, non-personal resolution of one approved VBS baseline.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -2492,10 +2410,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualProfile",
         "type": "object",
         "x-sdl": "entity"
@@ -2516,7 +2430,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -2539,17 +2453,12 @@
             "description": "Versioned, non-personal resolution of one approved VBS baseline.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -2658,10 +2567,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "VisualProfile",
             "type": "object",
             "x-sdl": "entity"
@@ -2703,6 +2608,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -2730,7 +2645,7 @@
       "params_schema": {
         "properties": {
           "profile_id": {
-            "description": "UUID of a Visual Profile draft \u2014 never invented",
+            "description": "UUID of a Visual Profile draft — never invented",
             "title": "Profile Id",
             "type": "string"
           },
@@ -2766,17 +2681,12 @@
         "description": "Versioned, non-personal resolution of one approved VBS baseline.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -2885,10 +2795,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualProfile",
         "type": "object",
         "x-sdl": "entity"
@@ -2909,7 +2815,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -2924,17 +2830,12 @@
         "description": "Versioned, non-personal resolution of one approved VBS baseline.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -3043,10 +2944,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualProfile",
         "type": "object",
         "x-sdl": "entity"
@@ -3067,7 +2964,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -3082,17 +2979,12 @@
         "description": "Read-only non-personal visual baseline for downstream content planning.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -3221,10 +3113,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "ApprovedVisualProfileHandoff",
         "type": "object",
         "x-sdl": "entity"
@@ -3245,7 +3133,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -3260,17 +3148,12 @@
         "description": "Read-only prompt guidance for Media Studio; never an asset or generation request.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -3371,10 +3254,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "ApprovedVisualMediaHandoff",
         "type": "object",
         "x-sdl": "entity"
@@ -3387,7 +3266,7 @@
     },
     {
       "name": "record_media_conformance",
-      "description": "Record a human's own verdict on whether a Media Studio media package's actual images conform to the approved Visual Profile guidance handed off to it. Stores a verdict only \u2014 never fetches the package, inspects any image, or generates anything. Requires the same review permission as evidence review.",
+      "description": "Record a human's own verdict on whether a Media Studio media package's actual images conform to the approved Visual Profile guidance handed off to it. Stores a verdict only — never fetches the package, inspects any image, or generates anything. Requires the same review permission as evidence review.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -3397,12 +3276,12 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
           "media_package_id": {
-            "description": "Media Studio package id being reviewed (from Media Studio's own list) \u2014 pasted, never fetched",
+            "description": "Media Studio package id being reviewed (from Media Studio's own list) — pasted, never fetched",
             "maxLength": 200,
             "minLength": 1,
             "title": "Media Package Id",
@@ -3414,7 +3293,7 @@
             "type": "string"
           },
           "reviewer_note": {
-            "description": "What the human actually checked and why this verdict \u2014 required, never empty",
+            "description": "What the human actually checked and why this verdict — required, never empty",
             "maxLength": 2000,
             "minLength": 1,
             "title": "Reviewer Note",
@@ -3431,20 +3310,15 @@
         "type": "object"
       },
       "return_schema": {
-        "description": "A human's own recorded verdict on whether a Media Studio media package's\nactual images conform to the approved Visual Profile guidance handed off to it.\n\nP2-A stores a verdict only. It never fetches the package, inspects any\nimage, or generates anything \u2014 the human states what they themselves saw.",
+        "description": "A human's own recorded verdict on whether a Media Studio media package's\nactual images conform to the approved Visual Profile guidance handed off to it.\n\nP2-A stores a verdict only. It never fetches the package, inspects any\nimage, or generates anything — the human states what they themselves saw.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -3557,10 +3431,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "MediaConformanceRecord",
         "type": "object",
         "x-sdl": "entity"
@@ -3581,7 +3451,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -3601,20 +3471,15 @@
       "return_schema": {
         "$defs": {
           "MediaConformanceRecord": {
-            "description": "A human's own recorded verdict on whether a Media Studio media package's\nactual images conform to the approved Visual Profile guidance handed off to it.\n\nP2-A stores a verdict only. It never fetches the package, inspects any\nimage, or generates anything \u2014 the human states what they themselves saw.",
+            "description": "A human's own recorded verdict on whether a Media Studio media package's\nactual images conform to the approved Visual Profile guidance handed off to it.\n\nP2-A stores a verdict only. It never fetches the package, inspects any\nimage, or generates anything — the human states what they themselves saw.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -3727,10 +3592,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "MediaConformanceRecord",
             "type": "object",
             "x-sdl": "entity"
@@ -3772,6 +3633,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -3799,7 +3670,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -3844,17 +3715,12 @@
         "description": "A private, non-fetched source reference supporting a VBS decision.\n\nP0 stores a validated HTTPS reference only. It never downloads the URL,\nprocesses files, identifies people or treats a source as approved truth.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -3940,10 +3806,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualEvidence",
         "type": "object",
         "x-sdl": "entity"
@@ -3966,7 +3828,7 @@
       "params_schema": {
         "properties": {
           "evidence_id": {
-            "description": "UUID of a private evidence reference \u2014 never invented",
+            "description": "UUID of a private evidence reference — never invented",
             "title": "Evidence Id",
             "type": "string"
           },
@@ -4008,17 +3870,12 @@
         "description": "A private, non-fetched source reference supporting a VBS decision.\n\nP0 stores a validated HTTPS reference only. It never downloads the URL,\nprocesses files, identifies people or treats a source as approved truth.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -4104,10 +3961,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "VisualEvidence",
         "type": "object",
         "x-sdl": "entity"
@@ -4128,7 +3981,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an initialized VBS workspace \u2014 never invented",
+            "description": "UUID of an initialized VBS workspace — never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -4151,17 +4004,12 @@
             "description": "A private, non-fetched source reference supporting a VBS decision.\n\nP0 stores a validated HTTPS reference only. It never downloads the URL,\nprocesses files, identifies people or treats a source as approved truth.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -4247,10 +4095,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "VisualEvidence",
             "type": "object",
             "x-sdl": "entity"
@@ -4292,6 +4136,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -4309,7 +4163,7 @@
     },
     {
       "name": "create_brand_profile",
-      "description": "Create a new brand profile \u2014 mission, vision, value proposition, tone of voice, and unique selling points. The anchor for SWOT, competitor tracking, and target segments for this brand.",
+      "description": "Create a new brand profile — mission, vision, value proposition, tone of voice, and unique selling points. The anchor for SWOT, competitor tracking, and target segments for this brand.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
@@ -4384,20 +4238,15 @@
         "type": "object"
       },
       "return_schema": {
-        "description": "One brand under strategic analysis \u2014 the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
+        "description": "One brand under strategic analysis — the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -4506,10 +4355,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "BrandProfile",
         "type": "object",
         "x-sdl": "entity"
@@ -4532,7 +4377,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -4654,20 +4499,15 @@
         "type": "object"
       },
       "return_schema": {
-        "description": "One brand under strategic analysis \u2014 the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
+        "description": "One brand under strategic analysis — the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -4776,10 +4616,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "BrandProfile",
         "type": "object",
         "x-sdl": "entity"
@@ -4812,20 +4648,15 @@
       "return_schema": {
         "$defs": {
           "BrandProfile": {
-            "description": "One brand under strategic analysis \u2014 the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
+            "description": "One brand under strategic analysis — the anchor every SWOT, segment,\nand gap-analysis result links back to via brand_id.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -4934,10 +4765,6 @@
                 "type": "array"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "BrandProfile",
             "type": "object",
             "x-sdl": "entity"
@@ -4979,6 +4806,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -5006,7 +4843,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -5056,17 +4893,12 @@
         "description": "One named competitor tracked against a brand.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -5148,10 +4980,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "CompetitorProfile",
         "type": "object",
         "x-sdl": "entity"
@@ -5193,17 +5021,12 @@
             "description": "One named competitor tracked against a brand.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -5285,10 +5108,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "CompetitorProfile",
             "type": "object",
             "x-sdl": "entity"
@@ -5330,6 +5149,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -5357,7 +5186,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -5415,17 +5244,12 @@
         "description": "One audience segment a brand is trying to reach.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -5527,10 +5351,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "TargetSegment",
         "type": "object",
         "x-sdl": "entity"
@@ -5572,17 +5392,12 @@
             "description": "One audience segment a brand is trying to reach.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -5684,10 +5499,6 @@
                 "type": "array"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "TargetSegment",
             "type": "object",
             "x-sdl": "entity"
@@ -5729,6 +5540,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -5756,7 +5577,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -5816,17 +5637,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -5931,10 +5747,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "SWOTResult",
         "type": "object",
         "x-sdl": "entity"
@@ -6027,17 +5839,12 @@
                 "x-sdl-role": "content.raw_body"
               },
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -6142,10 +5949,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "SWOTResult",
             "type": "object",
             "x-sdl": "entity"
@@ -6187,6 +5990,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -6249,7 +6062,7 @@
         },
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           },
@@ -6317,17 +6130,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -6426,10 +6234,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "MarketResearchSnapshot",
         "type": "object",
         "x-sdl": "entity"
@@ -6522,17 +6326,12 @@
                 "x-sdl-role": "content.raw_body"
               },
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -6631,10 +6430,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "MarketResearchSnapshot",
             "type": "object",
             "x-sdl": "entity"
@@ -6676,6 +6471,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -6703,7 +6508,7 @@
       "params_schema": {
         "properties": {
           "snapshot_id": {
-            "description": "UUID of an existing market-research snapshot \u2014 from list_market_research_results, never invented",
+            "description": "UUID of an existing market-research snapshot — from list_market_research_results, never invented",
             "title": "Snapshot Id",
             "type": "string"
           }
@@ -6763,17 +6568,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -6872,10 +6672,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "MarketResearchSnapshot",
         "type": "object",
         "x-sdl": "entity"
@@ -6898,12 +6694,12 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           },
           "segment_id": {
-            "description": "UUID of an existing target segment \u2014 from list_target_segments, never invented",
+            "description": "UUID of an existing target segment — from list_target_segments, never invented",
             "title": "Segment Id",
             "type": "string"
           }
@@ -6964,17 +6760,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -7068,10 +6859,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "GapAnalysisResult",
         "type": "object",
         "x-sdl": "entity"
@@ -7164,17 +6951,12 @@
                 "x-sdl-role": "content.raw_body"
               },
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -7268,10 +7050,6 @@
                 "type": "string"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "GapAnalysisResult",
             "type": "object",
             "x-sdl": "entity"
@@ -7313,6 +7091,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -7340,7 +7128,7 @@
       "params_schema": {
         "properties": {
           "competitor_id": {
-            "description": "UUID of an existing competitor \u2014 from list_brand_competitors, never invented",
+            "description": "UUID of an existing competitor — from list_brand_competitors, never invented",
             "title": "Competitor Id",
             "type": "string"
           }
@@ -7355,17 +7143,12 @@
         "description": "Outcome of a single-record delete.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -7428,10 +7211,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "DeleteResult",
         "type": "object",
         "x-sdl": "entity"
@@ -7454,7 +7233,7 @@
       "params_schema": {
         "properties": {
           "segment_id": {
-            "description": "UUID of an existing target segment \u2014 from list_target_segments, never invented",
+            "description": "UUID of an existing target segment — from list_target_segments, never invented",
             "title": "Segment Id",
             "type": "string"
           }
@@ -7469,17 +7248,12 @@
         "description": "Outcome of a single-record delete.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -7542,10 +7316,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "DeleteResult",
         "type": "object",
         "x-sdl": "entity"
@@ -7558,7 +7328,7 @@
     },
     {
       "name": "delete_brand_profile",
-      "description": "Permanently delete a brand profile AND cascade-delete everything anchored to it: its tracked competitors, target segments, SWOT snapshots (current + superseded), gap analyses, and -- if a private Visual Brand System workspace was ever set up for this brand -- that entire workspace: every style revision, saved reference, Visual Profile, team member, audit-trail event, reviewed integrity incident, and media-conformance verdict. Requires confirm_cascade=true. Irreversible.",
+      "description": "Permanently delete a brand profile AND cascade-delete everything anchored to it: its tracked competitors, target segments, SWOT snapshots (current + superseded), gap analyses, and -- if a private Visual Brand System workspace was ever set up for this brand -- that entire workspace: every style revision, saved reference, Visual Profile, team member, audit-trail event, reviewed integrity incident, and media-conformance verdict. Irreversible.",
       "action_type": "destructive",
       "chain_callable": true,
       "effects": [
@@ -7581,7 +7351,7 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           }
@@ -7596,17 +7366,12 @@
         "description": "Outcome of a single-record delete.",
         "properties": {
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -7669,10 +7434,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "DeleteResult",
         "type": "object",
         "x-sdl": "entity"
@@ -7695,7 +7456,7 @@
       "params_schema": {
         "properties": {
           "swot_id": {
-            "description": "UUID of an existing SWOT snapshot \u2014 from list_swot_results, never invented",
+            "description": "UUID of an existing SWOT snapshot — from list_swot_results, never invented",
             "title": "Swot Id",
             "type": "string"
           }
@@ -7755,17 +7516,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -7870,10 +7626,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "SWOTResult",
         "type": "object",
         "x-sdl": "entity"
@@ -7896,7 +7648,7 @@
       "params_schema": {
         "properties": {
           "gap_analysis_id": {
-            "description": "UUID of an existing gap analysis \u2014 from list_gap_analyses, never invented",
+            "description": "UUID of an existing gap analysis — from list_gap_analyses, never invented",
             "title": "Gap Analysis Id",
             "type": "string"
           }
@@ -7956,17 +7708,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -8060,10 +7807,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "GapAnalysisResult",
         "type": "object",
         "x-sdl": "entity"
@@ -8075,25 +7818,28 @@
       "owner_chat_tool": "brand-strategy-hub"
     },
     {
-      "name": "purge_brand_strategy_data",
-      "description": "Wipe ALL brand strategy WORKING data derived from a brand -- tracked competitors, target segments, SWOT snapshots (current + superseded), gap analyses, and market research snapshots. Brand profiles themselves are NEVER touched, mirroring Content Strategy Hub's purge_pipeline_data (which keeps site profiles): a brand profile is the anchor record, equivalent to a connected site, not disposable pipeline output. Requires confirm_wipe=true.",
-      "action_type": "destructive",
+      "name": "export_brand_project",
+      "description": "Export complete point-to-point data of a brand project into a JSON string for cross-account transfer or backup.",
+      "action_type": "read",
       "chain_callable": true,
-      "effects": [
-        "delete:competitor_profile",
-        "delete:target_segment",
-        "delete:swot_result",
-        "delete:gap_analysis_result",
-        "delete:market_research_snapshot"
-      ],
+      "effects": [],
       "id_projection": "",
       "params_schema": {
-        "properties": {},
-        "title": "PurgeBrandStrategyDataParams",
+        "description": "Parameters for exporting an entire brand project with all associated entities.",
+        "properties": {
+          "brand_id": {
+            "description": "ID of the brand project to export",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "ExportBrandProjectParams",
         "type": "object"
       },
       "return_schema": {
-        "description": "Outcome of a full brand-strategy data wipe \u2014 counts removed per\ncollection. Brand profiles themselves are never touched by this.",
         "properties": {
           "id": {
             "anyOf": [
@@ -8107,6 +7853,292 @@
             "title": "Id"
           },
           "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "brand_name": {
+            "default": "",
+            "title": "Brand Name",
+            "type": "string"
+          },
+          "json_data": {
+            "default": "",
+            "title": "Json Data",
+            "type": "string"
+          },
+          "total_records": {
+            "default": 0,
+            "title": "Total Records",
+            "type": "integer"
+          },
+          "exported_at": {
+            "default": "",
+            "title": "Exported At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ExportBrandProjectResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "import_brand_project",
+      "description": "Import complete point-to-point data of a brand project from a JSON string into this account.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:brand_profile",
+        "update:brand_profile",
+        "create:competitor_profile",
+        "create:target_segment",
+        "create:swot_result",
+        "create:gap_analysis_result",
+        "create:market_research_snapshot",
+        "create:vbs_workspace",
+        "create:visual_brand_system",
+        "create:visual_evidence",
+        "create:visual_profile",
+        "create:vbs_brand_membership",
+        "create:visual_brand_audit_event",
+        "create:visual_brand_audit_incident",
+        "create:vbs_media_conformance"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "default": "",
+            "description": "Optional brand_id to import into (defaults to exported brand's ID)",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "json_data": {
+            "description": "Raw exported JSON payload containing the complete brand project data",
+            "title": "Json Data",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": true,
+            "description": "Whether to overwrite/replace existing brand records if IDs match",
+            "title": "Overwrite",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "json_data"
+        ],
+        "title": "ImportBrandProjectParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "brand_name": {
+            "default": "",
+            "title": "Brand Name",
+            "type": "string"
+          },
+          "records_imported": {
+            "default": 0,
+            "title": "Records Imported",
+            "type": "integer"
+          },
+          "collections_updated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Collections Updated",
+            "type": "array"
+          },
+          "imported_at": {
+            "default": "",
+            "title": "Imported At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ImportBrandProjectResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "imported",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "purge_brand_strategy_data",
+      "description": "Wipe ALL brand strategy WORKING data derived from a brand -- tracked competitors, target segments, SWOT snapshots (current + superseded), gap analyses, and market research snapshots. Brand profiles themselves are NEVER touched, mirroring Content Strategy Hub's purge_pipeline_data (which keeps site profiles): a brand profile is the anchor record, equivalent to a connected site, not disposable pipeline output.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "delete:competitor_profile",
+        "delete:target_segment",
+        "delete:swot_result",
+        "delete:gap_analysis_result",
+        "delete:market_research_snapshot"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "description": "No fields: this is a whole-tenant destructive wipe, gated purely by\nthe platform's action_type=\"destructive\" KAV confirmation card (see\n/Users/vladivanco/Documents/Imperal OS/POST_AUDIT_LOG_STANDARD.md and\nImperal's action-types doctrine) -- a manual confirm_wipe field here\nwould be a double-prompt anti-pattern, since the card already shows\nthe tool's own description before anything runs.",
+        "properties": {},
+        "title": "PurgeBrandStrategyDataParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a full brand-strategy data wipe — counts removed per\ncollection. Brand profiles themselves are never touched by this.",
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -8196,10 +8228,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "PurgeResult",
         "type": "object",
         "x-sdl": "entity"
@@ -8220,12 +8248,12 @@
       "params_schema": {
         "properties": {
           "brand_id": {
-            "description": "UUID of an existing brand profile \u2014 from list_brand_profiles, never invented",
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
             "title": "Brand Id",
             "type": "string"
           },
           "site_id": {
-            "description": "Site id to use downstream, e.g. 'g4s.md' \u2014 matches Content Strategy Hub's site_id",
+            "description": "Site id to use downstream, e.g. 'g4s.md' — matches Content Strategy Hub's site_id",
             "title": "Site Id",
             "type": "string"
           },
@@ -8252,7 +8280,7 @@
         "type": "object"
       },
       "return_schema": {
-        "description": "Reshapes a brand profile into the exact fields Content Strategy Hub's\ncreate_site_profile/update expects, so brand strategy work does not have\nto be manually re-typed into the content-planning layer downstream.\nThere is no direct extension-to-extension call on this platform \u2014 Webbee\nrelays this payload into Content Strategy Hub's own tool in the same\nchat turn.",
+        "description": "Reshapes a brand profile into the exact fields Content Strategy Hub's\ncreate_site_profile/update expects, so brand strategy work does not have\nto be manually re-typed into the content-planning layer downstream.\nThere is no direct extension-to-extension call on this platform — Webbee\nrelays this payload into Content Strategy Hub's own tool in the same\nchat turn.",
         "properties": {
           "body": {
             "anyOf": [
@@ -8300,17 +8328,12 @@
             "x-sdl-role": "content.raw_body"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Id"
+            "default": "",
+            "title": "Id",
+            "type": "string"
           },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -8414,10 +8437,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
         "title": "BrandContentHandoff",
         "type": "object",
         "x-sdl": "entity"
@@ -8450,20 +8469,15 @@
       "return_schema": {
         "$defs": {
           "ConnectedSite": {
-            "description": "One site read from a site-provider extension (WordPress Hub today,\nmore providers later) \u2014 the raw material behind the Quick Add list.",
+            "description": "One site read from a site-provider extension (WordPress Hub today,\nmore providers later) — the raw material behind the Quick Add list.",
             "properties": {
               "id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ],
-                "title": "Id"
+                "default": "",
+                "title": "Id",
+                "type": "string"
               },
               "title": {
+                "default": "",
                 "title": "Title",
                 "type": "string"
               },
@@ -8522,10 +8536,6 @@
                 "type": "boolean"
               }
             },
-            "required": [
-              "id",
-              "title"
-            ],
             "title": "ConnectedSite",
             "type": "object",
             "x-sdl": "entity"
@@ -8567,6 +8577,16 @@
             "default": false,
             "title": "Has More",
             "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -8591,7 +8611,7 @@
     }
   ],
   "required_scopes": [],
-  "icon_size_bytes": 3906,
+  "icon_size_bytes": 3911,
   "exposed": [
     {
       "name": "register_project",
@@ -8613,7 +8633,7 @@
       "slot": "left",
       "title": "Brands",
       "tree": {},
-      "icon": "\ud83c\udfaf",
+      "icon": "🎯",
       "refresh": "manual",
       "center_overlay": false,
       "default_width": 280,
@@ -8625,7 +8645,7 @@
       "slot": "center",
       "title": "Brand Detail",
       "tree": {},
-      "icon": "\ud83c\udfaf",
+      "icon": "🎯",
       "refresh": "manual",
       "center_overlay": true
     }

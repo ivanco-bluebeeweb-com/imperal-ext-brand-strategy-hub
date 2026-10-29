@@ -46,6 +46,8 @@ from schemas import (
     ApprovalEvidenceBasisIntegrity, ApprovedVisualMediaHandoff, ApprovedVisualProfileHandoff, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
     BrandProfile, BrandProfileList, BrandMembership, BrandMembershipList, VisualBrandSystem, VisualBrandSystemList,
     VisualBrandWorkspace, VisualEvidence, VisualEvidenceList, VisualProfile, VisualProfileList,
+    ExportBrandProjectParams, ExportBrandProjectResult,
+    ImportBrandProjectParams, ImportBrandProjectResult,
     ConnectedSite, ConnectedSiteList, ListConnectedSitesParams,
     CompetitorProfile, CompetitorProfileList,
     GapAnalysisResult, GapAnalysisResultList,
@@ -2458,6 +2460,259 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Brand Project Export / Import — Full point-to-point cross-account portability
+# ──────────────────────────────────────────────────────────────────────────
+
+async def _store_upsert(ctx, collection: str, doc_id: str, data: dict):
+    """Upsert a document preserving its exact ID across accounts and stores."""
+    if hasattr(ctx.store, "set"):
+        return await ctx.store.set(collection, doc_id, data)
+    existing = await ctx.store.get(collection, doc_id) if doc_id else None
+    if existing:
+        return await ctx.store.update(collection, doc_id, data)
+    try:
+        return await ctx.store.update(collection, doc_id, data)
+    except Exception:
+        create_dict = {"id": doc_id, **data} if doc_id else data
+        return await ctx.store.create(collection, create_dict)
+
+
+ALL_BRAND_COLLECTIONS = [
+    "brand_profiles",
+    "competitor_profiles",
+    "target_segments",
+    "swot_results",
+    "gap_analysis_results",
+    "market_research_snapshots",
+    VBS_WORKSPACES,
+    VBS_SYSTEMS,
+    VBS_EVIDENCE,
+    VBS_PROFILES,
+    VBS_MEMBERSHIPS,
+    VBS_AUDIT_EVENTS,
+    VBS_AUDIT_INCIDENTS,
+    VBS_MEDIA_CONFORMANCE,
+]
+
+
+@chat.function(
+    "export_brand_project",
+    description="Export complete point-to-point data of a brand project into a JSON string for cross-account transfer or backup.",
+    action_type="read",
+    chain_callable=True,
+    effects=[],
+    data_model=ExportBrandProjectResult,
+)
+async def export_brand_project(ctx, params: ExportBrandProjectParams) -> ActionResult[ExportBrandProjectResult]:
+    """Export every single record tied to a brand profile into a portable, complete JSON snapshot."""
+    brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand_doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    total_records = 1
+    collections_data: dict[str, list[dict]] = {}
+
+    for collection in ALL_BRAND_COLLECTIONS:
+        if collection == "brand_profiles":
+            continue
+        page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=1000)
+        docs_list = [{"id": d.id, "data": d.data} for d in page.data]
+        collections_data[collection] = docs_list
+        total_records += len(docs_list)
+
+    export_payload = {
+        "format": "imperal:brand_project_export:v1",
+        "brand_id": params.brand_id,
+        "brand_profile": {"id": brand_doc.id, "data": brand_doc.data},
+        "collections": collections_data,
+        "exported_at": _now_iso(),
+        "total_records": total_records,
+    }
+
+    json_data = json.dumps(export_payload, indent=2, ensure_ascii=False)
+    brand_name = brand_doc.data.get("brand_name", "") or params.brand_id
+
+    return ActionResult.success(
+        ExportBrandProjectResult(
+            id=f"export:{params.brand_id}",
+            title=f"Export: {brand_name}",
+            brand_id=params.brand_id,
+            brand_name=brand_name,
+            json_data=json_data,
+            total_records=total_records,
+            exported_at=export_payload["exported_at"],
+        ),
+        summary=f"Exported brand project '{brand_name}' ({total_records} records across {len(collections_data) + 1} collections).",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "import_brand_project",
+    description="Import complete point-to-point data of a brand project from a JSON string into this account.",
+    action_type="write",
+    chain_callable=True,
+    effects=[
+        "create:brand_profile", "update:brand_profile",
+        "create:competitor_profile", "create:target_segment",
+        "create:swot_result", "create:gap_analysis_result", "create:market_research_snapshot",
+        "create:vbs_workspace", "create:visual_brand_system", "create:visual_evidence",
+        "create:visual_profile", "create:vbs_brand_membership", "create:visual_brand_audit_event",
+        "create:visual_brand_audit_incident", "create:vbs_media_conformance",
+    ],
+    event="imported",
+    data_model=ImportBrandProjectResult,
+)
+async def import_brand_project(ctx, params: ImportBrandProjectParams) -> ActionResult[ImportBrandProjectResult]:
+    """Import every single record from an exported brand project JSON snapshot into the current tenant."""
+    raw_json = (params.json_data or "").strip()
+    if not raw_json:
+        return ActionResult.error("Exported JSON data is required.", retryable=False, code="INVALID_EXPORT_PAYLOAD")
+
+    try:
+        payload = json.loads(raw_json)
+    except Exception as exc:
+        return ActionResult.error(f"Failed to parse JSON export payload: {exc}", retryable=False, code="INVALID_EXPORT_JSON")
+
+    if not isinstance(payload, dict):
+        return ActionResult.error("Invalid export payload structure: expected a JSON object.", retryable=False, code="INVALID_EXPORT_STRUCTURE")
+
+    brand_profile_obj = payload.get("brand_profile")
+    if not brand_profile_obj or not isinstance(brand_profile_obj, dict):
+        return ActionResult.error("Export payload is missing brand_profile data.", retryable=False, code="MISSING_BRAND_PROFILE")
+
+    actor_id, tenant_id = _actor(ctx)
+    target_brand_id = (params.brand_id or payload.get("brand_id") or brand_profile_obj.get("id") or "").strip()
+    if not target_brand_id:
+        return ActionResult.error("Target brand_id could not be determined.", retryable=False, code="MISSING_BRAND_ID")
+
+    brand_data = dict(brand_profile_obj.get("data", {}))
+    brand_name = brand_data.get("brand_name", "") or target_brand_id
+    records_count = 0
+    collections_updated = []
+
+    # 1. Store or update brand_profile
+    if target_brand_id:
+        await _store_upsert(ctx, "brand_profiles", target_brand_id, brand_data)
+    else:
+        await ctx.store.create("brand_profiles", brand_data)
+    records_count += 1
+    collections_updated.append("brand_profiles")
+
+    # Detect cross-tenant transfer
+    collections_data: dict[str, list[dict]] = payload.get("collections", {})
+    src_tenant_id = None
+    ws_items = collections_data.get(VBS_WORKSPACES, [])
+    if ws_items:
+        src_tenant_id = ws_items[0].get("data", {}).get("tenant_id")
+    cross_tenant = bool(tenant_id and src_tenant_id and tenant_id != src_tenant_id)
+
+    # 2. Import all sub-collections
+    for coll_name, doc_list in collections_data.items():
+        if coll_name == "brand_profiles":
+            continue
+        if not doc_list:
+            continue
+
+        collections_updated.append(coll_name)
+
+        # Sort audit events chronologically / by sequence if present
+        if coll_name == VBS_AUDIT_EVENTS:
+            doc_list = sorted(
+                doc_list,
+                key=lambda x: (
+                    int(x.get("data", {}).get("chain_sequence", 0)),
+                    str(x.get("data", {}).get("occurred_at", "")),
+                ),
+            )
+
+        previous_hash = ""
+        for item in doc_list:
+            doc_id = item.get("id")
+            doc_fields = dict(item.get("data", {}))
+
+            # Bind to target brand_id
+            doc_fields["brand_id"] = target_brand_id
+
+            # Adapt tenant_id if cross-tenant import
+            if cross_tenant and "tenant_id" in doc_fields and doc_fields.get("tenant_id") == src_tenant_id:
+                doc_fields["tenant_id"] = tenant_id
+
+            # Re-seal audit event hash chain if cross-tenant import changed tenant_id
+            if coll_name == VBS_AUDIT_EVENTS and cross_tenant:
+                integrity_version = doc_fields.get("integrity_version", 2)
+                doc_fields["previous_integrity_hash"] = previous_hash
+                if integrity_version in {2, 3}:
+                    hash_fields = {
+                        key: doc_fields.get(key, "")
+                        for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at", "chain_sequence", "previous_integrity_hash")
+                    }
+                    if integrity_version == 3:
+                        hash_fields["immutable_metadata"] = doc_fields.get("immutable_metadata", {})
+                    new_hash = _audit_event_hash(hash_fields)
+                    doc_fields["integrity_hash"] = new_hash
+                    previous_hash = new_hash
+                else:
+                    hash_fields = {key: doc_fields.get(key, "") for key in ("brand_id", "vbs_id", "event_type", "actor_id", "tenant_id", "details", "occurred_at")}
+                    new_hash = _audit_event_hash(hash_fields)
+                    doc_fields["integrity_hash"] = new_hash
+
+            # Adjust workspace audit head and owner if cross-tenant import
+            if coll_name == VBS_WORKSPACES and cross_tenant:
+                if previous_hash:
+                    doc_fields["audit_chain_head"] = previous_hash
+                if actor_id:
+                    doc_fields["owner_id"] = actor_id
+
+            if doc_id:
+                await _store_upsert(ctx, coll_name, doc_id, doc_fields)
+            else:
+                await ctx.store.create(coll_name, doc_fields)
+
+            records_count += 1
+
+    # Ensure importing user has owner membership if VBS workspace exists
+    ws = await _workspace_for_brand(ctx, target_brand_id)
+    if ws and actor_id and tenant_id:
+        m_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": target_brand_id}, limit=200)
+        curr_membership = next(
+            (m for m in m_page.data if m.data.get("tenant_id") == tenant_id and m.data.get("user_id") == actor_id and m.data.get("status") == "active"),
+            None,
+        )
+        if not curr_membership:
+            await ctx.store.create(
+                VBS_MEMBERSHIPS,
+                {
+                    "brand_id": target_brand_id,
+                    "tenant_id": tenant_id,
+                    "user_id": actor_id,
+                    "role": "owner",
+                    "status": "active",
+                    "workspace_version": ws.data.get("version", 1),
+                    "created_by": actor_id,
+                    "created_at": _now_iso(),
+                },
+            )
+            records_count += 1
+            if VBS_MEMBERSHIPS not in collections_updated:
+                collections_updated.append(VBS_MEMBERSHIPS)
+
+    return ActionResult.success(
+        ImportBrandProjectResult(
+            id=f"import:{target_brand_id}",
+            title=f"Import: {brand_name}",
+            brand_id=target_brand_id,
+            brand_name=brand_name,
+            records_imported=records_count,
+            collections_updated=collections_updated,
+            imported_at=_now_iso(),
+        ),
+        summary=f"Brand '{brand_name}' imported successfully ({records_count} records across {len(collections_updated)} collections).",
+        refresh_panels=["brands", "brand_detail"],
+    )
+
+
 @chat.function(
     "purge_brand_strategy_data",
     description=(
@@ -2922,6 +3177,32 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         ui.Input(param_name="domain", placeholder="Domain (optional, defaults to site id)"),
                         ui.TagInput(param_name="target_languages",
                                     placeholder="Add a language code (e.g. ru) and press Enter"),
+                    ],
+                ),
+            ),
+            ui.Card(
+                title="Export Project (JSON)",
+                subtitle="Export complete point-to-point snapshot of this brand project (including visual system, SWOT, competitors, and segments) to transfer or back up",
+                content=ui.Form(
+                    action="export_brand_project",
+                    submit_label="Export JSON",
+                    defaults={"brand_id": brand_id},
+                    children=[],
+                ),
+            ),
+            ui.Card(
+                title="Import Project (JSON)",
+                subtitle="Import complete point-to-point snapshot into this brand project from an exported JSON string",
+                content=ui.Form(
+                    action="import_brand_project",
+                    submit_label="Import JSON",
+                    defaults={"brand_id": brand_id},
+                    children=[
+                        ui.TextArea(
+                            param_name="json_data",
+                            placeholder="Paste exported project JSON snapshot here...",
+                            rows=4,
+                        ),
                     ],
                 ),
             ),
