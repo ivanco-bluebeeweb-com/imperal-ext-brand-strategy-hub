@@ -3102,7 +3102,119 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     latest_market = current_market_docs[0].data if current_market_docs else None
     latest_market_id = current_market_docs[0].id if current_market_docs else ""
 
-    header = ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand")
+    header_buttons = [
+        ui.Button(
+            "Export",
+            variant="secondary",
+            size="sm",
+            on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_export="1"),
+        ),
+        ui.Button(
+            "Import",
+            variant="secondary",
+            size="sm",
+            on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_import="1"),
+        ),
+    ]
+
+    header_row = ui.Row(
+        gap=2,
+        children=[
+            ui.Header(brand_name, level=2, subtitle=data.get("industry", "") or "Brand"),
+            *header_buttons,
+        ],
+    )
+
+    # ── Export / Import Dialogs ───────────────────────────────────────
+    show_export = kwargs.get("show_export", "")
+    show_import = kwargs.get("show_import", "")
+    dialogs = []
+
+    if show_export:
+        brand_doc = await ctx.store.get("brand_profiles", brand_id)
+        total_records = 1
+        collections_data: dict[str, list[dict]] = {}
+        for coll in ALL_BRAND_COLLECTIONS:
+            if coll == "brand_profiles":
+                continue
+            pg = await ctx.store.query(coll, where={"brand_id": brand_id}, limit=1000)
+            docs_list = [{"id": d.id, "data": d.data} for d in pg.data]
+            collections_data[coll] = docs_list
+            total_records += len(docs_list)
+
+        export_payload = {
+            "format": "imperal:brand_project_export:v1",
+            "brand_id": brand_id,
+            "brand_profile": {"id": brand_doc.id, "data": brand_doc.data} if brand_doc else {},
+            "collections": collections_data,
+            "exported_at": _now_iso(),
+            "total_records": total_records,
+        }
+        project_json = json.dumps(export_payload, ensure_ascii=False, indent=2)
+        import base64
+        b64_json = base64.b64encode(project_json.encode("utf-8")).decode("utf-8")
+        data_uri = f"data:application/json;base64,{b64_json}"
+        brand_slug = brand_name.lower().replace(" ", "-")
+        filename = f"{brand_slug}-brand-project-export.json"
+
+        dialogs.append(
+            ui.Dialog(
+                title=f"Export Project · {brand_name}",
+                content=ui.Stack(
+                    direction="v", gap=2,
+                    children=[
+                        ui.Text(
+                            f"Exporting complete snapshot of {brand_name} ({total_records} records). "
+                            "Click below to download the JSON bundle, or copy it directly.",
+                            variant="caption",
+                        ),
+                        ui.Link(
+                            label=f"💾 Download {filename}",
+                            href=data_uri,
+                        ),
+                        ui.Text(
+                            "Or copy the raw JSON directly:",
+                            variant="caption",
+                        ),
+                        ui.TextArea(
+                            param_name="exported_json",
+                            value=project_json,
+                            rows=12,
+                        ),
+                    ],
+                ),
+                confirm_label="Close",
+                cancel_label="",
+                on_confirm=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_export="", show_import=""),
+                on_cancel=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_export="", show_import=""),
+            )
+        )
+
+    if show_import:
+        dialogs.append(
+            ui.Dialog(
+                title=f"Import Project · {brand_name}",
+                content=ui.Stack(
+                    direction="v", gap=2,
+                    children=[
+                        ui.Text(
+                            "Paste complete brand project JSON exported from Brand Strategy Hub. "
+                            "All records and relational references will be recreated point-by-point.",
+                            variant="caption",
+                        ),
+                        ui.TextArea(
+                            param_name="json_data",
+                            placeholder="Paste project JSON here...",
+                            rows=12,
+                        ),
+                    ],
+                ),
+                confirm_label="Import Project",
+                cancel_label="Cancel",
+                on_confirm=ui.Call("import_brand_project", brand_id=brand_id),
+                on_cancel=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_import="", show_export=""),
+            )
+        )
 
     # Every action lives inside the tab it affects, never in a bar that is
     # visible on every tab. A refresh_panels=["brand_detail"] re-fetch keeps
@@ -4074,7 +4186,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
 
     return ui.Stack(
         direction="v", gap=3,
-        children=[header, ui.Divider(), tab_switcher, active_content],
+        children=[header_row, *dialogs, ui.Divider(), tab_switcher, active_content],
     )
 
 

@@ -848,3 +848,36 @@ class ConnectedSiteList(sdl.EntityList[ConnectedSite]):
 
 class ListConnectedSitesParams(BaseModel):
     limit: int = Field(50, description="Max items to return (1-100)")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Brand Project Export / Import (full round-trip portability across accounts)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class ExportBrandProjectParams(BaseModel):
+    """Parameters for exporting an entire brand project with all associated entities."""
+    brand_id: str = Field(..., description="ID of the brand project to export")
+
+
+class ExportBrandProjectResult(sdl.Entity):
+    brand_id: str = ""
+    brand_name: str = ""
+    json_data: str = ""
+    total_records: int = 0
+    exported_at: str = ""
+
+
+class ImportBrandProjectParams(BaseModel):
+    brand_id: str = Field("", description="Optional brand_id to import into (defaults to exported brand's ID)")
+    json_data: str = Field(..., description="Raw exported JSON payload containing the complete brand project data")
+    overwrite: bool = Field(True, description="Whether to overwrite/replace existing brand records if IDs match")
+
+
+class ImportBrandProjectResult(sdl.Entity):
+    brand_id: str = ""
+    brand_name: str = ""
+    records_imported: int = 0
+    collections_updated: list[str] = Field(default_factory=list)
+    imported_at: str = ""
+

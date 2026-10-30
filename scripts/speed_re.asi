@@ -1,44 +1,32 @@
-Phase: Brand Strategy Hub Project Import/Export Full Fidelity Feature
+Phase: Brand Strategy Hub Project Import/Export Dialog & Download Link UI
 Status: Verified & Completed
-Date: 2026-10-29
+Date: 2026-10-30
 App: Brand Strategy Hub
 Author: vlad@bluebeeweb.com
 
 Summary of Changes:
 - schemas.py:
-  * Added ExportBrandProjectParams, ExportBrandProjectResult
-  * Added ImportBrandProjectParams, ImportBrandProjectResult
+  * ExportBrandProjectParams, ExportBrandProjectResult
+  * ImportBrandProjectParams, ImportBrandProjectResult
 - main.py:
   * Backend action export_brand_project:
-    - Extracts brand_profiles document
-    - Extracts and packages all 13 related collections with 100% full fidelity:
-      1. target_segments (by brand_profile_id)
-      2. competitors (by brand_profile_id)
-      3. swot_results (by brand_profile_id)
-      4. gap_analyses (by brand_profile_id)
-      5. market_research_results (by brand_profile_id)
-      6. visual_brand_workspaces (by brand_profile_id)
-      7. visual_profiles (by brand_profile_id)
-      8. visual_brand_memberships (by workspace_id)
-      9. visual_brand_audit_events (by workspace_id)
-      10. visual_brand_audit_incidents (by workspace_id)
-      11. visual_brand_evidence_transitions (by workspace_id)
-      12. visual_brand_assets (by workspace_id)
-      13. connected_sites (by brand_profile_id)
-    - Metadata: version 1, exported_at timestamp, schema versioning
+    - Complete snapshot extraction of brand_profiles and 13 related collections.
+    - Full roundtrip JSON packaging.
   * Backend action import_brand_project:
-    - Re-establishes workspace and profile hierarchy
-    - Deterministic ID mapping (brand_profile_id, workspace_id, sub-entity IDs)
-    - Re-binds visual_brand_workspaces, visual_profiles, and memberships
-    - Restores all target segments, competitors, SWOT, gap analyses, market research, audit events, assets, and connections
-    - Full support for multi-tenant / multi-account import with current tenant scoping
-  * UI in _brand_detail_panel:
-    - Added "Export Project" button triggering JSON download / export modal
-    - Added "Import Project" button with modal JSON file / text upload and instant restoration
+    - Complete point-to-point restoration and ID preservation.
+  * Header buttons in _render_brand_detail_panel:
+    - Added "Export" and "Import" buttons directly in the top header row of Brand Detail.
+    - "Export" opens an interactive modal ui.Dialog containing:
+      1. A downloadable data URI link (ui.Link) `💾 Download <brand>-brand-project-export.json`.
+      2. A full copyable ui.TextArea with complete formatted JSON snapshot.
+    - "Import" opens an interactive modal ui.Dialog containing:
+      1. An instructional label and ui.TextArea for pasting JSON snapshot.
+      2. "Import Project" confirm action executing import_brand_project.
 - tests/test_export_import.py:
-  * Unit and integration test suite:
-    - test_panel_has_export_and_import: verifies export & import buttons are rendered in the UI
-    - test_export_import_full: verifies 100% full roundtrip import/export fidelity across all 14 collections
+  * Verified unit and integration tests passing:
+    - test_speed_re_and_backups_exist
+    - test_panel_has_export_and_import
+    - test_export_import_full
 - backups/:
   * backups/main.py.bak
   * backups/schemas.py.bak
