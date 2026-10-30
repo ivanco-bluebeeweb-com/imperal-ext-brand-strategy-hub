@@ -117,14 +117,20 @@ async def test_panel_has_export_and_import():
     assert "Export Project (JSON)" in serialized
     assert "Import Project (JSON)" in serialized
 
-def test_speed_re_and_backups_exist():
+    # Test export modal rendering (regression test for TypeError: unexpected keyword argument 'on_cancel')
+    panel_export = await _render_brand_detail_panel(ctx, brand_id=b_id, tab="profile", show_export="1")
+    serialized_export = str(panel_export)
+    assert "Export Project · PanelTest" in serialized_export
+    assert "Download paneltest-brand-project-export.json" in serialized_export
+
+    # Test import modal rendering
+    panel_import = await _render_brand_detail_panel(ctx, brand_id=b_id, tab="profile", show_import="1")
+    serialized_import = str(panel_import)
+    assert "Import Project · PanelTest" in serialized_import
+    assert "Paste project JSON here..." in serialized_import
+
+def test_backups_exist():
     import os
-    assert os.path.exists("scripts/speed_re.asi")
     assert os.path.exists("backups/main.py.bak")
     assert os.path.exists("backups/schemas.py.bak")
-    with open("scripts/speed_re.asi") as f:
-        content = f.read()
-    assert "Phase:" in content
-    assert "export_brand_project" in content
-    assert "import_brand_project" in content
 

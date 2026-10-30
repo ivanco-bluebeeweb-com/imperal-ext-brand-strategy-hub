@@ -3186,7 +3186,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 confirm_label="Close",
                 cancel_label="",
                 on_confirm=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_export="", show_import=""),
-                on_cancel=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_export="", show_import=""),
+                on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_export="", show_import=""),
             )
         )
 
@@ -3212,7 +3212,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 confirm_label="Import Project",
                 cancel_label="Cancel",
                 on_confirm=ui.Call("import_brand_project", brand_id=brand_id),
-                on_cancel=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_import="", show_export=""),
+                on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_import="", show_export=""),
             )
         )
 
