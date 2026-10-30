@@ -4202,10 +4202,12 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     try:
         return await _render_brand_detail_panel(ctx, brand_id=brand_id, tab=tab, **kwargs)
     except Exception as exc:  # panel errors must be visible rather than a blank loading overlay
+        import traceback
+        tb = traceback.format_exc()
         return ui.Error(
             message=(
                 "Brand detail could not load. Please record this reference for support: "
-                f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}."
+                f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}: {exc}."
             )
         )
 
