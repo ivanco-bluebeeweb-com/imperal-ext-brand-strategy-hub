@@ -2466,16 +2466,17 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
 
 async def _store_upsert(ctx, collection: str, doc_id: str, data: dict):
     """Upsert a document preserving its exact ID across accounts and stores."""
+    payload = {"id": doc_id, **data} if (doc_id and "id" not in data) else data
     if hasattr(ctx.store, "set"):
-        return await ctx.store.set(collection, doc_id, data)
+        key = f"{collection}/{doc_id}" if doc_id else collection
+        return await ctx.store.set(key, payload)
     existing = await ctx.store.get(collection, doc_id) if doc_id else None
     if existing:
-        return await ctx.store.update(collection, doc_id, data)
+        return await ctx.store.update(collection, doc_id, payload)
     try:
-        return await ctx.store.update(collection, doc_id, data)
+        return await ctx.store.update(collection, doc_id, payload)
     except Exception:
-        create_dict = {"id": doc_id, **data} if doc_id else data
-        return await ctx.store.create(collection, create_dict)
+        return await ctx.store.create(collection, payload)
 
 
 ALL_BRAND_COLLECTIONS = [

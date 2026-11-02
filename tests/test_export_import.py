@@ -99,6 +99,50 @@ async def test_export_import_full():
     assert "Reusability" in swots.data[0].data["strengths"]
 
 @pytest.mark.asyncio
+async def test_import_with_storeclient_set_signature():
+    """Regression test for 'StoreClient.set() takes 3 positional arguments but 4 were given'.
+    
+    Real StoreClient.set signature is:
+        async def set(self, key: str, data: Any) -> Document
+    where key is 'collection/doc_id'.
+    """
+    ctx = MockContext(user_id="u3", tenant_id="t3")
+    set_calls = []
+
+    async def mock_set(key: str, data):
+        set_calls.append((key, data))
+        collection, doc_id = key.split("/", 1)
+        # Delegate to standard mock store create or update
+        try:
+            return await ctx.store.update(collection, doc_id, data)
+        except Exception:
+            return await ctx.store.create(collection, data)
+
+    # Attach set method matching StoreClient.set signature
+    ctx.store.set = mock_set
+
+    test_bundle = {
+        "version": "1.0",
+        "brand_id": "test-b-1",
+        "brand_profile": {
+            "id": "test-b-1",
+            "data": {
+                "id": "test-b-1",
+                "brand_name": "SetSignatureTest",
+                "mission": "Test StoreClient.set call",
+            }
+        },
+        "collections": {}
+    }
+    raw_json = json.dumps(test_bundle)
+    res = await import_brand_project(ctx, ImportBrandProjectParams(json_data=raw_json))
+    assert res.status == "success"
+    assert len(set_calls) > 0
+    assert set_calls[0][0] == "brand_profiles/test-b-1"
+    assert set_calls[0][1]["brand_name"] == "SetSignatureTest"
+
+
+@pytest.mark.asyncio
 async def test_panel_has_export_and_import():
     ctx = MockContext(user_id="u1", tenant_id="t1")
     p = await create_brand_profile(
