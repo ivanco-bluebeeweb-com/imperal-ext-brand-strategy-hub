@@ -128,6 +128,8 @@ async def test_panel_has_export_and_import():
     serialized_import = str(panel_import)
     assert "Import Project · PanelTest" in serialized_import
     assert "Paste project JSON here..." in serialized_import
+    assert "import_brand_project" in serialized_import
+    assert "Import Project" in serialized_import
 
 def test_backups_exist():
     import os

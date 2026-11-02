@@ -3194,8 +3194,10 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         dialogs.append(
             ui.Dialog(
                 title=f"Import Project · {brand_name}",
-                content=ui.Stack(
-                    direction="v", gap=2,
+                content=ui.Form(
+                    action="import_brand_project",
+                    submit_label="Import Project",
+                    defaults={"brand_id": brand_id},
                     children=[
                         ui.Text(
                             "Paste complete brand project JSON exported from Brand Strategy Hub. "
@@ -3209,9 +3211,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         ),
                     ],
                 ),
-                confirm_label="Import Project",
+                confirm_label="",
                 cancel_label="Cancel",
-                on_confirm=ui.Call("import_brand_project", brand_id=brand_id),
                 on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_import="", show_export=""),
             )
         )
