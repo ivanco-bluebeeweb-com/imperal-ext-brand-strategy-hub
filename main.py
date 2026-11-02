@@ -3168,9 +3168,9 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                             "Click below to download the JSON bundle, or copy it directly.",
                             variant="caption",
                         ),
-                        ui.Link(
-                            label=f"💾 Download {filename}",
-                            href=data_uri,
+                        ui.Html(
+                            f'<a href="{data_uri}" download="{filename}" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;background-color:#2563eb;color:#ffffff;border-radius:6px;text-decoration:none;font-weight:500;font-size:14px;cursor:pointer;">💾 Download {filename}</a>',
+                            sandbox=False,
                         ),
                         ui.Text(
                             "Or copy the raw JSON directly:",
