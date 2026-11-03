@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
+import asyncio
 import hashlib
 import ipaddress
 import json
@@ -3078,27 +3079,37 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         except Exception as exc:  # keep VBS storage failures inside the VBS tab
             vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
-    comp_page = await ctx.store.query(
+    comp_fut = ctx.store.query(
         "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
-    competitors = [{"id": d.id, **d.data} for d in comp_page.data]
-
-    seg_page = await ctx.store.query(
+    seg_fut = ctx.store.query(
         "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
+    swot_fut = ctx.store.query(
+        "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    )
+    gap_fut = ctx.store.query(
+        "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    )
+    market_fut = ctx.store.query(
+        "market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    )
+
+    comp_page, seg_page, swot_page, gap_page, market_page = await asyncio.gather(
+        comp_fut, seg_fut, swot_fut, gap_fut, market_fut
+    )
+
+    competitors = [{"id": d.id, **d.data} for d in comp_page.data]
     segments = list(seg_page.data)
 
-    swot_page = await ctx.store.query("swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500)
     current_swot_docs = [d for d in swot_page.data if d.data.get("is_current", True)]
     latest_swot = current_swot_docs[0].data if current_swot_docs else None
     latest_swot_id = current_swot_docs[0].id if current_swot_docs else ""
 
-    gap_page = await ctx.store.query("gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500)
     current_gap_docs = [d for d in gap_page.data if d.data.get("is_current", True)]
     latest_gap = current_gap_docs[0].data if current_gap_docs else None
     latest_gap_id = current_gap_docs[0].id if current_gap_docs else ""
 
-    market_page = await ctx.store.query("market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500)
     current_market_docs = [d for d in market_page.data if d.data.get("is_current", True)]
     latest_market = current_market_docs[0].data if current_market_docs else None
     latest_market_id = current_market_docs[0].id if current_market_docs else ""
