@@ -2987,6 +2987,42 @@ async def brands_panel(ctx, **kwargs) -> object:
     plus a plain, clearly-labelled browsing list."""
     page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
     docs = list(page.data)
+    show_import = str(kwargs.get("show_import", "")).strip().lower() in {"1", "true", "yes"}
+
+    import_dialogs = []
+    if show_import:
+        import_dialogs.append(
+            ui.Dialog(
+                title="Import Project (JSON)",
+                content=ui.Stack(
+                    direction="v", gap=2,
+                    children=[
+                        ui.Text("Paste exported brand project JSON below to restore or transfer all data (brand profile, visual system, SWOT, competitors, and segments):"),
+                        ui.Form(
+                            action="import_brand_project",
+                            submit_label="Import Project",
+                            children=[
+                                ui.TextArea(
+                                    param_name="json_data",
+                                    placeholder="Paste project JSON here...",
+                                    min_length=2,
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                confirm_label="",
+                cancel_label="Close",
+                on_close=ui.Call("__panel__brands", show_import=""),
+            )
+        )
+
+    import_button = ui.Button(
+        "Import Project (JSON)",
+        variant="secondary",
+        icon="Upload",
+        on_click=ui.Call("__panel__brands", show_import="1"),
+    )
 
     new_brand_form = ui.Stack(direction="v", gap=2, children=[
         ui.Header("New brand", level=3),
@@ -2999,15 +3035,17 @@ async def brands_panel(ctx, **kwargs) -> object:
                 ui.Input(param_name="site_id", placeholder="Content Strategy Hub site_id (optional)"),
             ],
         ),
+        import_button,
     ])
 
     if not docs:
         return ui.Stack(direction="v", gap=3, children=[
             new_brand_form,
+            *import_dialogs,
             ui.Divider(),
             ui.Header("Existing Brands", level=3),
             ui.Empty(
-                message="No brands yet — create one above to start a SWOT / gap analysis.",
+                message="No brands yet — create one above or import a project JSON.",
                 icon="🎯",
             ),
         ])
@@ -3026,6 +3064,7 @@ async def brands_panel(ctx, **kwargs) -> object:
 
     return ui.Stack(direction="v", gap=3, children=[
         new_brand_form,
+        *import_dialogs,
         ui.Divider(),
         ui.Header("Existing Brands", level=3),
         ui.List(items=items, searchable=False),
@@ -3033,7 +3072,8 @@ async def brands_panel(ctx, **kwargs) -> object:
 
 
 async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: int = 2):
-    """Retrieve document with retries for transient 5xx or connection errors."""
+    """Retrieve document with retries for transient 5xx or connection errors,
+    falling back to query-based retrieval if direct GET fails with a 5xx error."""
     last_exc = None
     for attempt in range(max_retries + 1):
         try:
@@ -3053,9 +3093,21 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
             if is_transient and attempt < max_retries:
                 await asyncio.sleep(0.15 * (attempt + 1))
                 continue
-            raise
+            break
+
+    # Fallback strategy: if direct get fails with 5xx/storage error, query the collection
+    # directly. Often the collection query route works even when the single-item key lookup fails.
+    try:
+        query_page = await ctx.store.query(collection, limit=500)
+        for doc in query_page.data:
+            if doc.id == doc_id:
+                return doc
+    except Exception:
+        pass
+
     if last_exc:
         raise last_exc
+    return None
 
 
 async def _store_query_resilient(ctx, collection: str, where: dict | None = None, order_by: str | None = None, limit: int = 100, max_retries: int = 1):
@@ -4350,17 +4402,68 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
 )
 async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:
     """Render brand detail without leaving the panel in an infinite loading state."""
+    show_import = str(kwargs.get("show_import", "")).strip().lower() in {"1", "true", "yes"}
+    if show_import:
+        return ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Dialog(
+                    title="Import Project (JSON)",
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Text("Paste exported brand project JSON below to restore or transfer all data:"),
+                            ui.Form(
+                                action="import_brand_project",
+                                submit_label="Import Project",
+                                children=[
+                                    ui.TextArea(
+                                        param_name="json_data",
+                                        placeholder="Paste project JSON here...",
+                                        rows=12,
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                    actions=[
+                        ui.Button("Close", variant="secondary", on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=tab)),
+                    ],
+                ),
+            ],
+        )
+
     try:
         return await _render_brand_detail_panel(ctx, brand_id=brand_id, tab=tab, **kwargs)
     except Exception as exc:  # panel errors must be visible rather than a blank loading overlay
         sanitized_msg = _sanitize_storage_error(exc)
-        return ui.Error(
-            title="Brand Detail Error",
-            message=(
-                "Brand detail could not load. Please record this reference for support: "
-                f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}: {sanitized_msg}."
-            ),
-            retry=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=tab, **kwargs),
+        return ui.Stack(
+            direction="v", gap=3,
+            children=[
+                ui.Error(
+                    title="Brand Detail Error",
+                    message=(
+                        "Brand detail could not load. Please record this reference for support: "
+                        f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}: {sanitized_msg}."
+                    ),
+                    retry=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=tab, **kwargs),
+                ),
+                ui.Card(
+                    title="Cross-account project transfer or restore",
+                    content=ui.Stack(
+                        direction="v", gap=2,
+                        children=[
+                            ui.Text("If this brand was created on another account or tenant, import its project JSON here:"),
+                            ui.Button(
+                                "Import Project (JSON)",
+                                variant="primary",
+                                icon="Upload",
+                                on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=tab, show_import="1"),
+                            ),
+                        ],
+                    ),
+                ),
+            ],
         )
 
 
