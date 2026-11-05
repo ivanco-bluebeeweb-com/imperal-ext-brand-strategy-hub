@@ -249,6 +249,25 @@ async def test_run_market_research_without_signals_succeeds():
 
 
 @pytest.mark.asyncio
+async def test_run_market_research_with_existing_competitors():
+    """Market research must recognize and surface already tracked competitors in the brand."""
+    ctx = MockContext()
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security"))
+    await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="SecureCo", strengths=["fast response"]))
+    await m.add_brand_competitor(ctx, AddCompetitorParams(brand_id=brand.data.id, name="GuardCorp", weaknesses=["high price"]))
+
+    result = await m.run_market_research(ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[]))
+    assert result.status == "success"
+    assert result.data.is_current is True
+    assert result.data.tracked_competitors == ["SecureCo", "GuardCorp"]
+    assert "2 tracked competitor(s) recognized" in result.summary
+    assert "SecureCo" in result.data.landscape_summary
+    assert "GuardCorp" in result.data.landscape_summary
+    assert "SecureCo" in result.data.body
+    assert "Tracked competitors" in result.data.body
+
+
+@pytest.mark.asyncio
 async def test_rerunning_market_research_supersedes_the_previous_one():
     ctx = MockContext()
     brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security"))

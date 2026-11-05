@@ -117,9 +117,12 @@ def _swot_markdown(strengths, weaknesses, opportunities, threats) -> str:
     ])
 
 
-def _market_research_markdown(industry: str, landscape_summary: str, candidates: list[str], sourcing_trail: list[str]) -> str:
+def _market_research_markdown(industry: str, landscape_summary: str, candidates: list[str], sourcing_trail: list[str], tracked_competitors: list[str] | None = None) -> str:
     lines = [f"## Market landscape ({industry})" if industry else "## Market landscape"]
     lines.append(landscape_summary or "_(no summary)_")
+    if tracked_competitors:
+        lines.append("\n## Tracked competitors")
+        lines += [f"- {t}" for t in tracked_competitors]
     lines.append("\n## Candidate competitors")
     lines += [f"- {c}" for c in candidates] if candidates else ["- (none surfaced from the given sources)"]
     lines.append("\n## Sourcing trail")
@@ -130,9 +133,11 @@ def _market_research_markdown(industry: str, landscape_summary: str, candidates:
 def to_market_research_snapshot(d) -> MarketResearchSnapshot:
     data = d.data
     is_current = data.get("is_current", True)
+    tracked = data.get("tracked_competitors", [])
     body = _market_research_markdown(
         data.get("industry", ""), data.get("landscape_summary", ""),
         data.get("candidate_competitors", []), data.get("sourcing_trail", []),
+        tracked_competitors=tracked,
     )
     if not is_current:
         body = "_⚠ SUPERSEDED — a newer market-research snapshot exists for this brand._\n\n" + body
@@ -142,6 +147,7 @@ def to_market_research_snapshot(d) -> MarketResearchSnapshot:
         brand_id=data.get("brand_id", ""),
         industry=data.get("industry", ""),
         landscape_summary=data.get("landscape_summary", ""),
+        tracked_competitors=tracked,
         candidate_competitors=data.get("candidate_competitors", []),
         sourcing_trail=data.get("sourcing_trail", []),
         is_current=is_current,

@@ -2128,19 +2128,28 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
             "would just guess. Set industry (update_brand_profile) first.",
             retryable=False, code="EMPTY_INDUSTRY",
         )
+    comp_page = await ctx.store.query("competitor_profiles", where={"brand_id": params.brand_id}, limit=500)
+    tracked_competitors = [d.data.get("name", "").strip() for d in comp_page.data if d.data.get("name")]
+    tracked_names_lower = {name.lower() for name in tracked_competitors if name}
+
     if not params.signals:
         sourcing_trail = []
         candidate_competitors = []
+        comp_summary = (
+            f" Currently tracking {len(tracked_competitors)} competitor(s): {', '.join(tracked_competitors)}."
+            if tracked_competitors else " No competitors currently tracked."
+        )
         landscape_summary = (
             f"Market landscape analysis for industry '{industry}'.\n\n"
             f"Brand positioning: {brand.get('value_proposition') or brand.get('mission') or 'General market presence'}.\n"
-            f"Target segments and competitive landscape are monitored for {brand.get('brand_name', 'this brand')}."
+            f"Competitive landscape:{comp_summary}"
         )
     else:
         sourcing_trail = [s.url for s in params.signals]
-        candidate_competitors = sorted({
-            s.candidate_competitor_name for s in params.signals if s.candidate_competitor_name
+        raw_candidates = sorted({
+            s.candidate_competitor_name.strip() for s in params.signals if s.candidate_competitor_name and s.candidate_competitor_name.strip()
         })
+        candidate_competitors = [c for c in raw_candidates if c.lower() not in tracked_names_lower]
         landscape_summary = "\n\n".join(
             f"**{s.title or s.url}**: {s.summary}" for s in params.signals
         )
@@ -2159,19 +2168,35 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
             "brand_id": params.brand_id,
             "industry": industry,
             "landscape_summary": landscape_summary,
+            "tracked_competitors": tracked_competitors,
             "candidate_competitors": candidate_competitors,
             "sourcing_trail": sourcing_trail,
             "is_current": True,
             "superseded_at": "",
         },
     )
-    return ActionResult.success(
-        _to_market_research_snapshot(doc),
-        summary=(
+
+    if tracked_competitors and not candidate_competitors:
+        summary_msg = (
+            f"Market research snapshot created: {len(tracked_competitors)} tracked competitor(s) recognized "
+            f"({', '.join(tracked_competitors)}). 0 new candidate(s) from {len(params.signals)} source(s)."
+        )
+    elif tracked_competitors and candidate_competitors:
+        summary_msg = (
+            f"Market research snapshot created: {len(tracked_competitors)} tracked competitor(s) recognized, "
+            f"{len(candidate_competitors)} new candidate competitor(s) surfaced from {len(params.signals)} source(s). "
+            "Review and promote relevant ones via add_brand_competitor."
+        )
+    else:
+        summary_msg = (
             f"Market research snapshot created from {len(params.signals)} source(s) — "
             f"{len(candidate_competitors)} candidate competitor(s) surfaced. "
             "Review and promote relevant ones via add_brand_competitor."
-        ),
+        )
+
+    return ActionResult.success(
+        _to_market_research_snapshot(doc),
+        summary=summary_msg,
         refresh_panels=["brand_detail"],
     )
 
@@ -4189,17 +4214,20 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             "Mark as outdated", variant="secondary", icon="Archive",
             on_click=ui.Call("archive_market_research_result", snapshot_id=latest_market_id),
         )
-        market_tab = ui.Stack(
-            direction="v", gap=3,
-            children=[
-                ui.Badge(label="Current", color="green"),
-                ui.Card(title=f"Market landscape ({latest_market.get('industry', '')})", content=ui.Text(latest_market.get("landscape_summary", "") or "(no summary)")),
-                ui.Card(title="Candidate competitors", content=_swot_list(latest_market.get("candidate_competitors", []))),
-                ui.Card(title="Sourcing trail", content=_swot_list(latest_market.get("sourcing_trail", []))),
-                ui.Card(title="Run again (auto-supersedes this one)", content=run_market_button),
-                ui.Card(title="Or mark this one outdated by hand", content=archive_market_button),
-            ],
-        )
+        market_children = [
+            ui.Badge(label="Current", color="green"),
+            ui.Card(title=f"Market landscape ({latest_market.get('industry', '')})", content=ui.Text(latest_market.get("landscape_summary", "") or "(no summary)")),
+        ]
+        tracked = latest_market.get("tracked_competitors", [])
+        if tracked:
+            market_children.append(ui.Card(title=f"Tracked competitors ({len(tracked)})", content=_swot_list(tracked)))
+        market_children.extend([
+            ui.Card(title="Candidate competitors", content=_swot_list(latest_market.get("candidate_competitors", []))),
+            ui.Card(title="Sourcing trail", content=_swot_list(latest_market.get("sourcing_trail", []))),
+            ui.Card(title="Run again (auto-supersedes this one)", content=run_market_button),
+            ui.Card(title="Or mark this one outdated by hand", content=archive_market_button),
+        ])
+        market_tab = ui.Stack(direction="v", gap=3, children=market_children)
     else:
         market_tab = ui.Stack(
             direction="v", gap=3,

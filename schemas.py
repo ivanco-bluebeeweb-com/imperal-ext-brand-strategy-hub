@@ -417,6 +417,7 @@ class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
     brand_id: str = ""
     industry: str = ""
     landscape_summary: str = ""
+    tracked_competitors: list[str] = []  # currently tracked competitors in the brand
     candidate_competitors: list[str] = []  # names only -- human decides which to promote via add_brand_competitor
     sourcing_trail: list[str] = []  # every source URL used, in order -- never a candidate without a cited source
     is_current: bool = True
