@@ -118,7 +118,14 @@ async def test_evidence_access_and_stale_workspace_writes_fail_closed():
 
     other = MockContext(user_id="other", tenant_id="tenant-a")
     other.store = owner.store
-    denied = await m.list_visual_evidence(other, ListVisualEvidenceParams(brand_id=brand_id))
+    # With role restrictions removed, any user in the tenant can access visual evidence
+    allowed = await m.list_visual_evidence(other, ListVisualEvidenceParams(brand_id=brand_id))
+    assert allowed.status == "success"
+
+    # Cross-tenant requests still fail closed
+    outsider = MockContext(user_id="outsider", tenant_id="tenant-b")
+    outsider.store = owner.store
+    denied = await m.list_visual_evidence(outsider, ListVisualEvidenceParams(brand_id=brand_id))
     assert denied.status == "error"
     assert denied.error_code == "VBS_ACCESS_DENIED"
 

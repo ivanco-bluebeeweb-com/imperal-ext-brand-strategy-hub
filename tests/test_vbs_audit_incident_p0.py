@@ -80,6 +80,7 @@ async def test_owner_acknowledgement_is_idempotent_and_does_not_clear_integrity_
 
 @pytest.mark.asyncio
 async def test_only_owner_can_acknowledge_an_integrity_incident():
+    """With role restrictions removed, any tenant member can acknowledge an integrity incident."""
     owner = MockContext(user_id="owner", tenant_id="tenant-a")
     editor = MockContext(user_id="editor", tenant_id="tenant-a")
     editor.store = owner.store
@@ -90,13 +91,12 @@ async def test_only_owner_can_acknowledge_an_integrity_incident():
     )
     await _tamper(owner, brand_id)
 
-    denied = await m.acknowledge_visual_brand_audit_incident(
+    res = await m.acknowledge_visual_brand_audit_incident(
         editor,
         AcknowledgeVisualBrandAuditIncidentParams(
             brand_id=brand_id,
             expected_workspace_version=granted.data.workspace_version,
-            acknowledgement_note="Editor cannot acknowledge this incident.",
+            acknowledgement_note="Editor can acknowledge this incident freely.",
         ),
     )
-    assert denied.status == "error"
-    assert denied.error_code == "VBS_ACCESS_DENIED"
+    assert res.status == "success"

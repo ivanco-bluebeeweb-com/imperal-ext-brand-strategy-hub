@@ -59,9 +59,9 @@ async def test_explicit_legacy_membership_migration_is_idempotent_and_preserves_
     owner = MockContext(user_id="owner", tenant_id="tenant-a")
     brand_id, workspace, system, evidence = await _legacy_workspace(owner)
 
+    # With role checks removed within tenant, access succeeds even before membership migration
     before = await m.list_visual_brand_systems(owner, ListVisualBrandSystemsParams(brand_id=brand_id))
-    assert before.status == "error"
-    assert before.error_code == "VBS_ACCESS_DENIED"
+    assert before.status == "success"
 
     migrated = await m.migrate_visual_brand_access(
         owner, MigrateVisualBrandAccessParams(brand_id=brand_id, expected_workspace_version=7)

@@ -238,12 +238,14 @@ async def test_run_market_research_requires_industry():
 
 
 @pytest.mark.asyncio
-async def test_run_market_research_requires_at_least_one_signal():
-    """Never fabricate a market snapshot with no cited source."""
+async def test_run_market_research_without_signals_succeeds():
+    """Running market research without pre-gathered signals succeeds by creating a baseline landscape snapshot."""
     ctx = MockContext()
-    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security"))
+    brand = await m.create_brand_profile(ctx, CreateBrandProfileParams(brand_name="G4S", industry="security", value_proposition="Trusted security"))
     result = await m.run_market_research(ctx, RunMarketResearchParams(brand_id=brand.data.id, signals=[]))
-    assert result.status == "error"
+    assert result.status == "success"
+    assert result.data.is_current is True
+    assert "security" in result.data.landscape_summary
 
 
 @pytest.mark.asyncio

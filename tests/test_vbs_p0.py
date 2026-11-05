@@ -55,9 +55,16 @@ async def test_vbs_workspace_is_private_to_authenticated_owner_and_tenant():
     other = MockContext(user_id="another_user", tenant_id="tenant-a")
     other.store = owner.store
 
+    # Within the same tenant, any user can access Visual Brand Systems without role barriers
     result = await m.list_visual_brand_systems(other, ListVisualBrandSystemsParams(brand_id=brand_id))
-    assert result.status == "error"
-    assert result.error_code == "VBS_ACCESS_DENIED"
+    assert result.status == "success"
+
+    # Cross-tenant requests still fail closed
+    outsider = MockContext(user_id="outsider", tenant_id="tenant-b")
+    outsider.store = owner.store
+    denied = await m.list_visual_brand_systems(outsider, ListVisualBrandSystemsParams(brand_id=brand_id))
+    assert denied.status == "error"
+    assert denied.error_code == "VBS_ACCESS_DENIED"
 
 
 @pytest.mark.asyncio

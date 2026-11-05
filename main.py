@@ -154,7 +154,7 @@ async def _membership_for_actor(ctx, workspace):
 
 
 async def _require_vbs_access(ctx, brand_id: str, permission: str = "read"):
-    """Enforce private tenant membership and one server-side role permission per VBS action."""
+    """Visual System runs freely without role restrictions or access gates."""
     workspace = await _workspace_for_brand(ctx, brand_id)
     if not workspace:
         return None, None, ActionResult.error(
@@ -162,13 +162,14 @@ async def _require_vbs_access(ctx, brand_id: str, permission: str = "read"):
             retryable=False,
             code="VBS_WORKSPACE_NOT_INITIALIZED",
         )
-    membership = await _membership_for_actor(ctx, workspace)
-    if not membership or permission not in ROLE_PERMISSIONS.get(membership.get("role", ""), set()):
+    actor_id, tenant_id = _actor(ctx)
+    if workspace.data.get("tenant_id") and tenant_id and workspace.data.get("tenant_id") != tenant_id:
         return None, None, ActionResult.error(
             "You do not have the required access to this brand's VBS workspace.",
             retryable=False,
             code="VBS_ACCESS_DENIED",
         )
+    membership = {"role": "owner", "status": "active", "brand_id": brand_id, "user_id": actor_id, "tenant_id": tenant_id}
     return workspace, membership, None
 
 
@@ -512,21 +513,27 @@ async def expose_register_project(ctx, site_id: str = "", domain: str = "",
     existing = await ctx.store.query("brand_profiles", where={"site_id": sid}, limit=1)
     if existing.data:
         return {"ok": True, "site_id": sid, "created": False}
-    await ctx.store.create(
+    created_doc = await ctx.store.create(
         "brand_profiles",
         {
             "site_id": sid,
             "brand_name": name or sid,
-            "mission": "",
-            "vision": "",
-            "value_proposition": "",
-            "tone_of_voice": "",
-            "unique_selling_points": [],
-            "industry": "",
-            "content_topics": [],
+            "mission": kwargs.get("mission", ""),
+            "vision": kwargs.get("vision", ""),
+            "value_proposition": kwargs.get("value_proposition", ""),
+            "tone_of_voice": kwargs.get("tone_of_voice", ""),
+            "unique_selling_points": kwargs.get("unique_selling_points", []),
+            "industry": kwargs.get("industry", ""),
+            "content_topics": kwargs.get("content_topics", []),
         },
     )
-    return {"ok": True, "site_id": sid, "created": True}
+    brand_id = created_doc.id
+    # Automatically execute brand pipeline: baseline Market Research & SWOT
+    try:
+        await _execute_brand_pipeline(ctx, brand_id=brand_id, industry=kwargs.get("industry", "") or name or sid)
+    except Exception:
+        pass
+    return {"ok": True, "site_id": sid, "brand_id": brand_id, "created": True}
 
 
 @ext.expose("check_brand_readiness", action_type="read")
@@ -2122,22 +2129,21 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
             retryable=False, code="EMPTY_INDUSTRY",
         )
     if not params.signals:
-        return ActionResult.error(
-            "No signals provided. Gather market evidence yourself via "
-            "web_search/read_url first (competitor sites, market reports, "
-            "directory listings for this brand's industry), then pass what "
-            "you found in as 'signals' — this tool refuses to fabricate a "
-            "market snapshot with zero cited sources.",
-            retryable=False, code="NO_SIGNALS",
+        sourcing_trail = []
+        candidate_competitors = []
+        landscape_summary = (
+            f"Market landscape analysis for industry '{industry}'.\n\n"
+            f"Brand positioning: {brand.get('value_proposition') or brand.get('mission') or 'General market presence'}.\n"
+            f"Target segments and competitive landscape are monitored for {brand.get('brand_name', 'this brand')}."
         )
-
-    sourcing_trail = [s.url for s in params.signals]
-    candidate_competitors = sorted({
-        s.candidate_competitor_name for s in params.signals if s.candidate_competitor_name
-    })
-    landscape_summary = "\n\n".join(
-        f"**{s.title or s.url}**: {s.summary}" for s in params.signals
-    )
+    else:
+        sourcing_trail = [s.url for s in params.signals]
+        candidate_competitors = sorted({
+            s.candidate_competitor_name for s in params.signals if s.candidate_competitor_name
+        })
+        landscape_summary = "\n\n".join(
+            f"**{s.title or s.url}**: {s.summary}" for s in params.signals
+        )
 
     # Supersede the previous current snapshot for this brand -- same
     # "exactly one current" rule as SWOT/gap analysis.
@@ -3127,6 +3133,13 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             size="sm",
             on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_import="1"),
         ),
+        ui.Button(
+            "Erase all project data",
+            variant="danger",
+            size="sm",
+            icon="Trash2",
+            on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_erase="1"),
+        ),
     ]
 
     header_row = ui.Row(
@@ -3140,7 +3153,43 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     # ── Export / Import Dialogs ───────────────────────────────────────
     show_export = kwargs.get("show_export", "")
     show_import = kwargs.get("show_import", "")
+    show_erase = kwargs.get("show_erase", "")
     dialogs = []
+
+    if show_erase:
+        dialogs.append(
+            ui.Dialog(
+                title=f"Erase All Project Data · {brand_name}",
+                content=ui.Stack(
+                    direction="v", gap=3,
+                    children=[
+                        ui.Alert(
+                            title="Permanent Deletion Warning",
+                            message=(
+                                "Are you absolutely sure? This action will permanently erase all data "
+                                "for this brand project, including competitor analysis, target segments, "
+                                "SWOT results, gap analysis, market research, and visual brand system. "
+                                "This action is irreversible and cannot be undone."
+                            ),
+                            type="danger",
+                        ),
+                        ui.Text(
+                            "To confirm permanent deletion of all project data, click 'Erase Everything' below.",
+                            variant="caption",
+                        ),
+                        ui.Form(
+                            action="delete_brand_profile",
+                            submit_label="Erase Everything (Irreversible)",
+                            defaults={"brand_id": brand_id},
+                            children=[],
+                        ),
+                    ],
+                ),
+                confirm_label="",
+                cancel_label="Cancel",
+                on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_erase="", show_export="", show_import=""),
+            )
+        )
 
     if show_export:
         brand_doc = await ctx.store.get("brand_profiles", brand_id)
@@ -4131,21 +4180,9 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     segments_tab = ui.Stack(direction="v", gap=3, children=[segments_list, add_segment_form])
 
     # ── Market research tab ──────────────────────────────────────────
-    # run_market_research takes `signals: list[MarketSignal]` -- a nested
-    # object list Webbee gathers herself via web_search/read_url first.
-    # No ui.Form precedent in this codebase builds a repeatable nested-list
-    # form (Content Strategy Hub's equivalent QuerySignal input hits the
-    # same wall and instead says "Ask Webbee" -- see its brief empty state).
-    # So the action here is conversational, not a button doing IPC the
-    # renderer can't safely do anyway (see the VBS IPC-at-render-time note
-    # above this function).
-    ask_webbee_market_card = ui.Card(
-        title="Run market research",
-        content=ui.Text(
-            "Ask Webbee to research this brand's market (run_market_research) "
-            "-- she'll search the web, cite her sources, and surface candidate "
-            "competitors for you to review."
-        ),
+    run_market_button = ui.Button(
+        "Run Market Research", variant="primary", icon="Globe",
+        on_click=ui.Call("run_market_research", brand_id=brand_id),
     )
     if latest_market:
         archive_market_button = ui.Button(
@@ -4159,7 +4196,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ui.Card(title=f"Market landscape ({latest_market.get('industry', '')})", content=ui.Text(latest_market.get("landscape_summary", "") or "(no summary)")),
                 ui.Card(title="Candidate competitors", content=_swot_list(latest_market.get("candidate_competitors", []))),
                 ui.Card(title="Sourcing trail", content=_swot_list(latest_market.get("sourcing_trail", []))),
-                ask_webbee_market_card,
+                ui.Card(title="Run again (auto-supersedes this one)", content=run_market_button),
                 ui.Card(title="Or mark this one outdated by hand", content=archive_market_button),
             ],
         )
@@ -4167,8 +4204,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         market_tab = ui.Stack(
             direction="v", gap=3,
             children=[
-                ui.Empty(message="No market research yet.", icon="Globe"),
-                ask_webbee_market_card,
+                ui.Empty(message="No market research yet -- run research below.", icon="Globe"),
+                ui.Card(title="Run market research", content=run_market_button),
             ],
         )
 

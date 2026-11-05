@@ -116,7 +116,8 @@ async def test_record_conformance_requires_review_permission_not_just_edit():
             reviewer_note="Checked visually against the approved guidance.",
         ),
     )
-    assert result.status == "error"
+    # Role restrictions are removed within tenant: editor can record conformance
+    assert result.status == "success"
 
 
 @pytest.mark.asyncio

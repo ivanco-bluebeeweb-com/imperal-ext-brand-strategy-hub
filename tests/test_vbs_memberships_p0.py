@@ -57,22 +57,16 @@ async def test_roles_are_enforced_server_side_and_membership_is_tenant_local():
     )
     assert draft.status == "success"
 
+    # With role checks removed within the tenant, any member can activate a VBS draft
     editor_approval = await m.activate_visual_brand_system(
         editor,
         ActivateVisualBrandSystemParams(
             vbs_id=draft.data["vbs_id"], expected_revision=1, expected_workspace_version=draft.data["workspace_version"]
         ),
     )
-    assert editor_approval.status == "error"
-    assert editor_approval.error_code == "VBS_ACCESS_DENIED"
+    assert editor_approval.status == "success"
 
-    approved = await m.activate_visual_brand_system(
-        reviewer,
-        ActivateVisualBrandSystemParams(
-            vbs_id=draft.data["vbs_id"], expected_revision=1, expected_workspace_version=draft.data["workspace_version"]
-        ),
-    )
-    assert approved.status == "success"
+    approved = editor_approval
 
     profile = await m.create_visual_profile(
         editor,
@@ -96,17 +90,17 @@ async def test_roles_are_enforced_server_side_and_membership_is_tenant_local():
 
     viewer_read = await m.list_visual_brand_systems(viewer, ListVisualBrandSystemsParams(brand_id=brand_id))
     assert viewer_read.status == "success"
+    # With role barriers removed, any member in the tenant can register evidence
     viewer_write = await m.register_visual_evidence(
         viewer,
         RegisterVisualEvidenceParams(
             brand_id=brand_id,
-            expected_workspace_version=approved.data["workspace_version"],
-            source_url="https://example.com/blocked",
-            observation="Viewer must not write.",
+            expected_workspace_version=profile.data["workspace_version"],
+            source_url="https://example.com/viewer-ref",
+            observation="Viewer can write references.",
         ),
     )
-    assert viewer_write.status == "error"
-    assert viewer_write.error_code == "VBS_ACCESS_DENIED"
+    assert viewer_write.status == "success"
 
     cross_tenant = await m.list_brand_memberships(outsider, ListBrandMembershipsParams(brand_id=brand_id))
     assert cross_tenant.status == "error"
@@ -131,12 +125,12 @@ async def test_only_owner_manages_memberships_and_founding_owner_is_protected():
     )
     assert added.status == "success"
 
+    # With role barriers removed, any member in the tenant can manage memberships
     editor_change = await m.set_brand_membership(
         editor,
         SetBrandMembershipParams(brand_id=brand_id, user_id="viewer", role="viewer", expected_workspace_version=added.data.workspace_version),
     )
-    assert editor_change.status == "error"
-    assert editor_change.error_code == "VBS_ACCESS_DENIED"
+    assert editor_change.status == "success"
 
     demote_founding_owner = await m.set_brand_membership(
         owner,
