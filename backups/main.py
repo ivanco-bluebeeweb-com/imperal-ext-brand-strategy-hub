@@ -3032,6 +3032,79 @@ async def brands_panel(ctx, **kwargs) -> object:
     ])
 
 
+async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: int = 2):
+    """Retrieve document with retries for transient 5xx or connection errors."""
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            return await ctx.store.get(collection, doc_id)
+        except Exception as exc:
+            last_exc = exc
+            exc_str = str(exc)
+            exc_name = type(exc).__name__
+            is_transient = (
+                "500" in exc_str
+                or "502" in exc_str
+                or "503" in exc_str
+                or "504" in exc_str
+                or "Connect" in exc_name
+                or "Timeout" in exc_name
+            )
+            if is_transient and attempt < max_retries:
+                await asyncio.sleep(0.15 * (attempt + 1))
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+
+
+async def _store_query_resilient(ctx, collection: str, where: dict | None = None, order_by: str | None = None, limit: int = 100, max_retries: int = 1):
+    """Query store with fallback to empty list on failure, preventing secondary collection outages from crashing brand detail."""
+    for attempt in range(max_retries + 1):
+        try:
+            kwargs = {}
+            if where:
+                kwargs["where"] = where
+            if order_by:
+                kwargs["order_by"] = order_by
+            if limit:
+                kwargs["limit"] = limit
+            return await ctx.store.query(collection, **kwargs)
+        except Exception as exc:
+            exc_str = str(exc)
+            exc_name = type(exc).__name__
+            is_transient = "50" in exc_str or "Connect" in exc_name or "Timeout" in exc_name
+            if attempt < max_retries and is_transient:
+                await asyncio.sleep(0.15)
+                continue
+            class _EmptyPage:
+                data = []
+            return _EmptyPage()
+
+
+def _sanitize_storage_error(exc: Exception) -> str:
+    """Sanitize error messages to remove internal cluster URLs, hostnames, and query parameters."""
+    import re
+    msg = str(exc)
+    # Remove internal cluster hostnames and URLs
+    msg = re.sub(r"https?://[a-zA-Z0-9\.\-_]*internal[a-zA-Z0-9\.\-_:]*", "[internal service]", msg)
+    msg = re.sub(r"https?://[a-zA-Z0-9\.\-_]*whm\.cloud[a-zA-Z0-9\.\-_:]*", "[internal service]", msg)
+    msg = re.sub(r"\?[a-zA-Z0-9_\-=&%]+", "", msg)
+    if "500" in msg or "Internal Server Error" in msg:
+        return "Internal storage service error (HTTP 500). Please try again."
+    if "502" in msg or "Bad Gateway" in msg:
+        return "Storage service gateway error (HTTP 502). Please try again."
+    if "503" in msg or "Service Unavailable" in msg:
+        return "Storage service temporarily unavailable (HTTP 503). Please try again."
+    if "504" in msg or "Gateway Timeout" in msg:
+        return "Storage service request timed out (HTTP 504). Please try again."
+    if "ConnectError" in type(exc).__name__ or "ConnectTimeout" in type(exc).__name__:
+        return "Could not connect to storage service. Please check connection and try again."
+    return msg
+
+_sanitize_error_message = _sanitize_storage_error
+
+
 async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kwargs) -> object:
     """Detail overlay for one brand: action bar up top, then a tab switcher
     for Profile / SWOT / Gap Analysis / Competitors / Segments. Tabs are
@@ -3042,7 +3115,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     if not brand_id:
         return ui.Empty(message="Pick a brand from the list.", icon="🎯")
 
-    brand_doc = await ctx.store.get("brand_profiles", brand_id)
+    brand_doc = await _store_get_resilient(ctx, "brand_profiles", brand_id)
     if not brand_doc:
         return ui.Empty(message="Brand not found.", icon="⚠️")
 
@@ -3110,20 +3183,20 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         except Exception as exc:  # keep VBS storage failures inside the VBS tab
             vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
-    comp_fut = ctx.store.query(
-        "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+    comp_fut = _store_query_resilient(
+        ctx, "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
-    seg_fut = ctx.store.query(
-        "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+    seg_fut = _store_query_resilient(
+        ctx, "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
-    swot_fut = ctx.store.query(
-        "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    swot_fut = _store_query_resilient(
+        ctx, "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
     )
-    gap_fut = ctx.store.query(
-        "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    gap_fut = _store_query_resilient(
+        ctx, "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
     )
-    market_fut = ctx.store.query(
-        "market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    market_fut = _store_query_resilient(
+        ctx, "market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500
     )
 
     comp_page, seg_page, swot_page, gap_page, market_page = await asyncio.gather(
@@ -4280,13 +4353,14 @@ async def brand_detail_panel(ctx, brand_id: str = "", tab: str = "profile", **kw
     try:
         return await _render_brand_detail_panel(ctx, brand_id=brand_id, tab=tab, **kwargs)
     except Exception as exc:  # panel errors must be visible rather than a blank loading overlay
-        import traceback
-        tb = traceback.format_exc()
+        sanitized_msg = _sanitize_storage_error(exc)
         return ui.Error(
+            title="Brand Detail Error",
             message=(
                 "Brand detail could not load. Please record this reference for support: "
-                f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}: {exc}."
-            )
+                f"brand={brand_id or 'missing'}; view={tab or 'profile'}; error={type(exc).__name__}: {sanitized_msg}."
+            ),
+            retry=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=tab, **kwargs),
         )
 
 
