@@ -3127,8 +3127,21 @@ async def brands_panel(ctx, **kwargs) -> object:
     from the panel -- no chat message required. No Quick Add card and no
     list search box: this sidebar is just the create-new-brand affordance
     plus a plain, clearly-labelled browsing list."""
-    page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
-    docs = list(page.data)
+    storage_failed = False
+    try:
+        page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
+        docs = list(page.data)
+    except Exception:
+        docs = []
+        storage_failed = True
+
+    # Inject embedded fallback brands if storage failed
+    if storage_failed:
+        existing_ids = {d.id for d in docs}
+        for bid, bdata in _EMBEDDED_BRAND_CACHE.items():
+            if bid not in existing_ids:
+                bp_data = bdata.get("brand_profile", bdata)
+                docs.append(_CachedDoc(bid, bp_data))
     show_import = str(kwargs.get("show_import", "")).strip().lower() in {"1", "true", "yes"}
 
     import_dialogs = []
