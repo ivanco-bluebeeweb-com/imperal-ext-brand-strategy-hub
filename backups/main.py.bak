@@ -3097,12 +3097,12 @@ async def brands_panel(ctx, **kwargs) -> object:
 async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: int = 3):
     """Retrieve document with retries for transient 5xx or connection errors,
     falling back to query-based retrieval if direct GET fails with a 5xx error.
-    Never crashes with an unhandled exception if storage is experiencing 5xx errors;
-    returns None so the caller can render an empty or fallback state gracefully."""
+    Returns (doc, error_message). If error_message is not None, storage experienced a failure."""
     last_exc = None
     for attempt in range(max_retries + 1):
         try:
-            return await ctx.store.get(collection, doc_id)
+            doc = await ctx.store.get(collection, doc_id)
+            return doc, None
         except Exception as exc:
             last_exc = exc
             exc_str = str(exc)
@@ -3127,7 +3127,7 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
         if query_by_id and getattr(query_by_id, "data", None):
             for doc in query_by_id.data:
                 if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
-                    return doc
+                    return doc, None
     except Exception:
         pass
 
@@ -3137,7 +3137,7 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
         if query_page and getattr(query_page, "data", None):
             for doc in query_page.data:
                 if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
-                    return doc
+                    return doc, None
     except Exception:
         pass
 
@@ -3147,19 +3147,13 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
         if query_recent and getattr(query_recent, "data", None):
             for doc in query_recent.data:
                 if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
-                    return doc
+                    return doc, None
     except Exception:
         pass
 
-    # If all lookup methods failed but it was a 5xx/transient/HTTPStatusError error from the store,
-    # return None to allow graceful fallback rendering instead of hard crashing with 500 error overlay.
     if last_exc:
-        exc_str = str(last_exc)
-        exc_name = type(last_exc).__name__
-        if "500" in exc_str or "502" in exc_str or "503" in exc_str or "504" in exc_str or "HTTPStatusError" in exc_name:
-            return None
-        raise last_exc
-    return None
+        return None, _sanitize_storage_error(last_exc)
+    return None, None
 
 
 async def _store_query_resilient(ctx, collection: str, where: dict | None = None, order_by: str | None = None, limit: int = 100, max_retries: int = 2):
@@ -3219,7 +3213,33 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     if not brand_id:
         return ui.Empty(message="Pick a brand from the list.", icon="🎯")
 
-    brand_doc = await _store_get_resilient(ctx, "brand_profiles", brand_id)
+    brand_doc, brand_err = await _store_get_resilient(ctx, "brand_profiles", brand_id)
+    if brand_err:
+        return ui.Stack(
+            direction="v",
+            gap="md",
+            children=[
+                ui.Error(
+                    message=f"Storage temporarily unavailable: {brand_err}. Please try again in a few moments.",
+                    icon="⚠️",
+                ),
+                ui.Row(
+                    gap="sm",
+                    children=[
+                        ui.Button(
+                            label="Retry",
+                            action=ui.Call(
+                                "__panel__:brand-strategy-hub:brand_detail_panel",
+                                brand_id=brand_id,
+                                tab=tab,
+                            ),
+                            icon="RefreshCw",
+                            variant="primary",
+                        ),
+                    ],
+                ),
+            ],
+        )
     if not brand_doc:
         return ui.Empty(message="Brand not found.", icon="⚠️")
 
