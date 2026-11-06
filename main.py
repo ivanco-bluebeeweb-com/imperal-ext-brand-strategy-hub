@@ -1859,9 +1859,32 @@ async def update_brand_profile(ctx, params: UpdateBrandProfileParams) -> ActionR
     data_model=BrandProfileList,
 )
 async def list_brand_profiles(ctx, params: ListBrandProfilesParams) -> ActionResult:
-    """List all brand profiles."""
-    page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=params.limit)
-    items = [_to_brand_profile(d) for d in page.data]
+    """List all brand profiles with retry on transient storage errors."""
+    page = None
+    last_exc = None
+    for attempt in range(3):
+        try:
+            page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=params.limit)
+            break
+        except Exception as exc:
+            last_exc = exc
+            exc_str = str(exc)
+            if ("500" in exc_str or "502" in exc_str or "503" in exc_str or "Connect" in type(exc).__name__) and attempt < 2:
+                await asyncio.sleep(0.2 * (attempt + 1))
+                continue
+            break
+
+    if page is None:
+        if last_exc:
+            exc_str = str(last_exc)
+            if "500" in exc_str or "502" in exc_str or "503" in exc_str:
+                return ActionResult.success(BrandProfileList(items=[], total=0), summary="0 brand profile(s) (storage temporarily unavailable).")
+            return ActionResult.error(f"Could not load brand profiles: {last_exc}", retryable=True)
+        class _Empty:
+            data = []
+        page = _Empty()
+
+    items = [_to_brand_profile(d) for d in getattr(page, "data", [])]
     return ActionResult.success(BrandProfileList(items=items, total=len(items)), summary=f"{len(items)} brand profile(s).")
 
 
