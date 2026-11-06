@@ -70,129 +70,6 @@ from converters import (
     to_target_segment as _to_target_segment,
 )
 
-class _CachedDoc:
-    def __init__(self, doc_id: str, data: dict):
-        self.id = doc_id
-        self.data = data
-
-_KSR_BRAND_ID = "6e122b5c-1d89-4b34-bb14-de33a1689d7a"
-_KSR_BRAND_ID_ALT = "6ae634d0-1227-4a1c-97c8-58653fd0d0e0"
-
-_KSR_DATA = {
-    "brand_profile": {
-        "id": _KSR_BRAND_ID,
-        "brand_name": "KS Renovation Group",
-        "industry": "строительство и премиальный ремонт",
-        "site_id": "ksr.bluebeeweb.com",
-        "mission": "Создание бескомпромиссного качества жилых и коммерческих пространств с полным контролем сроков и бюджета.",
-        "vision": "Стать эталоном генерального подряда и премиального девелопмента в регионе.",
-        "value_proposition": "Прозрачная смета, фиксированные сроки по договору, 5 лет гарантии на все виды отделочных и инженерных работ.",
-        "tone_of_voice": "Уверенный, экспертный, сдержанный, без профессионального жаргона.",
-        "unique_selling_points": [
-            "Собственный штат узкопрофильных специалистов без субподрядчиков с улицы",
-            "Фиксированная смета без скрытых доплат по ходу проекта",
-            "Онлайн-видеонаблюдение и ежедневные фотоотчеты со строительной площадки",
-            "Гарантия 5 лет по официальному договору",
-        ],
-        "content_topics": [
-            "премиальный ремонт",
-            "дизайн интерьера",
-            "инженерные системы",
-            "технический надзор",
-            "ремонт под ключ",
-        ],
-    },
-    "competitor_profiles": [
-        {
-            "id": "comp-ksr-1",
-            "brand_id": _KSR_BRAND_ID,
-            "name": "Elite Remont Pro",
-            "url": "https://eliteremont.example.com",
-            "strengths": ["Активный маркетинг в соцсетях", "Широкий портфель типовых проектов"],
-            "weaknesses": ["Привлечение случайных субподрядчиков", "Частый перенос сроков сдачи объектов"],
-            "notes": "Основной конкурент в среднем и премиальном сегменте жилой недвижимости.",
-        },
-        {
-            "id": "comp-ksr-2",
-            "brand_id": _KSR_BRAND_ID,
-            "name": "Prime Construction",
-            "url": "https://primebuild.example.com",
-            "strengths": ["Крупные коммерческие подряды", "Низкие цены на черновой материал"],
-            "weaknesses": ["Слабый клиентский сервис и отсутствие прозрачной отчетности", "Бюрократичность"],
-            "notes": "Сильные позиции в B2B и коммерческих объектах.",
-        },
-    ],
-    "target_segments": [
-        {
-            "id": "seg-ksr-1",
-            "brand_id": _KSR_BRAND_ID,
-            "segment_name": "Владельцы премиальной недвижимости",
-            "demographics": "Возраст 30-55 лет, предприниматели, топ-менеджеры, владельцы квартир от 100 м² и загородных домов.",
-            "psychographics": "Ценят свое время, комфорт, надежность и предсказуемость. Не хотят вникать в строительную рутину.",
-            "pain_points": [
-                "Срывы сроков сдачи",
-                "Раздувание сметы в процессе работ",
-                "Необходимость постоянно контролировать рабочих",
-                "Низкое качество скрытых инженерных работ",
-            ],
-            "needs": [
-                "Ремонт под ключ с гарантией по договору",
-                "Фиксированная смета без сюрпризов",
-                "Регулярные понятные отчеты и прозрачность",
-                "Высокая культура производства на объекте",
-            ],
-            "preferred_channels": ["Персональные рекомендации", "Премиальные выставки и интерьерные журналы", "Telegram-канал", "Instagram"],
-        },
-    ],
-    "swot_results": [
-        {
-            "id": "swot-ksr-1",
-            "brand_id": _KSR_BRAND_ID,
-            "is_current": True,
-            "strengths": [
-                "Собственный штат узкопрофильных специалистов без субподрядчиков с улицы",
-                "Фиксированная смета без скрытых доплат по ходу проекта",
-                "Онлайн-видеонаблюдение и ежедневные фотоотчеты со строительной площадки",
-                "Гарантия 5 лет по официальному договору",
-                "Clear value proposition: Прозрачная смета, фиксированные сроки по договору, 5 лет гарантии на все виды отделочных и инженерных работ.",
-                "Defined tone of voice: Уверенный, экспертный, сдержанный, без профессионального жаргона.",
-            ],
-            "weaknesses": [
-                "Более высокий средний чек по сравнению с частными бригадами",
-            ],
-            "opportunities": [
-                "Elite Remont Pro weakness to exploit: Привлечение случайных субподрядчиков",
-                "Elite Remont Pro weakness to exploit: Частый перенос сроков сдачи объектов",
-                "Prime Construction weakness to exploit: Слабый клиентский сервис и отсутствие прозрачной отчетности",
-            ],
-            "threats": [
-                "Elite Remont Pro strength to watch: Активный маркетинг в соцсетях",
-                "Prime Construction strength to watch: Крупные коммерческие подряды",
-            ],
-            "superseded_at": "",
-        },
-    ],
-    "market_research_snapshots": [
-        {
-            "id": "market-ksr-1",
-            "brand_id": _KSR_BRAND_ID,
-            "is_current": True,
-            "industry": "строительство и премиальный ремонт",
-            "landscape_summary": "Рынок премиального ремонта и отделки характеризуется высоким спросом на прозрачность, соблюдение сроков и квалифицированный технический надзор. Клиенты устали от непрозрачных смет и срывов дедлайнов.",
-            "tracked_competitors": ["Elite Remont Pro", "Prime Construction"],
-            "candidate_competitors": [],
-            "sourcing_trail": [],
-            "superseded_at": "",
-        },
-    ],
-}
-
-_EMBEDDED_BRAND_CACHE = {
-    _KSR_BRAND_ID: _KSR_DATA,
-    _KSR_BRAND_ID_ALT: _KSR_DATA,
-}
-
-
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -3131,21 +3008,8 @@ async def brands_panel(ctx, **kwargs) -> object:
     from the panel -- no chat message required. No Quick Add card and no
     list search box: this sidebar is just the create-new-brand affordance
     plus a plain, clearly-labelled browsing list."""
-    storage_failed = False
-    try:
-        page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
-        docs = list(page.data)
-    except Exception:
-        docs = []
-        storage_failed = True
-
-    # Inject embedded fallback brands if storage failed or in production when missing
-    if storage_failed:
-        existing_ids = {d.id for d in docs}
-        for bid, bdata in _EMBEDDED_BRAND_CACHE.items():
-            if bid not in existing_ids:
-                bp_data = bdata.get("brand_profile", bdata)
-                docs.append(_CachedDoc(bid, bp_data))
+    page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=200)
+    docs = list(page.data)
     show_import = str(kwargs.get("show_import", "")).strip().lower() in {"1", "true", "yes"}
 
     import_dialogs = []
@@ -3350,12 +3214,6 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         return ui.Empty(message="Pick a brand from the list.", icon="🎯")
 
     brand_doc, brand_err = await _store_get_resilient(ctx, "brand_profiles", brand_id)
-    if (not brand_doc or brand_err) and brand_id in _EMBEDDED_BRAND_CACHE:
-        cache_entry = _EMBEDDED_BRAND_CACHE[brand_id]
-        brand_profile_data = cache_entry.get("brand_profile", cache_entry)
-        brand_doc = _CachedDoc(brand_id, brand_profile_data)
-        brand_err = None
-
     if brand_err:
         return ui.Stack(
             direction="v",
@@ -3387,7 +3245,6 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ),
             ],
         )
-
     if not brand_doc:
         return ui.Empty(message="Brand not found.", icon="⚠️")
 
