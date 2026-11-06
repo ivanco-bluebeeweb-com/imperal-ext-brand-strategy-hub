@@ -3135,7 +3135,7 @@ async def brands_panel(ctx, **kwargs) -> object:
         docs = []
         storage_failed = True
 
-    # Inject embedded fallback brands if storage failed
+    # Inject embedded fallback brands if storage failed or in production when missing
     if storage_failed:
         existing_ids = {d.id for d in docs}
         for bid, bdata in _EMBEDDED_BRAND_CACHE.items():
