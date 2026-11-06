@@ -8,3 +8,6 @@ __pycache__/
 .imperal/
 .DS_Store
 manifest.json
+*.egg-info/
+*.egg-info
+
