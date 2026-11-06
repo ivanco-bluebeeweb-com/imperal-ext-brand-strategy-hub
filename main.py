@@ -3071,9 +3071,11 @@ async def brands_panel(ctx, **kwargs) -> object:
     ])
 
 
-async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: int = 2):
+async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: int = 3):
     """Retrieve document with retries for transient 5xx or connection errors,
-    falling back to query-based retrieval if direct GET fails with a 5xx error."""
+    falling back to query-based retrieval if direct GET fails with a 5xx error.
+    Never crashes with an unhandled exception if storage is experiencing 5xx errors;
+    returns None so the caller can render an empty or fallback state gracefully."""
     last_exc = None
     for attempt in range(max_retries + 1):
         try:
@@ -3095,23 +3097,48 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
                 continue
             break
 
-    # Fallback strategy: if direct get fails with 5xx/storage error, query the collection
-    # directly. Often the collection query route works even when the single-item key lookup fails.
+    # Fallback strategy 1: query specific document by where={"id": doc_id}
     try:
-        query_page = await ctx.store.query(collection, limit=500)
-        for doc in query_page.data:
-            if doc.id == doc_id:
-                return doc
+        query_by_id = await ctx.store.query(collection, where={"id": doc_id}, limit=1)
+        if query_by_id and getattr(query_by_id, "data", None):
+            for doc in query_by_id.data:
+                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
+                    return doc
     except Exception:
         pass
 
+    # Fallback strategy 2: query collection list and match doc_id in memory
+    try:
+        query_page = await ctx.store.query(collection, limit=500)
+        if query_page and getattr(query_page, "data", None):
+            for doc in query_page.data:
+                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
+                    return doc
+    except Exception:
+        pass
+
+    # Fallback strategy 3: query with order_by="-created_at" (same path as brands_panel)
+    try:
+        query_recent = await ctx.store.query(collection, order_by="-created_at", limit=500)
+        if query_recent and getattr(query_recent, "data", None):
+            for doc in query_recent.data:
+                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
+                    return doc
+    except Exception:
+        pass
+
+    # If all lookup methods failed but it was a 5xx/transient error from the store,
+    # return None to allow graceful fallback rendering instead of hard crashing with 500 error overlay.
     if last_exc:
+        exc_str = str(last_exc)
+        if "500" in exc_str or "502" in exc_str or "503" in exc_str or "504" in exc_str:
+            return None
         raise last_exc
     return None
 
 
-async def _store_query_resilient(ctx, collection: str, where: dict | None = None, order_by: str | None = None, limit: int = 100, max_retries: int = 1):
-    """Query store with fallback to empty list on failure, preventing secondary collection outages from crashing brand detail."""
+async def _store_query_resilient(ctx, collection: str, where: dict | None = None, order_by: str | None = None, limit: int = 100, max_retries: int = 2):
+    """Query store with retry and fallback to empty list on failure, preventing secondary collection outages from crashing brand detail."""
     for attempt in range(max_retries + 1):
         try:
             kwargs = {}
@@ -3127,7 +3154,7 @@ async def _store_query_resilient(ctx, collection: str, where: dict | None = None
             exc_name = type(exc).__name__
             is_transient = "50" in exc_str or "Connect" in exc_name or "Timeout" in exc_name
             if attempt < max_retries and is_transient:
-                await asyncio.sleep(0.15)
+                await asyncio.sleep(0.15 * (attempt + 1))
                 continue
             class _EmptyPage:
                 data = []
