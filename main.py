@@ -3102,7 +3102,8 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
     for attempt in range(max_retries + 1):
         try:
             doc = await ctx.store.get(collection, doc_id)
-            return doc, None
+            if doc is not None:
+                return doc, None
         except Exception as exc:
             last_exc = exc
             exc_str = str(exc)
@@ -3121,35 +3122,35 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
                 continue
             break
 
-    # Fallback strategy 1: query specific document by where={"id": doc_id}
-    try:
-        query_by_id = await ctx.store.query(collection, where={"id": doc_id}, limit=1)
-        if query_by_id and getattr(query_by_id, "data", None):
-            for doc in query_by_id.data:
-                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
-                    return doc, None
-    except Exception:
-        pass
-
-    # Fallback strategy 2: query collection list and match doc_id in memory
-    try:
-        query_page = await ctx.store.query(collection, limit=500)
-        if query_page and getattr(query_page, "data", None):
-            for doc in query_page.data:
-                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
-                    return doc, None
-    except Exception:
-        pass
-
-    # Fallback strategy 3: query with order_by="-created_at" (same path as brands_panel)
+    # Fallback strategy 1: query collection with order_by="-created_at" (matches brands_panel exactly)
     try:
         query_recent = await ctx.store.query(collection, order_by="-created_at", limit=500)
         if query_recent and getattr(query_recent, "data", None):
             for doc in query_recent.data:
                 if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
                     return doc, None
-    except Exception:
-        pass
+    except Exception as q_exc:
+        last_exc = q_exc or last_exc
+
+    # Fallback strategy 2: query collection without ordering
+    try:
+        query_page = await ctx.store.query(collection, limit=500)
+        if query_page and getattr(query_page, "data", None):
+            for doc in query_page.data:
+                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
+                    return doc, None
+    except Exception as q_exc:
+        last_exc = q_exc or last_exc
+
+    # Fallback strategy 3: query specific document by where={"id": doc_id}
+    try:
+        query_by_id = await ctx.store.query(collection, where={"id": doc_id}, limit=10)
+        if query_by_id and getattr(query_by_id, "data", None):
+            for doc in query_by_id.data:
+                if doc.id == doc_id or getattr(doc, "data", {}).get("id") == doc_id:
+                    return doc, None
+    except Exception as q_exc:
+        last_exc = q_exc or last_exc
 
     if last_exc:
         return None, _sanitize_storage_error(last_exc)
