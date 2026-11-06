@@ -3333,6 +3333,12 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         return ui.Empty(message="Pick a brand from the list.", icon="🎯")
 
     brand_doc, brand_err = await _store_get_resilient(ctx, "brand_profiles", brand_id)
+    if (not brand_doc or brand_err) and brand_id in _EMBEDDED_BRAND_CACHE:
+        cache_entry = _EMBEDDED_BRAND_CACHE[brand_id]
+        brand_profile_data = cache_entry.get("brand_profile", cache_entry)
+        brand_doc = _CachedDoc(brand_id, brand_profile_data)
+        brand_err = None
+
     if brand_err:
         return ui.Stack(
             direction="v",
@@ -3364,12 +3370,6 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ),
             ],
         )
-    # Check local fallback cache if not found in primary store
-    if not brand_doc and brand_id in _EMBEDDED_BRAND_CACHE:
-        cache_entry = _EMBEDDED_BRAND_CACHE[brand_id]
-        brand_profile_data = cache_entry.get("brand_profile", cache_entry)
-        brand_doc = _CachedDoc(brand_id, brand_profile_data)
-        # Also pre-populate fallback data for competitors, segments, swot, gap, market if needed
 
     if not brand_doc:
         return ui.Empty(message="Brand not found.", icon="⚠️")
