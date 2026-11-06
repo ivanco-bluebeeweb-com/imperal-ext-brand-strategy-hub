@@ -3220,20 +3220,25 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             gap="md",
             children=[
                 ui.Error(
+                    title="Storage Unavailable",
                     message=f"Storage temporarily unavailable: {brand_err}. Please try again in a few moments.",
-                    icon="⚠️",
+                    retry=ui.Call(
+                        "__panel__:brand-strategy-hub:brand_detail_panel",
+                        brand_id=brand_id,
+                        tab=tab,
+                    ),
                 ),
                 ui.Row(
                     gap="sm",
                     children=[
                         ui.Button(
                             label="Retry",
-                            action=ui.Call(
+                            on_click=ui.Call(
                                 "__panel__:brand-strategy-hub:brand_detail_panel",
                                 brand_id=brand_id,
                                 tab=tab,
                             ),
-                            icon="RefreshCw",
+                            icon="refresh-cw",
                             variant="primary",
                         ),
                     ],
