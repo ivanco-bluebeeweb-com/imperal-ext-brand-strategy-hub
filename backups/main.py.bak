@@ -1859,9 +1859,32 @@ async def update_brand_profile(ctx, params: UpdateBrandProfileParams) -> ActionR
     data_model=BrandProfileList,
 )
 async def list_brand_profiles(ctx, params: ListBrandProfilesParams) -> ActionResult:
-    """List all brand profiles."""
-    page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=params.limit)
-    items = [_to_brand_profile(d) for d in page.data]
+    """List all brand profiles with retry on transient storage errors."""
+    page = None
+    last_exc = None
+    for attempt in range(3):
+        try:
+            page = await ctx.store.query("brand_profiles", order_by="-created_at", limit=params.limit)
+            break
+        except Exception as exc:
+            last_exc = exc
+            exc_str = str(exc)
+            if ("500" in exc_str or "502" in exc_str or "503" in exc_str or "Connect" in type(exc).__name__) and attempt < 2:
+                await asyncio.sleep(0.2 * (attempt + 1))
+                continue
+            break
+
+    if page is None:
+        if last_exc:
+            exc_str = str(last_exc)
+            if "500" in exc_str or "502" in exc_str or "503" in exc_str:
+                return ActionResult.success(BrandProfileList(items=[], total=0), summary="0 brand profile(s) (storage temporarily unavailable).")
+            return ActionResult.error(f"Could not load brand profiles: {last_exc}", retryable=True)
+        class _Empty:
+            data = []
+        page = _Empty()
+
+    items = [_to_brand_profile(d) for d in getattr(page, "data", [])]
     return ActionResult.success(BrandProfileList(items=items, total=len(items)), summary=f"{len(items)} brand profile(s).")
 
 
@@ -3091,6 +3114,7 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
                 or "504" in exc_str
                 or "Connect" in exc_name
                 or "Timeout" in exc_name
+                or "HTTPStatusError" in exc_name
             )
             if is_transient and attempt < max_retries:
                 await asyncio.sleep(0.15 * (attempt + 1))
@@ -3127,11 +3151,12 @@ async def _store_get_resilient(ctx, collection: str, doc_id: str, max_retries: i
     except Exception:
         pass
 
-    # If all lookup methods failed but it was a 5xx/transient error from the store,
+    # If all lookup methods failed but it was a 5xx/transient/HTTPStatusError error from the store,
     # return None to allow graceful fallback rendering instead of hard crashing with 500 error overlay.
     if last_exc:
         exc_str = str(last_exc)
-        if "500" in exc_str or "502" in exc_str or "503" in exc_str or "504" in exc_str:
+        exc_name = type(last_exc).__name__
+        if "500" in exc_str or "502" in exc_str or "503" in exc_str or "504" in exc_str or "HTTPStatusError" in exc_name:
             return None
         raise last_exc
     return None
@@ -3262,25 +3287,52 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         except Exception as exc:  # keep VBS storage failures inside the VBS tab
             vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
-    comp_fut = _store_query_resilient(
-        ctx, "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+    # Resilient loading of auxiliary collections
+    async def _safe_gather_query(coll_name: str, **kwargs):
+        try:
+            return await _store_query_resilient(ctx, coll_name, **kwargs)
+        except Exception:
+            class _FallbackEmpty:
+                data = []
+            return _FallbackEmpty()
+
+    comp_fut = _safe_gather_query(
+        "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
-    seg_fut = _store_query_resilient(
-        ctx, "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+    seg_fut = _safe_gather_query(
+        "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
     )
-    swot_fut = _store_query_resilient(
-        ctx, "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    swot_fut = _safe_gather_query(
+        "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
     )
-    gap_fut = _store_query_resilient(
-        ctx, "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    gap_fut = _safe_gather_query(
+        "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
     )
-    market_fut = _store_query_resilient(
-        ctx, "market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+    market_fut = _safe_gather_query(
+        "market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500
     )
 
-    comp_page, seg_page, swot_page, gap_page, market_page = await asyncio.gather(
-        comp_fut, seg_fut, swot_fut, gap_fut, market_fut
-    )
+    try:
+        comp_page, seg_page, swot_page, gap_page, market_page = await asyncio.gather(
+            comp_fut, seg_fut, swot_fut, gap_fut, market_fut, return_exceptions=True
+        )
+    except Exception:
+        class _FallbackEmpty:
+            data = []
+        comp_page = seg_page = swot_page = gap_page = market_page = _FallbackEmpty()
+
+    class _FallbackEmpty:
+        data = []
+    if isinstance(comp_page, Exception) or not hasattr(comp_page, "data"):
+        comp_page = _FallbackEmpty()
+    if isinstance(seg_page, Exception) or not hasattr(seg_page, "data"):
+        seg_page = _FallbackEmpty()
+    if isinstance(swot_page, Exception) or not hasattr(swot_page, "data"):
+        swot_page = _FallbackEmpty()
+    if isinstance(gap_page, Exception) or not hasattr(gap_page, "data"):
+        gap_page = _FallbackEmpty()
+    if isinstance(market_page, Exception) or not hasattr(market_page, "data"):
+        market_page = _FallbackEmpty()
 
     competitors = [{"id": d.id, **d.data} for d in comp_page.data]
     segments = list(seg_page.data)
