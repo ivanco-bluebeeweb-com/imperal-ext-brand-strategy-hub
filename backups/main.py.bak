@@ -3015,7 +3015,7 @@ async def brands_panel(ctx, **kwargs) -> object:
     import_dialogs = []
     if show_import:
         import_dialogs.append(
-            ui.Dialog(
+            ui.Modal(
                 title="Import Project (JSON)",
                 content=ui.Stack(
                     direction="v", gap=2,
@@ -3028,7 +3028,7 @@ async def brands_panel(ctx, **kwargs) -> object:
                                 ui.TextArea(
                                     param_name="json_data",
                                     placeholder="Paste project JSON here...",
-                                    min_length=2,
+                                    rows=10,
                                 ),
                             ],
                         ),
