@@ -612,3 +612,57 @@ async def test_import_user_payload():
     # Verify visual brand workspace
     ws = await ctx.store.query("vbs_workspaces", where={"brand_id": b_id})
     assert len(ws.data) == 1
+@pytest.mark.asyncio
+async def test_import_deduplication():
+    """Verify that importing JSON multiple times or when brand exists by site_id/name does not create duplicates."""
+    payload = {
+        "format": "imperal:brand_project_export:v1",
+        "brand_id": "test-dedup-id-1",
+        "brand_profile": {
+            "id": "test-dedup-id-1",
+            "data": {
+                "site_id": "dedup-test.com",
+                "brand_name": "Dedup Test Brand",
+                "mission": "Original mission",
+            }
+        },
+        "collections": {}
+    }
+    raw_json = json.dumps(payload)
+    ctx = MockContext(user_id="imp_u_test", tenant_id="tenant-dedup")
+
+    # First import
+    res1 = await import_brand_project(ctx, ImportBrandProjectParams(json_data=raw_json))
+    assert res1.status == "success"
+
+    all_brands_1 = await ctx.store.query("brand_profiles")
+    assert len(all_brands_1.data) == 1
+    assert all_brands_1.data[0].data["brand_name"] == "Dedup Test Brand"
+
+    # Second import with same JSON
+    res2 = await import_brand_project(ctx, ImportBrandProjectParams(json_data=raw_json))
+    assert res2.status == "success"
+
+    all_brands_2 = await ctx.store.query("brand_profiles")
+    assert len(all_brands_2.data) == 1, "Duplicate brand profile was created on re-import"
+
+    # Third import with different exported ID but matching site_id
+    payload_diff_id = {
+        "format": "imperal:brand_project_export:v1",
+        "brand_id": "different-exported-id",
+        "brand_profile": {
+            "id": "different-exported-id",
+            "data": {
+                "site_id": "dedup-test.com",
+                "brand_name": "Dedup Test Brand",
+                "mission": "Updated mission",
+            }
+        },
+        "collections": {}
+    }
+    res3 = await import_brand_project(ctx, ImportBrandProjectParams(json_data=json.dumps(payload_diff_id)))
+    assert res3.status == "success"
+
+    all_brands_3 = await ctx.store.query("brand_profiles")
+    assert len(all_brands_3.data) == 1, "Brand duplicated despite matching site_id"
+    assert all_brands_3.data[0].data["mission"] == "Updated mission"

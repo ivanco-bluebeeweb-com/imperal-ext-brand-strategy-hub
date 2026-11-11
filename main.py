@@ -2716,20 +2716,40 @@ async def import_brand_project(ctx, params: ImportBrandProjectParams) -> ActionR
         return ActionResult.error("Export payload is missing brand_profile data.", retryable=False, code="MISSING_BRAND_PROFILE")
 
     actor_id, tenant_id = _actor(ctx)
-    target_brand_id = (params.brand_id or payload.get("brand_id") or brand_profile_obj.get("id") or "").strip()
-    if not target_brand_id:
-        return ActionResult.error("Target brand_id could not be determined.", retryable=False, code="MISSING_BRAND_ID")
-
+    requested_brand_id = (params.brand_id or payload.get("brand_id") or brand_profile_obj.get("id") or "").strip()
     brand_data = dict(brand_profile_obj.get("data", {}))
-    brand_name = brand_data.get("brand_name", "") or target_brand_id
+    brand_name = (brand_data.get("brand_name") or requested_brand_id).strip()
+    site_id = (brand_data.get("site_id") or "").strip()
+
+    # Deduplicate existing brand profile in this tenant by ID, site_id, or brand_name
+    existing_brand = None
+    if requested_brand_id:
+        existing_brand = await ctx.store.get("brand_profiles", requested_brand_id)
+    if not existing_brand and site_id:
+        s_page = await ctx.store.query("brand_profiles", where={"site_id": site_id}, limit=1)
+        if s_page.data:
+            existing_brand = s_page.data[0]
+    if not existing_brand and brand_name:
+        all_brands_page = await ctx.store.query("brand_profiles", limit=500)
+        for b_doc in all_brands_page.data:
+            if b_doc.data.get("brand_name", "").strip().lower() == brand_name.lower():
+                existing_brand = b_doc
+                break
+
     records_count = 0
     collections_updated = []
 
-    # 1. Store or update brand_profile
-    if target_brand_id:
-        await _store_upsert(ctx, "brand_profiles", target_brand_id, brand_data)
+    # 1. Store or update brand_profile idempotently
+    if existing_brand:
+        target_brand_id = existing_brand.id
+        await ctx.store.update("brand_profiles", existing_brand.id, {**existing_brand.data, **brand_data})
     else:
-        await ctx.store.create("brand_profiles", brand_data)
+        created_bp = await _store_upsert(ctx, "brand_profiles", requested_brand_id, brand_data)
+        target_brand_id = getattr(created_bp, "id", None) or requested_brand_id
+
+    if not target_brand_id:
+        return ActionResult.error("Target brand_id could not be determined.", retryable=False, code="MISSING_BRAND_ID")
+
     records_count += 1
     collections_updated.append("brand_profiles")
 
