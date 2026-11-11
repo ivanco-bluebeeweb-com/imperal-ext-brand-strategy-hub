@@ -2593,16 +2593,22 @@ async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by:
 async def _store_upsert(ctx, collection: str, doc_id: str, data: dict):
     """Upsert a document preserving its exact ID across accounts and stores."""
     payload = {"id": doc_id, **data} if (doc_id and "id" not in data) else data
-    if hasattr(ctx.store, "set"):
-        key = f"{collection}/{doc_id}" if doc_id else collection
-        return await ctx.store.set(key, payload)
-    existing = await ctx.store.get(collection, doc_id) if doc_id else None
-    if existing:
-        return await ctx.store.update(collection, doc_id, payload)
+    if doc_id:
+        existing = await ctx.store.get(collection, doc_id)
+        if existing:
+            return await ctx.store.update(collection, doc_id, payload)
+    if hasattr(ctx.store, "set") and doc_id:
+        key = f"{collection}/{doc_id}"
+        try:
+            return await ctx.store.set(key, payload)
+        except Exception:
+            pass
     try:
-        return await ctx.store.update(collection, doc_id, payload)
+        if doc_id:
+            return await ctx.store.update(collection, doc_id, payload)
     except Exception:
-        return await ctx.store.create(collection, payload)
+        pass
+    return await ctx.store.create(collection, payload)
 
 
 ALL_BRAND_COLLECTIONS = [
