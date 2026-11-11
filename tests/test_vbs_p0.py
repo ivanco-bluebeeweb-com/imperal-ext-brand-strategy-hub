@@ -174,13 +174,12 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     ctx = MockContext()
     brand_id = await _brand(ctx)
 
+    # Visual System works immediately out of the box without manual setup blockers
     uninitialized = await m.brand_detail_panel(ctx, brand_id=brand_id, tab="visual_system")
     rendered_uninitialized = repr(uninitialized)
-    assert "Set up visual brand rules" in rendered_uninitialized
     assert "Visual System" in rendered_uninitialized
-    assert "initialize_visual_brand_workspace" in rendered_uninitialized
-    assert "Turn it on — I own this brand" in rendered_uninitialized
-    assert "confirm_owner_claim" in rendered_uninitialized
+    assert "Set your visual style" in rendered_uninitialized
+    assert "create_visual_brand_system" in rendered_uninitialized
 
     await _workspace(ctx, brand_id)
     evidence = await m.register_visual_evidence(
@@ -213,10 +212,6 @@ async def test_visual_system_panel_has_safe_empty_and_owned_workspace_states():
     assert "'value': 'No additional notes.'" in rendered
     assert "expected_status" in rendered
     assert "Turn your style into a working profile" in rendered
-    assert "Who can see and edit this" in rendered
-    assert "set_brand_membership" in rendered
-    assert "Their Imperal user ID" in rendered
-    assert "You need edit access and an approved style" in rendered
     assert "Audit trail" in rendered
     assert "Visual style only" in rendered
     assert "Not supported yet" in rendered

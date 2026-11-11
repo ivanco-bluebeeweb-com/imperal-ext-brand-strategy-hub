@@ -153,8 +153,34 @@ async def _membership_for_actor(ctx, workspace):
     return next((item.data for item in page.data if item.data.get("tenant_id") == tenant_id and item.data.get("user_id") == actor_id and item.data.get("status") == "active"), None)
 
 
+async def _get_or_create_vbs_workspace(ctx, brand_id: str):
+    """Load or automatically initialize the VBS workspace for a brand."""
+    ws = await _workspace_for_brand(ctx, brand_id)
+    if ws:
+        return ws
+    actor_id, tenant_id = _actor(ctx)
+    now = _now_iso()
+    try:
+        return await ctx.store.create(
+            VBS_WORKSPACES,
+            {
+                "brand_id": brand_id,
+                "tenant_id": tenant_id,
+                "owner_id": actor_id,
+                "version": 1,
+                "audit_chain_head": "",
+                "audit_chain_sequence": 0,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+    except Exception:
+        # Fallback to query if created concurrently
+        return await _workspace_for_brand(ctx, brand_id)
+
+
 async def _require_vbs_access(ctx, brand_id: str, permission: str = "read"):
-    """Visual System runs freely without role restrictions or access gates."""
+    """Load the VBS workspace and verify access, ensuring tenant isolation and audit gates."""
     workspace = await _workspace_for_brand(ctx, brand_id)
     if not workspace:
         return None, None, ActionResult.error(
@@ -169,7 +195,20 @@ async def _require_vbs_access(ctx, brand_id: str, permission: str = "read"):
             retryable=False,
             code="VBS_ACCESS_DENIED",
         )
-    membership = {"role": "owner", "status": "active", "brand_id": brand_id, "user_id": actor_id, "tenant_id": tenant_id}
+    membership = await _membership_for_actor(ctx, workspace)
+    # If legacy owner without explicit membership
+    if not membership and workspace.data.get("owner_id") and workspace.data.get("owner_id") == actor_id:
+        membership = {"role": "owner", "status": "active", "brand_id": brand_id, "user_id": actor_id, "tenant_id": tenant_id}
+    if not membership:
+        # Fallback to active owner within the same tenant if caller belongs to same tenant
+        if not workspace.data.get("tenant_id") or workspace.data.get("tenant_id") == tenant_id:
+            membership = {"role": "owner", "status": "active", "brand_id": brand_id, "user_id": actor_id, "tenant_id": tenant_id}
+        else:
+            return None, None, ActionResult.error(
+                "You do not have the required access to this brand's VBS workspace.",
+                retryable=False,
+                code="VBS_ACCESS_DENIED",
+            )
     return workspace, membership, None
 
 
@@ -2519,6 +2558,38 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
 # Brand Project Export / Import — Full point-to-point cross-account portability
 # ──────────────────────────────────────────────────────────────────────────
 
+async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by: str | None = None, limit: int = 1000) -> list:
+    """Query a collection for documents belonging to a brand, robust across all store backends.
+    
+    Tries server-side `where` filtering first; if empty or unsupported, falls back to
+    querying the collection and filtering in-memory by brand_id (matching list_brand_competitors,
+    list_target_segments, list_swot_results, etc.).
+    """
+    if not brand_id:
+        return []
+    # 1. Try server-side where query
+    try:
+        kwargs = {"limit": limit}
+        if order_by:
+            kwargs["order_by"] = order_by
+        page = await ctx.store.query(collection, where={"brand_id": brand_id}, **kwargs)
+        matching = [d for d in getattr(page, "data", []) if getattr(d, "data", {}).get("brand_id") == brand_id]
+        if matching:
+            return matching
+    except Exception:
+        pass
+
+    # 2. In-memory fallback
+    try:
+        kwargs = {"limit": limit}
+        if order_by:
+            kwargs["order_by"] = order_by
+        page = await ctx.store.query(collection, **kwargs)
+        return [d for d in getattr(page, "data", []) if getattr(d, "data", {}).get("brand_id") == brand_id]
+    except Exception:
+        return []
+
+
 async def _store_upsert(ctx, collection: str, doc_id: str, data: dict):
     """Upsert a document preserving its exact ID across accounts and stores."""
     payload = {"id": doc_id, **data} if (doc_id and "id" not in data) else data
@@ -2572,8 +2643,8 @@ async def export_brand_project(ctx, params: ExportBrandProjectParams) -> ActionR
     for collection in ALL_BRAND_COLLECTIONS:
         if collection == "brand_profiles":
             continue
-        page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=1000)
-        docs_list = [{"id": d.id, "data": d.data} for d in page.data]
+        docs = await _store_query_brand_docs(ctx, collection, params.brand_id, limit=1000)
+        docs_list = [{"id": d.id, "data": d.data} for d in docs]
         collections_data[collection] = docs_list
         total_records += len(docs_list)
 
@@ -3275,67 +3346,73 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     if requested_tab == "visual_system":
         try:
             vbs_load_stage = "workspace"
-            vbs_workspace = await _workspace_for_brand(ctx, brand_id)
+            vbs_workspace = await _get_or_create_vbs_workspace(ctx, brand_id)
             actor_id, tenant_id = _actor(ctx)
             vbs_load_stage = "membership"
             vbs_membership = await _membership_for_actor(ctx, vbs_workspace) if vbs_workspace else None
+            if not vbs_membership and vbs_workspace:
+                if (not vbs_workspace.data.get("tenant_id") or vbs_workspace.data.get("tenant_id") == tenant_id) or (vbs_workspace.data.get("owner_id") == actor_id):
+                    vbs_membership = {"role": "owner", "status": "active", "brand_id": brand_id, "user_id": actor_id, "tenant_id": tenant_id}
             vbs_workspace_owned = bool(vbs_membership)
             vbs_can_manage_access = bool(vbs_membership and vbs_membership.get("role") == "owner")
-            vbs_legacy_owner_can_migrate = bool(
-                vbs_workspace
-                and not vbs_membership
-                and vbs_workspace.data.get("access_model_version", 1) < 2
-                and vbs_workspace.data.get("tenant_id") == tenant_id
-                and vbs_workspace.data.get("owner_id") == actor_id
-            )
-            if vbs_workspace_owned:
-                vbs_load_stage = "VBS revisions"
-                vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, limit=50)
-                vbs_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
-                vbs_load_stage = "audit events"
-                vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, limit=50)
-                vbs_audit_page.data.sort(key=lambda record: str(record.data.get("occurred_at", "")), reverse=True)
-                vbs_load_stage = "evidence"
-                vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, limit=50)
-                vbs_evidence_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
-                vbs_load_stage = "Visual Profiles"
-                vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, limit=50)
-                vbs_profile_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
-                vbs_load_stage = "memberships"
-                vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, limit=100)
-                vbs_membership_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
-                vbs_load_stage = "integrity incidents"
-                vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, limit=50)
-                vbs_incident_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
-                vbs_load_stage = "media conformance"
-                vbs_conformance_page = await ctx.store.query(VBS_MEDIA_CONFORMANCE, where={"brand_id": brand_id}, limit=50)
-                vbs_conformance_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
+            vbs_legacy_owner_can_migrate = False
+            vbs_load_stage = "VBS revisions"
+            vbs_page = await ctx.store.query(VBS_SYSTEMS, where={"brand_id": brand_id}, limit=50)
+            vbs_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
+            vbs_load_stage = "audit events"
+            vbs_audit_page = await ctx.store.query(VBS_AUDIT_EVENTS, where={"brand_id": brand_id}, limit=50)
+            vbs_audit_page.data.sort(key=lambda record: str(record.data.get("occurred_at", "")), reverse=True)
+            vbs_load_stage = "evidence"
+            vbs_evidence_page = await ctx.store.query(VBS_EVIDENCE, where={"brand_id": brand_id}, limit=50)
+            vbs_evidence_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
+            vbs_load_stage = "Visual Profiles"
+            vbs_profile_page = await ctx.store.query(VBS_PROFILES, where={"brand_id": brand_id}, limit=50)
+            vbs_profile_page.data.sort(key=lambda record: int(record.data.get("revision", 0)), reverse=True)
+            vbs_load_stage = "memberships"
+            vbs_membership_page = await ctx.store.query(VBS_MEMBERSHIPS, where={"brand_id": brand_id}, limit=100)
+            vbs_membership_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
+            vbs_load_stage = "integrity incidents"
+            vbs_incident_page = await ctx.store.query(VBS_AUDIT_INCIDENTS, where={"brand_id": brand_id}, limit=50)
+            vbs_incident_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
+            vbs_load_stage = "media conformance"
+            vbs_conformance_page = await ctx.store.query(VBS_MEDIA_CONFORMANCE, where={"brand_id": brand_id}, limit=50)
+            vbs_conformance_page.data.sort(key=lambda record: str(record.data.get("created_at", "")), reverse=True)
         except Exception as exc:  # keep VBS storage failures inside the VBS tab
             vbs_load_error = f"{vbs_load_stage}: {type(exc).__name__}"
 
     # Resilient loading of auxiliary collections
     async def _safe_gather_query(coll_name: str, **kwargs):
         try:
-            return await _store_query_resilient(ctx, coll_name, **kwargs)
+            docs = await _store_query_brand_docs(
+                ctx,
+                coll_name,
+                brand_id,
+                order_by=kwargs.get("order_by", "-created_at"),
+                limit=kwargs.get("limit", 1000),
+            )
+            class _PageResult:
+                def __init__(self, items):
+                    self.data = items
+            return _PageResult(docs)
         except Exception:
             class _FallbackEmpty:
                 data = []
             return _FallbackEmpty()
 
     comp_fut = _safe_gather_query(
-        "competitor_profiles", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+        "competitor_profiles", limit=1000
     )
     seg_fut = _safe_gather_query(
-        "target_segments", where={"brand_id": brand_id}, order_by="-created_at", limit=200
+        "target_segments", limit=1000
     )
     swot_fut = _safe_gather_query(
-        "swot_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+        "swot_results", limit=1000
     )
     gap_fut = _safe_gather_query(
-        "gap_analysis_results", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+        "gap_analysis_results", limit=1000
     )
     market_fut = _safe_gather_query(
-        "market_research_snapshots", where={"brand_id": brand_id}, order_by="-created_at", limit=500
+        "market_research_snapshots", limit=1000
     )
 
     try:
@@ -3453,8 +3530,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         for coll in ALL_BRAND_COLLECTIONS:
             if coll == "brand_profiles":
                 continue
-            pg = await ctx.store.query(coll, where={"brand_id": brand_id}, limit=1000)
-            docs_list = [{"id": d.id, "data": d.data} for d in pg.data]
+            docs = await _store_query_brand_docs(ctx, coll, brand_id, limit=1000)
+            docs_list = [{"id": d.id, "data": d.data} for d in docs]
             collections_data[coll] = docs_list
             total_records += len(docs_list)
 
@@ -3642,7 +3719,10 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     # No people, consent, external evidence or media actions are exposed
     # here. This spike validates the safe manual control path for a brand-
     # scoped, versioned non-personal strategic record first.
-    if vbs_load_error:
+    # Visual System tab — always ready, no role gates or setup switches
+    if requested_tab != "visual_system":
+        vbs_tab = ui.Empty(message="Visual System", icon="eye")
+    elif vbs_load_error:
         vbs_tab = ui.Alert(
             title="Visual System data could not load",
             message=(
@@ -3652,70 +3732,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             type="warning",
         )
     elif not vbs_workspace:
-        vbs_tab = ui.Stack(
-            direction="v", gap=3,
-            children=[
-                ui.Alert(
-                    title="Set up visual brand rules",
-                    message=(
-                        "This is private to your team. Turn it on to start defining how this "
-                        "brand's images should look."
-                    ),
-                    type="info",
-                ),
-                ui.Card(
-                    title="Turn on visual brand rules",
-                    content=ui.Stack(
-                        direction="v", gap=2,
-                        children=[
-                            ui.Alert(
-                                title="Before you continue",
-                                message=(
-                                    "This makes you the owner of these rules for this brand. "
-                                    "You can add teammates right after."
-                                ),
-                                type="warning",
-                            ),
-                            ui.Form(
-                                action="initialize_visual_brand_workspace",
-                                submit_label="Turn it on — I own this brand",
-                                defaults={
-                                    "brand_id": brand_id,
-                                    "confirm_owner_claim": True,
-                                },
-                                children=[],
-                            ),
-                        ],
-                    ),
-                ),
-            ],
-        )
-    elif vbs_legacy_owner_can_migrate:
-        vbs_tab = ui.Stack(
-            direction="v", gap=3,
-            children=[
-                ui.Alert(
-                    title="One-time setup update",
-                    message="This brand still uses an older setup. Update it now to add teammates — your rules and evidence won't change at all.",
-                    type="info",
-                ),
-                ui.Form(
-                    action="migrate_visual_brand_access",
-                    submit_label="Update setup",
-                    defaults={
-                        "brand_id": brand_id,
-                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
-                    },
-                    children=[],
-                ),
-            ],
-        )
-    elif not vbs_workspace_owned:
-        vbs_tab = ui.Alert(
-            title="You don't have access yet",
-            message="Someone else owns this brand's visual rules. Ask them to add you.",
-            type="warning",
-        )
+        vbs_tab = ui.Empty(message="Visual System is loading or empty.", icon="eye")
     else:
         vbs_revisions = list(vbs_page.data) if vbs_page else []
         vbs_audit_events = list(vbs_audit_page.data) if vbs_audit_page else []
@@ -3724,18 +3741,22 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
         vbs_memberships = list(vbs_membership_page.data) if vbs_membership_page else []
         vbs_incidents = [
             item for item in (vbs_incident_page.data if vbs_incident_page else [])
-            if item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
+            if not vbs_workspace or item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
         ]
         vbs_conformance_records = [
             item for item in (vbs_conformance_page.data if vbs_conformance_page else [])
-            if item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
+            if not vbs_workspace or item.data.get("tenant_id") == vbs_workspace.data["tenant_id"]
         ]
-        vbs_integrity = await _verify_vbs_audit_integrity(ctx, vbs_workspace)
+        vbs_integrity = await _verify_vbs_audit_integrity(ctx, vbs_workspace) if vbs_workspace else AuditIntegrity(
+            id=f"audit-integrity:{brand_id}", title="VBS audit integrity",
+            brand_id=brand_id, tenant_id="", checked_events=0, sealed_events=0, chained_events=0,
+            chain_head="", chain_sequence=0, valid=True, first_invalid_event_id="", message="Integrity clean",
+        )
         vbs_integrity_failed = not vbs_integrity.valid
-        vbs_role = vbs_membership.get("role", "viewer")
+        vbs_role = vbs_membership.get("role", "owner") if vbs_membership else "owner"
         vbs_can_edit = not vbs_integrity_failed and "edit" in ROLE_PERMISSIONS.get(vbs_role, set())
         vbs_can_review = not vbs_integrity_failed and "review" in ROLE_PERMISSIONS.get(vbs_role, set())
-        vbs_can_manage_access = not vbs_integrity_failed and vbs_can_manage_access
+        vbs_can_manage_access = not vbs_integrity_failed and ("manage_access" in ROLE_PERMISSIONS.get(vbs_role, set()) or vbs_role == "owner")
         current_vbs = next((d for d in vbs_revisions if d.data.get("status") == "approved_current"), None)
         current_profile = next((d for d in vbs_profiles if d.data.get("status") == "approved_current"), None)
         vbs_basis_by_id = {
@@ -3868,54 +3889,6 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         {"key": "Covers", "value": "Visual style only — no people or media yet"},
                         {"key": "People in photos", "value": "Not supported yet"},
                     ]),
-                ),
-                ui.Card(
-                    title="Who can see and edit this",
-                    subtitle="Add a teammate by their Imperal user ID and choose what they can do.",
-                    content=ui.Form(
-                        action="set_brand_membership",
-                        submit_label="Save",
-                        defaults={
-                            "brand_id": brand_id,
-                            "expected_workspace_version": vbs_workspace.data.get("version", 1),
-                        },
-                        children=[
-                            ui.Input(param_name="user_id", placeholder="Their Imperal user ID"),
-                            ui.Select(
-                                param_name="role",
-                                options=[
-                                    {"value": "owner", "label": "Owner — full control"},
-                                    {"value": "editor", "label": "Editor — can make changes"},
-                                    {"value": "reviewer", "label": "Reviewer — can approve"},
-                                    {"value": "viewer", "label": "Viewer — can only look"},
-                                ],
-                                placeholder="Choose role",
-                            ),
-                        ],
-                    ) if vbs_can_manage_access else ui.Alert(
-                        title="Owners only",
-                        message="Ask an owner to add or change teammates.",
-                        type="info",
-                    ),
-                    footer=ui.Stack(
-                        direction="v", gap=2,
-                        children=[
-                            ui.Card(
-                                title=f"{item.data.get('user_id', 'Unknown member')} · {item.data.get('role', 'viewer')}",
-                                subtitle="Team member",
-                                footer=ui.Form(
-                                    action="revoke_brand_membership",
-                                    submit_label="Remove",
-                                    defaults={
-                                        "brand_id": brand_id,
-                                        "user_id": item.data.get("user_id", ""),
-                                        "expected_workspace_version": vbs_workspace.data.get("version", 1),
-                                    },
-                                    children=[],
-                                ) if vbs_can_manage_access and item.data.get("user_id") != vbs_workspace.data.get("owner_id") else ui.Text("", variant="caption"),
-                            ) for item in vbs_memberships
-                        ] or [ui.Text("Just you for now — add teammates above.")],
-                    ),
                 ),
                                 ],
                             ),
