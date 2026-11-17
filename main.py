@@ -2655,18 +2655,83 @@ async def archive_gap_analysis(ctx, params: ArchiveGapAnalysisParams) -> ActionR
 # Brand Project Export / Import — Full point-to-point cross-account portability
 # ──────────────────────────────────────────────────────────────────────────
 
+async def _clean_duplicate_brand_records(ctx, brand_id: str | None = None) -> dict:
+    """Find and delete duplicate documents in competitor_profiles and target_segments by business key."""
+    deleted_counts = {"competitor_profiles": 0, "target_segments": 0}
+    
+    # 1. Clean competitor_profiles
+    try:
+        page = await ctx.store.query("competitor_profiles", limit=1000)
+        docs = list(getattr(page, "data", []))
+        if brand_id:
+            docs = [d for d in docs if getattr(d, "data", {}).get("brand_id") == brand_id]
+        
+        # Group by (brand_id, name)
+        seen_competitors: dict[tuple[str, str], str] = {}
+        for d in docs:
+            b_id = getattr(d, "data", {}).get("brand_id", "")
+            name = (getattr(d, "data", {}).get("name") or "").strip().lower()
+            if not name:
+                continue
+            key = (b_id, name)
+            doc_id = getattr(d, "id", None) or getattr(d, "data", {}).get("id")
+            if not doc_id:
+                continue
+            if key in seen_competitors:
+                try:
+                    await ctx.store.delete("competitor_profiles", doc_id)
+                    deleted_counts["competitor_profiles"] += 1
+                except Exception:
+                    pass
+            else:
+                seen_competitors[key] = doc_id
+    except Exception:
+        pass
+
+    # 2. Clean target_segments
+    try:
+        page = await ctx.store.query("target_segments", limit=1000)
+        docs = list(getattr(page, "data", []))
+        if brand_id:
+            docs = [d for d in docs if getattr(d, "data", {}).get("brand_id") == brand_id]
+        
+        seen_segments: dict[tuple[str, str], str] = {}
+        for d in docs:
+            b_id = getattr(d, "data", {}).get("brand_id", "")
+            seg_name = (getattr(d, "data", {}).get("segment_name") or "").strip().lower()
+            if not seg_name:
+                continue
+            key = (b_id, seg_name)
+            doc_id = getattr(d, "id", None) or getattr(d, "data", {}).get("id")
+            if not doc_id:
+                continue
+            if key in seen_segments:
+                try:
+                    await ctx.store.delete("target_segments", doc_id)
+                    deleted_counts["target_segments"] += 1
+                except Exception:
+                    pass
+            else:
+                seen_segments[key] = doc_id
+    except Exception:
+        pass
+
+    return deleted_counts
+
+
 async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by: str | None = None, limit: int = 1000) -> list:
     """Query a collection for documents belonging to a brand, robust across all store backends.
     
     Tries server-side `where` filtering first; if empty or unsupported, falls back to
     querying the collection and filtering in-memory by brand_id (matching list_brand_competitors,
-    list_target_segments, list_swot_results, etc.). Deduplicates documents by ID.
+    list_target_segments, list_swot_results, etc.). Deduplicates documents by ID and business keys.
     """
     if not brand_id:
         return []
     
     def _dedup_docs(doc_list):
         seen_ids = set()
+        seen_keys = set()
         unique = []
         for d in doc_list:
             doc_id = getattr(d, "id", None) or getattr(d, "data", {}).get("id")
@@ -2674,6 +2739,22 @@ async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by:
                 if doc_id in seen_ids:
                     continue
                 seen_ids.add(doc_id)
+            
+            data = getattr(d, "data", {}) or {}
+            # Deduplicate by business key per collection
+            if collection == "competitor_profiles":
+                c_name = (data.get("name") or "").strip().lower()
+                if c_name:
+                    if c_name in seen_keys:
+                        continue
+                    seen_keys.add(c_name)
+            elif collection == "target_segments":
+                s_name = (data.get("segment_name") or "").strip().lower()
+                if s_name:
+                    if s_name in seen_keys:
+                        continue
+                    seen_keys.add(s_name)
+
             unique.append(d)
         return unique
 
