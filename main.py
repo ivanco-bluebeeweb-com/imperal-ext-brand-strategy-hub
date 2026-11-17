@@ -2511,12 +2511,12 @@ async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionR
 @chat.function(
     "bulk_delete_brand_profiles",
     description=(
-        "Bulk permanently delete multiple brand profiles by their IDs and "
+        "Bulk permanently delete multiple brand profiles by their IDs or brand names and "
         "cascade-delete all dependents anchored to each: competitors, "
         "target segments, SWOT snapshots, gap analyses, market research "
         "snapshots, and any associated private Visual Brand System workspaces."
     ),
-    action_type="destructive",
+    action_type="write",
     chain_callable=True,
     effects=[
         "delete:brand_profile", "delete:competitor_profile", "delete:target_segment",
@@ -2537,14 +2537,33 @@ async def bulk_delete_brand_profiles(ctx, params: BulkDeleteBrandProfilesParams)
     failed_ids: list[str] = []
     errors: list[str] = []
 
-    for brand_id in params.brand_ids:
+    for item in params.brand_ids:
         try:
-            doc = await ctx.store.get("brand_profiles", brand_id)
+            target_id = item.strip()
+            doc = await ctx.store.get("brand_profiles", target_id)
             if not doc:
-                failed_ids.append(brand_id)
-                errors.append(f"Brand profile '{brand_id}' not found.")
+                # Try finding by exact brand_name
+                by_name = await ctx.store.query("brand_profiles", where={"brand_name": target_id}, limit=1)
+                if by_name.data:
+                    doc = by_name.data[0]
+                    target_id = doc.id
+                else:
+                    # Case-insensitive search fallback
+                    all_docs = await ctx.store.query("brand_profiles", limit=200)
+                    matches = [
+                        d for d in all_docs.data
+                        if d.data.get("brand_name", "").strip().lower() == target_id.lower()
+                    ]
+                    if matches:
+                        doc = matches[0]
+                        target_id = doc.id
+
+            if not doc:
+                failed_ids.append(item)
+                errors.append(f"Brand profile '{item}' not found.")
                 continue
 
+            brand_id = target_id
             for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
                 page = await ctx.store.query(collection, where={"brand_id": brand_id}, limit=500)
                 for d in page.data:
@@ -2565,8 +2584,8 @@ async def bulk_delete_brand_profiles(ctx, params: BulkDeleteBrandProfilesParams)
             await ctx.store.delete("brand_profiles", brand_id)
             deleted_ids.append(brand_id)
         except Exception as e:
-            failed_ids.append(brand_id)
-            errors.append(f"Failed to delete brand profile '{brand_id}': {str(e)}")
+            failed_ids.append(item)
+            errors.append(f"Failed to delete brand profile '{item}': {str(e)}")
 
     summary = f"Bulk deleted {len(deleted_ids)} brand profile(s)."
     if failed_ids:
@@ -3222,6 +3241,51 @@ async def brands_panel(ctx, **kwargs) -> object:
         on_click=ui.Call("__panel__brands", show_import="1"),
     )
 
+    bulk_delete_dialogs = []
+    show_bulk_delete = str(kwargs.get("show_bulk_delete", "")).strip().lower() in {"1", "true", "yes"}
+    if show_bulk_delete and docs:
+        brand_options = [
+            {"value": d.id, "label": f"{d.data.get('brand_name', '') or d.id}"}
+            for d in docs
+        ]
+        bulk_delete_dialogs.append(
+            ui.Modal(
+                title="Bulk Delete Brands",
+                content=ui.Stack(
+                    direction="v", gap=2,
+                    children=[
+                        ui.Alert(
+                            title="Permanent Deletion",
+                            message="Select the brand profiles you want to permanently delete. All associated data (competitors, SWOT, segments, visual systems) will be cascade-deleted.",
+                            type="danger",
+                        ),
+                        ui.Form(
+                            action="bulk_delete_brand_profiles",
+                            submit_label="Delete Selected Brands",
+                            children=[
+                                ui.MultiSelect(
+                                    param_name="brand_ids",
+                                    label="Select Brands to Delete",
+                                    options=brand_options,
+                                    required=True,
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                confirm_label="",
+                cancel_label="Cancel",
+                on_close=ui.Call("__panel__brands", show_bulk_delete=""),
+            )
+        )
+
+    bulk_delete_button = ui.Button(
+        "Bulk Delete Brands",
+        variant="danger",
+        icon="Trash2",
+        on_click=ui.Call("__panel__brands", show_bulk_delete="1"),
+    )
+
     new_brand_form = ui.Stack(direction="v", gap=2, children=[
         ui.Header("New brand", level=3),
         ui.Form(
@@ -3233,13 +3297,20 @@ async def brands_panel(ctx, **kwargs) -> object:
                 ui.Input(param_name="site_id", placeholder="Content Strategy Hub site_id (optional)"),
             ],
         ),
-        import_button,
+        ui.Stack(
+            direction="h", gap=2,
+            children=[
+                import_button,
+                bulk_delete_button,
+            ]
+        ) if docs else import_button,
     ])
 
     if not docs:
         return ui.Stack(direction="v", gap=3, children=[
             new_brand_form,
             *import_dialogs,
+            *bulk_delete_dialogs,
             ui.Divider(),
             ui.Header("Existing Brands", level=3),
             ui.Empty(
@@ -3263,6 +3334,7 @@ async def brands_panel(ctx, **kwargs) -> object:
     return ui.Stack(direction="v", gap=3, children=[
         new_brand_form,
         *import_dialogs,
+        *bulk_delete_dialogs,
         ui.Divider(),
         ui.Header("Existing Brands", level=3),
         ui.List(items=items, searchable=False),
