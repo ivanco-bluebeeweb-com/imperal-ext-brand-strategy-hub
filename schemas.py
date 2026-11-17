@@ -781,8 +781,40 @@ class DeleteResult(sdl.Entity):
     deleted: bool = False
 
 
+class BulkDeleteResult(sdl.Entity):
+    """Outcome of a bulk brand-profile delete operation."""
+    id: str = ""
+    title: str = ""
+    deleted_count: int = 0
+    deleted_ids: list[str] = Field(default_factory=list)
+    failed_ids: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
 class DeleteBrandProfileParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+
+
+class BulkDeleteBrandProfilesParams(BaseModel):
+    brand_ids: list[str] = Field(
+        ...,
+        description="List of brand profile UUIDs to delete.",
+    )
+
+    @field_validator("brand_ids", mode="before")
+    @classmethod
+    def _validate_brand_ids(cls, v):
+        v = _coerce_str_list(v)
+        if isinstance(v, list):
+            seen = set()
+            cleaned = []
+            for item in v:
+                s = str(item).strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    cleaned.append(s)
+            return cleaned
+        return v
 
 
 class DeleteCompetitorParams(BaseModel):

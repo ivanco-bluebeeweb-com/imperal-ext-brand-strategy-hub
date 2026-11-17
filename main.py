@@ -55,7 +55,7 @@ from schemas import (
     SWOTResult, SWOTResultList,
     MarketResearchSnapshot, MarketResearchSnapshotList,
     TargetSegment, TargetSegmentList,
-    DeleteResult, DeleteBrandProfileParams, DeleteCompetitorParams,
+    DeleteResult, BulkDeleteResult, DeleteBrandProfileParams, BulkDeleteBrandProfilesParams, DeleteCompetitorParams,
     DeleteTargetSegmentParams, ArchiveSWOTResultParams,
     ArchiveGapAnalysisParams, PurgeBrandStrategyDataParams, PurgeResult,
 )
@@ -2504,6 +2504,84 @@ async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionR
             f"Brand profile '{doc.data.get('brand_name', params.brand_id)}' and all its "
             "dependents deleted" + (", including its visual brand system." if vbs_workspace else ".")
         ),
+        refresh_panels=["brands", "brand_detail"],
+    )
+
+
+@chat.function(
+    "bulk_delete_brand_profiles",
+    description=(
+        "Bulk permanently delete multiple brand profiles by their IDs and "
+        "cascade-delete all dependents anchored to each: competitors, "
+        "target segments, SWOT snapshots, gap analyses, market research "
+        "snapshots, and any associated private Visual Brand System workspaces."
+    ),
+    action_type="destructive",
+    chain_callable=True,
+    effects=[
+        "delete:brand_profile", "delete:competitor_profile", "delete:target_segment",
+        "delete:swot_result", "delete:gap_analysis_result", "delete:market_research_snapshot", "delete:vbs_workspace",
+        "delete:visual_brand_system", "delete:visual_evidence", "delete:visual_profile",
+        "delete:vbs_brand_membership", "delete:visual_brand_audit_event",
+        "delete:visual_brand_audit_incident", "delete:vbs_media_conformance",
+    ],
+    event="deleted",
+    data_model=BulkDeleteResult,
+)
+async def bulk_delete_brand_profiles(ctx, params: BulkDeleteBrandProfilesParams) -> ActionResult:
+    """Bulk delete brand profiles and cascade-delete their dependents."""
+    if not params.brand_ids:
+        return ActionResult.error("No brand IDs provided for bulk deletion.", retryable=False)
+
+    deleted_ids: list[str] = []
+    failed_ids: list[str] = []
+    errors: list[str] = []
+
+    for brand_id in params.brand_ids:
+        try:
+            doc = await ctx.store.get("brand_profiles", brand_id)
+            if not doc:
+                failed_ids.append(brand_id)
+                errors.append(f"Brand profile '{brand_id}' not found.")
+                continue
+
+            for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
+                page = await ctx.store.query(collection, where={"brand_id": brand_id}, limit=500)
+                for d in page.data:
+                    await ctx.store.delete(collection, d.id)
+
+            for collection in (
+                VBS_SYSTEMS, VBS_EVIDENCE, VBS_PROFILES, VBS_MEMBERSHIPS,
+                VBS_AUDIT_EVENTS, VBS_AUDIT_INCIDENTS, VBS_MEDIA_CONFORMANCE,
+            ):
+                page = await ctx.store.query(collection, where={"brand_id": brand_id}, limit=1000)
+                for d in page.data:
+                    await ctx.store.delete(collection, d.id)
+
+            vbs_workspace = await _workspace_for_brand(ctx, brand_id)
+            if vbs_workspace:
+                await ctx.store.delete(VBS_WORKSPACES, vbs_workspace.id)
+
+            await ctx.store.delete("brand_profiles", brand_id)
+            deleted_ids.append(brand_id)
+        except Exception as e:
+            failed_ids.append(brand_id)
+            errors.append(f"Failed to delete brand profile '{brand_id}': {str(e)}")
+
+    summary = f"Bulk deleted {len(deleted_ids)} brand profile(s)."
+    if failed_ids:
+        summary += f" Failed to delete {len(failed_ids)} profile(s)."
+
+    return ActionResult.success(
+        BulkDeleteResult(
+            id="bulk_delete",
+            title="Bulk brand profiles deletion",
+            deleted_count=len(deleted_ids),
+            deleted_ids=deleted_ids,
+            failed_ids=failed_ids,
+            errors=errors,
+        ),
+        summary=summary,
         refresh_panels=["brands", "brand_detail"],
     )
 
