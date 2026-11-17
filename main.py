@@ -1985,7 +1985,16 @@ async def list_brand_competitors(ctx, params: ListCompetitorsParams) -> ActionRe
     items = list(page.data)
     if params.brand_id:
         items = [d for d in items if d.data.get("brand_id") == params.brand_id]
-    items = items[: params.limit]
+    seen_names = set()
+    deduped_items = []
+    for d in items:
+        name = (d.data.get("name") or "").strip().lower()
+        if name:
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+        deduped_items.append(d)
+    items = deduped_items[: params.limit]
     entities = [_to_competitor_profile(d) for d in items]
     return ActionResult.success(CompetitorProfileList(items=entities, total=len(entities)), summary=f"{len(entities)} competitor(s).")
 
@@ -2048,7 +2057,16 @@ async def list_target_segments(ctx, params: ListTargetSegmentsParams) -> ActionR
     items = list(page.data)
     if params.brand_id:
         items = [d for d in items if d.data.get("brand_id") == params.brand_id]
-    items = items[: params.limit]
+    seen_names = set()
+    deduped_items = []
+    for d in items:
+        name = (d.data.get("segment_name") or "").strip().lower()
+        if name:
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+        deduped_items.append(d)
+    items = deduped_items[: params.limit]
     entities = [_to_target_segment(d) for d in items]
     return ActionResult.success(TargetSegmentList(items=entities, total=len(entities)), summary=f"{len(entities)} target segment(s).")
 
@@ -3708,8 +3726,38 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     if isinstance(market_page, Exception) or not hasattr(market_page, "data"):
         market_page = _FallbackEmpty()
 
-    competitors = [{"id": d.id, **d.data} for d in comp_page.data]
-    segments = list(seg_page.data)
+    # Deduplicate competitors by name
+    seen_c = set()
+    unique_comps = []
+    for d in comp_page.data:
+        d_data = getattr(d, "data", {}) if hasattr(d, "data") else (d if isinstance(d, dict) else {})
+        c_name = (d_data.get("name") or "").strip().lower()
+        if c_name:
+            if c_name in seen_c:
+                continue
+            seen_c.add(c_name)
+        d_id = getattr(d, "id", None) or d_data.get("id", "")
+        unique_comps.append({"id": d_id, **d_data})
+    competitors = unique_comps
+
+    # Deduplicate segments by segment_name
+    seen_s = set()
+    unique_segs = []
+    for d in seg_page.data:
+        d_data = getattr(d, "data", {}) if hasattr(d, "data") else (d if isinstance(d, dict) else {})
+        s_name = (d_data.get("segment_name") or "").strip().lower()
+        if s_name:
+            if s_name in seen_s:
+                continue
+            seen_s.add(s_name)
+        unique_segs.append(d)
+    segments = unique_segs
+
+    # Also clean up duplicate documents in store in background
+    try:
+        await _clean_duplicate_brand_records(ctx, brand_id)
+    except Exception:
+        pass
 
     current_swot_docs = [d for d in swot_page.data if d.data.get("is_current", True)]
     latest_swot = current_swot_docs[0].data if current_swot_docs else None
