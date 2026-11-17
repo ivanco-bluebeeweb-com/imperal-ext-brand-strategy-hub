@@ -2660,10 +2660,23 @@ async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by:
     
     Tries server-side `where` filtering first; if empty or unsupported, falls back to
     querying the collection and filtering in-memory by brand_id (matching list_brand_competitors,
-    list_target_segments, list_swot_results, etc.).
+    list_target_segments, list_swot_results, etc.). Deduplicates documents by ID.
     """
     if not brand_id:
         return []
+    
+    def _dedup_docs(doc_list):
+        seen_ids = set()
+        unique = []
+        for d in doc_list:
+            doc_id = getattr(d, "id", None) or getattr(d, "data", {}).get("id")
+            if doc_id:
+                if doc_id in seen_ids:
+                    continue
+                seen_ids.add(doc_id)
+            unique.append(d)
+        return unique
+
     # 1. Try server-side where query
     try:
         kwargs = {"limit": limit}
@@ -2672,7 +2685,7 @@ async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by:
         page = await ctx.store.query(collection, where={"brand_id": brand_id}, **kwargs)
         matching = [d for d in getattr(page, "data", []) if getattr(d, "data", {}).get("brand_id") == brand_id]
         if matching:
-            return matching
+            return _dedup_docs(matching)
     except Exception:
         pass
 
@@ -2682,7 +2695,8 @@ async def _store_query_brand_docs(ctx, collection: str, brand_id: str, order_by:
         if order_by:
             kwargs["order_by"] = order_by
         page = await ctx.store.query(collection, **kwargs)
-        return [d for d in getattr(page, "data", []) if getattr(d, "data", {}).get("brand_id") == brand_id]
+        matching = [d for d in getattr(page, "data", []) if getattr(d, "data", {}).get("brand_id") == brand_id]
+        return _dedup_docs(matching)
     except Exception:
         return []
 

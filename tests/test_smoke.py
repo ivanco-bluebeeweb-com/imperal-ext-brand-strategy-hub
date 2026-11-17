@@ -1061,3 +1061,28 @@ async def test_purge_brand_strategy_data_keeps_brand_profiles():
     # Everything derived from it is gone.
     assert (await m.list_brand_competitors(ctx, ListCompetitorsParams())).data.items == []
     assert (await m.list_target_segments(ctx, ListTargetSegmentsParams())).data.items == []
+
+
+@pytest.mark.asyncio
+async def test_store_query_brand_docs_deduplication():
+    """Verify _store_query_brand_docs deduplicates documents by id."""
+    from unittest.mock import MagicMock, AsyncMock
+    ctx = MagicMock()
+    ctx.store = MagicMock()
+    
+    doc1 = MagicMock()
+    doc1.id = "doc-1"
+    doc1.data = {"id": "doc-1", "brand_id": "b-1", "name": "Doc 1"}
+
+    doc2 = MagicMock()
+    doc2.id = "doc-2"
+    doc2.data = {"id": "doc-2", "brand_id": "b-1", "name": "Doc 2"}
+
+    # Simulate query returning duplicates
+    mock_page = MagicMock()
+    mock_page.data = [doc1, doc1, doc2, doc1]
+    ctx.store.query = AsyncMock(return_value=mock_page)
+
+    docs = await m._store_query_brand_docs(ctx, "competitor_profiles", "b-1")
+    assert len(docs) == 2
+    assert [d.id for d in docs] == ["doc-1", "doc-2"]
