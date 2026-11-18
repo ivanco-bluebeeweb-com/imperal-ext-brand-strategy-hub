@@ -702,6 +702,19 @@ class ListCompetitorsParams(BaseModel):
     limit: int = Field(20, description="Max items to return (1-100)")
 
 
+class AutoAddCompetitorsParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+    signals: list[MarketSignal] = Field(
+        default_factory=list,
+        description="Optional auxiliary market signals or web evidence gathered beforehand.",
+    )
+    candidates: list[str | AddCompetitorParams] = Field(
+        default_factory=list,
+        description="Optional explicit competitor candidate names or objects to add.",
+    )
+    limit: int = Field(5, description="Max number of competitors to add (1-20)")
+
+
 class CreateTargetSegmentParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
     segment_name: str = Field(min_length=1, description="Segment label, e.g. 'SMB office managers'")
@@ -715,6 +728,19 @@ class CreateTargetSegmentParams(BaseModel):
 class ListTargetSegmentsParams(BaseModel):
     brand_id: str = Field("", description="Optional brand filter. Empty = all.")
     limit: int = Field(20, description="Max items to return (1-100)")
+
+
+class AutoAddSegmentsParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+    signals: list[MarketSignal] = Field(
+        default_factory=list,
+        description="Optional auxiliary market signals or audience research gathered beforehand.",
+    )
+    candidates: list[CreateTargetSegmentParams] = Field(
+        default_factory=list,
+        description="Optional explicit segment candidates to create.",
+    )
+    limit: int = Field(5, description="Max number of segments to add (1-20)")
 
 
 class RunMarketResearchParams(BaseModel):

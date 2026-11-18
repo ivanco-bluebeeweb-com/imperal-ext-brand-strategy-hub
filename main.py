@@ -42,6 +42,7 @@ from schemas import (
     ListVisualBrandSystemsParams, ListVisualEvidenceParams, ListVisualProfilesParams,
     RegisterVisualEvidenceParams, ReviewVisualEvidenceParams, ResolveCurrentVisualProfileParams, RunGapAnalysisParams, RunSWOTAnalysisParams,
     RunMarketResearchParams, ListMarketResearchResultsParams, ArchiveMarketResearchResultParams,
+    AutoAddCompetitorsParams, AutoAddSegmentsParams,
     ListBrandMembershipsParams, SetBrandMembershipParams, RevokeBrandMembershipParams,
     UpdateBrandProfileParams,
     ApprovalEvidenceBasisIntegrity, ApprovedVisualMediaHandoff, ApprovedVisualProfileHandoff, AuditEvent, AuditEventList, AuditIntegrity, AuditIntegrityIncident, AuditIntegrityIncidentList, BrandContentHandoff,
@@ -2303,6 +2304,115 @@ async def list_brand_competitors(ctx, params: ListCompetitorsParams) -> ActionRe
     return ActionResult.success(CompetitorProfileList(items=entities, total=len(entities)), summary=f"{len(entities)} competitor(s).")
 
 
+@chat.function(
+    "auto_add_competitors",
+    description="Autonomously discover and add competitor profiles for a brand, either from auxiliary signals/candidates or via industry benchmarks when no signals are provided.",
+    action_type="write",
+    chain_callable=True,
+    effects=["create:competitor_profile"],
+    event="created",
+    data_model=CompetitorProfileList,
+)
+async def auto_add_competitors(ctx, params: AutoAddCompetitorsParams) -> ActionResult:
+    """Auto-discover and add competitor profiles for a brand.
+    
+    If auxiliary signals or candidates are provided, parses and creates competitors from them.
+    If no auxiliary data is provided, autonomously discovers benchmark competitors
+    for the brand's industry and context.
+    """
+    brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand_doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    brand = brand_doc.data
+    industry = (brand.get("industry") or "").strip()
+    if not industry:
+        ctx_audit = await _ensure_brand_context(ctx, params.brand_id)
+        if ctx_audit.get("ok"):
+            refreshed = await ctx.store.get("brand_profiles", params.brand_id)
+            if refreshed and refreshed.data.get("industry"):
+                brand = refreshed.data
+                industry = (brand.get("industry") or "").strip()
+
+    if not industry:
+        return ActionResult.error(
+            f"Brand profile '{params.brand_id}' has no industry set — auto-discovering "
+            "competitors requires knowing the industry. Set industry first.",
+            retryable=False, code="EMPTY_INDUSTRY",
+        )
+
+    comp_page = await ctx.store.query("competitor_profiles", where={"brand_id": params.brand_id}, limit=500)
+    existing_items = list(comp_page.data)
+    tracked_names_lower = {
+        d.data.get("name", "").strip().lower() for d in existing_items if d.data.get("name")
+    }
+    brand_name_lower = (brand.get("brand_name") or "").strip().lower()
+
+    to_create: list[dict] = []
+    has_auxiliary = bool(params.signals or params.candidates)
+
+    if has_auxiliary:
+        for cname in params.candidates:
+            clean = cname.strip()
+            if not clean or clean.lower() in tracked_names_lower or clean.lower() == brand_name_lower:
+                continue
+            to_create.append({
+                "brand_id": params.brand_id,
+                "name": clean,
+                "url": "",
+                "strengths": ["Identified from candidate signals"],
+                "weaknesses": [],
+                "notes": "Added via auxiliary candidate list.",
+            })
+            tracked_names_lower.add(clean.lower())
+
+        for s in params.signals:
+            cname = (s.candidate_competitor_name or "").strip()
+            if not cname or cname.lower() in tracked_names_lower or cname.lower() == brand_name_lower:
+                continue
+            to_create.append({
+                "brand_id": params.brand_id,
+                "name": cname,
+                "url": s.url or "",
+                "strengths": ["Surfaced from market signal"],
+                "weaknesses": [],
+                "notes": s.summary or f"Sourced from {s.url}",
+            })
+            tracked_names_lower.add(cname.lower())
+    else:
+        _, _, auto_details, _ = await _discover_market_signals(
+            ctx, params.brand_id, brand, industry, tracked_names_lower
+        )
+        for cand in auto_details:
+            cname = (cand.get("name") or "").strip()
+            if not cname or cname.lower() in tracked_names_lower or cname.lower() == brand_name_lower:
+                continue
+            to_create.append({
+                "brand_id": params.brand_id,
+                "name": cname,
+                "url": cand.get("url") or "",
+                "strengths": cand.get("strengths") or ["Industry benchmark"],
+                "weaknesses": cand.get("weaknesses") or [],
+                "notes": cand.get("notes") or f"Autonomously discovered benchmark for {industry}.",
+            })
+            tracked_names_lower.add(cname.lower())
+
+    items_to_create = to_create[: params.limit]
+    created_docs = []
+    for item in items_to_create:
+        doc = await ctx.store.create("competitor_profiles", item)
+        created_docs.append(doc)
+
+    entities = [_to_competitor_profile(d) for d in created_docs]
+    method = "from auxiliary signals" if has_auxiliary else "via autonomous industry discovery"
+    summary_msg = f"Auto-added {len(entities)} competitor(s) {method} for brand '{brand.get('brand_name')}'."
+    return ActionResult.success(
+        CompetitorProfileList(items=entities, total=len(entities)),
+        summary=summary_msg,
+        refresh_panels=["brand_detail"],
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Target segments
 # ──────────────────────────────────────────────────────────────────────────
@@ -2373,6 +2483,298 @@ async def list_target_segments(ctx, params: ListTargetSegmentsParams) -> ActionR
     items = deduped_items[: params.limit]
     entities = [_to_target_segment(d) for d in items]
     return ActionResult.success(TargetSegmentList(items=entities, total=len(entities)), summary=f"{len(entities)} target segment(s).")
+
+
+@chat.function(
+    "auto_add_segments",
+    description="Autonomously discover and add target audience segments for a brand, either from auxiliary signals/candidates or via industry audience benchmarks when no signals are provided.",
+    action_type="write",
+    chain_callable=True,
+    effects=["create:target_segment"],
+    event="created",
+    data_model=TargetSegmentList,
+)
+async def auto_add_segments(ctx, params: AutoAddSegmentsParams) -> ActionResult:
+    """Auto-discover and add target audience segments for a brand.
+    
+    If auxiliary signals or explicit segment candidates are provided, parses and creates segments from them.
+    If no auxiliary data is provided, autonomously infers and discovers target audience segments
+    tailored to the brand's industry, value proposition, and business model.
+    """
+    brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand_doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    brand = brand_doc.data
+    industry = (brand.get("industry") or "").strip()
+    if not industry:
+        ctx_audit = await _ensure_brand_context(ctx, params.brand_id)
+        if ctx_audit.get("ok"):
+            refreshed = await ctx.store.get("brand_profiles", params.brand_id)
+            if refreshed and refreshed.data.get("industry"):
+                brand = refreshed.data
+                industry = (brand.get("industry") or "").strip()
+
+    if not industry:
+        return ActionResult.error(
+            f"Brand profile '{params.brand_id}' has no industry set — auto-discovering "
+            "target segments requires knowing the industry or business niche.",
+            retryable=False, code="EMPTY_INDUSTRY",
+        )
+
+    seg_page = await ctx.store.query("target_segments", where={"brand_id": params.brand_id}, limit=500)
+    existing_items = list(seg_page.data)
+    tracked_names_lower = {
+        d.data.get("segment_name", "").strip().lower() for d in existing_items if d.data.get("segment_name")
+    }
+
+    to_create: list[dict] = []
+    has_auxiliary = bool(params.signals or params.candidates)
+
+    if has_auxiliary:
+        for cand in params.candidates:
+            if isinstance(cand, dict):
+                sname = (cand.get("segment_name") or "").strip()
+                demographics = cand.get("demographics") or ""
+                psychographics = cand.get("psychographics") or ""
+                pain_points = cand.get("pain_points") or []
+                needs = cand.get("needs") or []
+                preferred_channels = cand.get("preferred_channels") or []
+            elif hasattr(cand, "segment_name"):
+                sname = (cand.segment_name or "").strip()
+                demographics = getattr(cand, "demographics", "") or ""
+                psychographics = getattr(cand, "psychographics", "") or ""
+                pain_points = getattr(cand, "pain_points", []) or []
+                needs = getattr(cand, "needs", []) or []
+                preferred_channels = getattr(cand, "preferred_channels", []) or []
+            else:
+                sname = str(cand).strip()
+                demographics = f"Audience profile in {industry}"
+                psychographics = "Value-conscious, outcome-driven"
+                pain_points = []
+                needs = []
+                preferred_channels = ["Direct", "Search"]
+
+            if not sname or sname.lower() in tracked_names_lower:
+                continue
+
+            to_create.append({
+                "brand_id": params.brand_id,
+                "segment_name": sname,
+                "demographics": demographics,
+                "psychographics": psychographics,
+                "pain_points": pain_points,
+                "needs": needs,
+                "preferred_channels": preferred_channels,
+            })
+            tracked_names_lower.add(sname.lower())
+
+        for s in params.signals:
+            title = (s.title or s.candidate_competitor_name or "").strip()
+            summary = (s.summary or "").strip()
+            # If signal provides audience/buyer context, construct a segment candidate
+            cand_name = ""
+            if "B2B" in summary or "enterprise" in summary.lower() or "commercial" in summary.lower():
+                cand_name = f"Commercial & Enterprise Buyers ({industry.title()})"
+            elif "home" in summary.lower() or "residential" in summary.lower() or "consumer" in summary.lower():
+                cand_name = f"Residential & Individual Clients ({industry.title()})"
+            elif title:
+                cand_name = f"Audience ({title[:35]})"
+            else:
+                cand_name = f"Market Segment ({industry.title()})"
+
+            if cand_name and cand_name.lower() not in tracked_names_lower:
+                to_create.append({
+                    "brand_id": params.brand_id,
+                    "segment_name": cand_name,
+                    "demographics": f"Target audience identified from market signal '{title or s.url}' in {industry}.",
+                    "psychographics": "Looking for specialized solutions, reliable delivery, and verified quality.",
+                    "pain_points": [summary[:120]] if summary else ["Unaddressed market requirement"],
+                    "needs": [f"High-quality {industry} services/solutions"],
+                    "preferred_channels": [s.url] if s.url else ["Web / Search"],
+                })
+                tracked_names_lower.add(cand_name.lower())
+    else:
+        # Autonomous audience discovery derived from industry, brand mission, and positioning
+        ind_lower = industry.lower()
+        bname = (brand.get("brand_name") or "Brand").strip()
+        vprop = (brand.get("value_proposition") or brand.get("mission") or "").strip()
+
+        industry_audience_benchmarks: dict[str, list[dict]] = {
+            "security": [
+                {
+                    "segment_name": "Commercial Facility & Operations Managers",
+                    "demographics": "Operations Directors, Facility Managers, and Safety Officers at commercial properties.",
+                    "psychographics": "Risk-averse, compliance-focused, prioritizes response speed and verified guard accreditation.",
+                    "pain_points": [
+                        "Slow emergency response times from legacy security providers",
+                        "Inconsistent reporting and lack of real-time incident visibility",
+                        "High guard turnover leading to security lapses",
+                    ],
+                    "needs": [
+                        "24/7 rapid alarm dispatch and patrol monitoring",
+                        "Transparent digital incident logs and patrol compliance metrics",
+                        "Dedicated account management and certified personnel",
+                    ],
+                    "preferred_channels": ["Industry security expos", "B2B referrals", "Search (Commercial Security)", "LinkedIn"],
+                },
+                {
+                    "segment_name": "Residential & Private Estate Property Owners",
+                    "demographics": "High-net-worth homeowners, residential HOA boards, and private estate managers.",
+                    "psychographics": "Protective, values discretion, peace of mind, seamless mobile smart-security integration.",
+                    "pain_points": [
+                        "Intrusive hardware and complicated alarm interfaces",
+                        "False alarms and delayed dispatch",
+                        "Lack of remote smartphone control and visual verification",
+                    ],
+                    "needs": [
+                        "Unobtrusive, reliable perimeter and video monitoring",
+                        "Instant mobile notifications with verified camera feeds",
+                        "Discreet, courteous rapid intervention teams",
+                    ],
+                    "preferred_channels": ["Local search (Residential Alarm)", "Neighborhood referrals", "Real estate partnerships", "Google Ads"],
+                },
+                {
+                    "segment_name": "Retail & Hospitality Business Owners",
+                    "demographics": "Store owners, restaurant managers, and boutique retail operators.",
+                    "psychographics": "Loss-prevention oriented, sensitive to customer experience and budget constraints.",
+                    "pain_points": [
+                        "Inventory shrinkage and shoplifting",
+                        "Customer disputes and unrecorded incidents",
+                        "High security equipment setup costs",
+                    ],
+                    "needs": [
+                        "Integrated POS-camera surveillance",
+                        "Visible deterrence without intimidating legitimate shoppers",
+                        "Flexible monthly service plans with hardware leasing",
+                    ],
+                    "preferred_channels": ["Local business associations", "Direct mail / cold outreach", "Search", "Word of mouth"],
+                },
+            ],
+            "construction": [
+                {
+                    "segment_name": "Commercial Real Estate Developers & GC",
+                    "demographics": "General contractors, real estate developers, and municipal project managers.",
+                    "psychographics": "Schedule-driven, penalty-conscious, values strict compliance with building codes.",
+                    "pain_points": ["Cost overruns", "Subcontractor delays", "Inspection failures"],
+                    "needs": ["Turnkey execution", "Transparent milestone billing", "Guaranteed completion dates"],
+                    "preferred_channels": ["Industry bidding portals", "Trade expos", "Direct B2B networking"],
+                },
+                {
+                    "segment_name": "Homeowners Planning Major Renovations",
+                    "demographics": "Suburban homeowners age 32-58, household income $90k+.",
+                    "psychographics": "Aspirational, anxious about unexpected costs and disruption to family life.",
+                    "pain_points": ["Contractor ghosting", "Unclear estimates", "Subpar finishing quality"],
+                    "needs": ["Fixed-price contracts", "Dedicated project manager", "3D architectural preview"],
+                    "preferred_channels": ["Instagram / Pinterest", "Google Local Services", "Houzz", "Local referrals"],
+                },
+            ],
+            "beverage": [
+                {
+                    "segment_name": "Specialty Coffee Enthusiasts & Connoisseurs",
+                    "demographics": "Urban professionals age 22-42, frequent café visitors, home brewing hobbyists.",
+                    "psychographics": "Craft-focused, ethically conscious, values origin traceability and tasting notes.",
+                    "pain_points": ["Stale mass-market supermarket beans", "Opaque sourcing practices", "Lack of roast date info"],
+                    "needs": ["Fresh roast-to-order delivery", "Single-origin transparent direct trade", "Brew guides and flavor profiles"],
+                    "preferred_channels": ["Instagram", "Coffee festivals / popups", "Specialty coffee blogs", "TikTok"],
+                },
+                {
+                    "segment_name": "Boutique Cafés & B2B Office Hospitality",
+                    "demographics": "Independent café owners, co-working space managers, creative agency office leads.",
+                    "psychographics": "Brand-conscious, seeks reliable weekly supply and barista support.",
+                    "pain_points": ["Inconsistent batch flavor profiles", "Late wholesale deliveries", "Equipment maintenance headaches"],
+                    "needs": ["Wholesale pricing tiers", "Free barista training and machine maintenance", "Custom co-branded beans"],
+                    "preferred_channels": ["Direct sales outreach", "Specialty food trade shows", "LinkedIn", "Industry word of mouth"],
+                },
+            ],
+        }
+
+        # Select matching benchmark or generate adaptive segments
+        matched_benchmarks = None
+        for key, segs in industry_audience_benchmarks.items():
+            if key in ind_lower or ind_lower in key:
+                matched_benchmarks = segs
+                break
+
+        if not matched_benchmarks:
+            matched_benchmarks = [
+                {
+                    "segment_name": f"Core B2B Decision Makers ({industry.title()})",
+                    "demographics": f"Executives, Department Directors, and Procurement Leads in {industry.title()}.",
+                    "psychographics": "Results-oriented, values ROI, reliability, efficiency, and proven vendor track record.",
+                    "pain_points": [
+                        f"Unpredictable service quality from current {industry} vendors",
+                        "High overhead and lack of transparent communication",
+                        "Difficulty scaling operations without losing control",
+                    ],
+                    "needs": [
+                        f"End-to-end trusted partner for {industry}",
+                        "Clear metrics, predictable timelines, and transparent reporting",
+                        "Customized solutions matching specific business workflows",
+                    ],
+                    "preferred_channels": ["LinkedIn", "Industry publications", "Direct referrals", "Search"],
+                },
+                {
+                    "segment_name": f"End Users & Operational Leads ({industry.title()})",
+                    "demographics": f"Mid-level practitioners and operational specialists using {bname}'s solutions daily.",
+                    "psychographics": "Practical, seeks ease of use, responsive support, and reduced daily friction.",
+                    "pain_points": [
+                        "Complex, steep learning curves of legacy tools and services",
+                        "Manual repetitive routines taking up valuable hours",
+                        "Slow support response when issues arise",
+                    ],
+                    "needs": [
+                        "Intuitive, modern customer experience",
+                        "Fast onboarding and clear documentation",
+                        "Reliable uptime and proactive customer success",
+                    ],
+                    "preferred_channels": ["Online communities", "Search / Google", "Product reviews", "YouTube"],
+                },
+                {
+                    "segment_name": f"Growth-Stage Innovators & Adopters ({industry.title()})",
+                    "demographics": f"Forward-thinking managers looking to modernize their {industry} stack.",
+                    "psychographics": "Innovative, early-adopter mindset, seeking competitive differentiation.",
+                    "pain_points": [
+                        "Legacy competitors moving too slowly to adopt modern standards",
+                        "High switching costs or rigid contracts with incumbent providers",
+                    ],
+                    "needs": [
+                        f"Modern, agile alternative: {vprop or 'cutting-edge capabilities'}",
+                        "Flexible onboarding with zero business downtime",
+                    ],
+                    "preferred_channels": ["Industry podcasts", "Product hunt", "Tech / Trade blogs", "Webinars"],
+                },
+            ]
+
+        for s_def in matched_benchmarks:
+            sname = (s_def.get("segment_name") or "").strip()
+            if not sname or sname.lower() in tracked_names_lower:
+                continue
+            to_create.append({
+                "brand_id": params.brand_id,
+                "segment_name": sname,
+                "demographics": s_def.get("demographics") or "",
+                "psychographics": s_def.get("psychographics") or "",
+                "pain_points": s_def.get("pain_points") or [],
+                "needs": s_def.get("needs") or [],
+                "preferred_channels": s_def.get("preferred_channels") or [],
+            })
+            tracked_names_lower.add(sname.lower())
+
+    items_to_create = to_create[: params.limit]
+    created_docs = []
+    for item in items_to_create:
+        doc = await ctx.store.create("target_segments", item)
+        created_docs.append(doc)
+
+    entities = [_to_target_segment(d) for d in created_docs]
+    method = "from auxiliary signals/candidates" if has_auxiliary else "via autonomous audience discovery"
+    summary_msg = f"Auto-added {len(entities)} target segment(s) {method} for brand '{brand.get('brand_name')}'."
+    return ActionResult.success(
+        TargetSegmentList(items=entities, total=len(entities)),
+        summary=summary_msg,
+        refresh_panels=["brand_detail"],
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -5157,7 +5559,22 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             ],
         ),
     )
-    competitors_tab = ui.Stack(direction="v", gap=3, children=[*candidates_blocks, competitors_list, add_competitor_form])
+    auto_competitor_button = ui.Button(
+        "Auto-discover & Add Competitors",
+        variant="secondary",
+        icon="Compass",
+        on_click=ui.Call("auto_add_competitors", brand_id=brand_id),
+    )
+    auto_competitor_card = ui.Card(
+        title="Auto-discover competitors",
+        subtitle="Autonomously find and track benchmark competitors for this industry (or from signals)",
+        content=auto_competitor_button,
+    )
+    competitors_tab = ui.Stack(
+        direction="v",
+        gap=3,
+        children=[*candidates_blocks, competitors_list, auto_competitor_card, add_competitor_form],
+    )
 
     # ── Segments tab ─────────────────────────────────────────────────
     if segments:
@@ -5179,6 +5596,18 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     else:
         segments_list = ui.Empty(message="No target segments defined yet.", icon="Users")
 
+    auto_segment_button = ui.Button(
+        "Auto-discover & Add Segments",
+        variant="secondary",
+        icon="Users",
+        on_click=ui.Call("auto_add_segments", brand_id=brand_id),
+    )
+    auto_segment_card = ui.Card(
+        title="Auto-discover target segments",
+        subtitle="Autonomously infer audience segments tailored to the brand's industry and positioning",
+        content=auto_segment_button,
+    )
+
     add_segment_form = ui.Card(
         title="Add target segment",
         content=ui.Form(
@@ -5195,7 +5624,11 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             ],
         ),
     )
-    segments_tab = ui.Stack(direction="v", gap=3, children=[segments_list, add_segment_form])
+    segments_tab = ui.Stack(
+        direction="v",
+        gap=3,
+        children=[segments_list, auto_segment_card, add_segment_form],
+    )
 
     # ── Market research tab ──────────────────────────────────────────
     run_market_button = ui.Button(
