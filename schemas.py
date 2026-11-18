@@ -397,6 +397,16 @@ class MarketSignal(BaseModel):
     candidate_competitor_name: str = Field("", description="If this source points to a specific named competitor, its name -- empty if this source is general market context, not a competitor")
 
 
+class CandidateCompetitor(BaseModel):
+    """Candidate competitor surfaced by market research before being formally promoted."""
+    name: str = ""
+    url: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    notes: str = ""
+    source: str = ""
+
+
 class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
     """One market-research snapshot for a brand: a landscape summary plus
     candidate competitors surfaced from real, cited sources -- never
@@ -410,7 +420,7 @@ class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
 
     Candidates here are NOT auto-written into competitor_profiles --
     promoting one to a tracked competitor is a deliberate human action via
-    add_brand_competitor (human-in-the-loop, same principle as VBS
+    add_brand_competitor or promote_candidate (human-in-the-loop, same principle as VBS
     evidence review)."""
     id: str = ""
     title: str = ""
@@ -419,6 +429,7 @@ class MarketResearchSnapshot(sdl.Entity, sdl.Bodied):
     landscape_summary: str = ""
     tracked_competitors: list[str] = []  # currently tracked competitors in the brand
     candidate_competitors: list[str] = []  # names only -- human decides which to promote via add_brand_competitor
+    candidate_details: list[CandidateCompetitor] = []
     sourcing_trail: list[str] = []  # every source URL used, in order -- never a candidate without a cited source
     is_current: bool = True
     superseded_at: str = ""
@@ -675,6 +686,15 @@ class AddCompetitorParams(BaseModel):
     strengths: list[str] = Field(default_factory=list, description="What the competitor does well")
     weaknesses: list[str] = Field(default_factory=list, description="Where the competitor falls short")
     notes: str = Field("", description="Freeform observations")
+
+
+class PromoteCandidateParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+    candidate_name: str = Field(min_length=1, description="Name of candidate competitor to promote to tracked competitors")
+    url: str = Field("", description="Competitor website")
+    strengths: list[str] = Field(default_factory=list, description="What the competitor does well")
+    weaknesses: list[str] = Field(default_factory=list, description="Where the competitor falls short")
+    notes: str = Field("", description="Freeform observations or rationale")
 
 
 class ListCompetitorsParams(BaseModel):

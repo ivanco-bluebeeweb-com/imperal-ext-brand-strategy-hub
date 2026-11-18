@@ -7,7 +7,7 @@ action, not the derivation detail. Imported one-way from main.py only.
 from __future__ import annotations
 
 from schemas import (
-    BrandContentHandoff, BrandProfile, CompetitorProfile,
+    BrandContentHandoff, BrandProfile, CandidateCompetitor, CompetitorProfile,
     GapAnalysisResult, MarketResearchSnapshot, SWOTResult, TargetSegment,
 )
 
@@ -134,9 +134,17 @@ def to_market_research_snapshot(d) -> MarketResearchSnapshot:
     data = d.data
     is_current = data.get("is_current", True)
     tracked = data.get("tracked_competitors", [])
+    candidate_names = data.get("candidate_competitors", [])
+    raw_details = data.get("candidate_details", [])
+    candidate_details = []
+    for cd in raw_details:
+        if isinstance(cd, dict):
+            candidate_details.append(CandidateCompetitor(**cd))
+        elif isinstance(cd, CandidateCompetitor):
+            candidate_details.append(cd)
     body = _market_research_markdown(
         data.get("industry", ""), data.get("landscape_summary", ""),
-        data.get("candidate_competitors", []), data.get("sourcing_trail", []),
+        candidate_names, data.get("sourcing_trail", []),
         tracked_competitors=tracked,
     )
     if not is_current:
@@ -148,7 +156,8 @@ def to_market_research_snapshot(d) -> MarketResearchSnapshot:
         industry=data.get("industry", ""),
         landscape_summary=data.get("landscape_summary", ""),
         tracked_competitors=tracked,
-        candidate_competitors=data.get("candidate_competitors", []),
+        candidate_competitors=candidate_names,
+        candidate_details=candidate_details,
         sourcing_trail=data.get("sourcing_trail", []),
         is_current=is_current,
         superseded_at=data.get("superseded_at", ""),

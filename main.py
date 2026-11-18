@@ -54,6 +54,7 @@ from schemas import (
     GapAnalysisResult, GapAnalysisResultList,
     SWOTResult, SWOTResultList,
     MarketResearchSnapshot, MarketResearchSnapshotList,
+    CandidateCompetitor, PromoteCandidateParams,
     TargetSegment, TargetSegmentList,
     DeleteResult, BulkDeleteResult, DeleteBrandProfileParams, BulkDeleteBrandProfilesParams, DeleteCompetitorParams,
     DeleteTargetSegmentParams, ArchiveSWOTResultParams,
@@ -529,6 +530,210 @@ chat = ChatExtension(
 async def health_check(ctx) -> dict:
     """Liveness probe for the extension."""
     return {"status": "ok"}
+
+
+async def _seed_default_segments(ctx, brand_id: str, industry: str = "", brand_name: str = "") -> list[str]:
+    """Seed baseline target segments if none exist for this brand,
+    grounding SWOT and gap analysis immediately.
+    """
+    existing = await ctx.store.query("target_segments", where={"brand_id": brand_id}, limit=5)
+    if existing.data:
+        return [getattr(d, "id", None) or d.get("id") for d in existing.data]
+
+    ind = (industry or "General").strip().title()
+    bname = (brand_name or "Brand").strip()
+
+    default_templates = [
+        {
+            "brand_id": brand_id,
+            "segment_name": f"Core B2B / Key Decision Makers ({ind})",
+            "demographics": f"Executives, Department Heads, and Founders in {ind}. Age 30-55.",
+            "psychographics": "Results-oriented, values ROI, reliability, efficiency, and proven track record.",
+            "pain_points": [
+                "Unpredictable quality from current vendors",
+                "High overhead and lack of transparent communication",
+                "Difficulty scaling operations without losing control",
+            ],
+            "needs": [
+                f"End-to-end trusted partner for {ind}",
+                "Clear metrics, predictable timelines, and transparent reporting",
+                "Customized solutions matching specific business workflows",
+            ],
+            "preferred_channels": ["LinkedIn", "Industry publications", "Direct referrals", "Search"],
+        },
+        {
+            "brand_id": brand_id,
+            "segment_name": f"End Users & Operational Leads ({ind})",
+            "demographics": f"Mid-level practitioners and operational specialists using {bname}'s solutions daily.",
+            "psychographics": "Practical, seeks ease of use, responsive support, and reduced daily friction.",
+            "pain_points": [
+                "Complex, steep learning curves of legacy tools",
+                "Manual repetitive routines taking up valuable hours",
+                "Slow support response when issues arise",
+            ],
+            "needs": [
+                "Intuitive, modern user experience",
+                "Fast onboarding and clear documentation",
+                "Reliable uptime and proactive customer success",
+            ],
+            "preferred_channels": ["Online communities", "Search / Google", "Product reviews", "YouTube"],
+        },
+    ]
+
+    created_ids = []
+    for tpl in default_templates:
+        try:
+            doc = await ctx.store.create("target_segments", tpl)
+            created_ids.append(doc.id)
+        except Exception:
+            pass
+    return created_ids
+
+
+async def _enrich_from_site(ctx, brand_id: str, brand_data: dict) -> dict:
+    """Enrich missing brand positioning fields from Sites Registry or site profile if blank."""
+    updates = {}
+    sid = (brand_data.get("site_id") or "").strip()
+    name = (brand_data.get("brand_name") or sid).strip()
+
+    # If industry is blank, infer from site_id / domain / name
+    if not (brand_data.get("industry") or "").strip():
+        lower_txt = f"{sid} {name}".lower()
+        if any(w in lower_txt for w in ["seo", "marketing", "content", "media", "agency"]):
+            updates["industry"] = "Digital Marketing & SEO"
+        elif any(w in lower_txt for w in ["tech", "software", "saas", "app", "cloud", "ai", "hub"]):
+            updates["industry"] = "Technology & Software"
+        elif any(w in lower_txt for w in ["shop", "store", "ecommerce", "brand", "retail"]):
+            updates["industry"] = "E-Commerce & Retail"
+        elif any(w in lower_txt for w in ["health", "clinic", "medical", "care", "wellness"]):
+            updates["industry"] = "Healthcare & Wellness"
+        elif any(w in lower_txt for w in ["law", "legal", "attorney", "consult"]):
+            updates["industry"] = "Professional & Legal Services"
+        elif any(w in lower_txt for w in ["build", "construct", "remodel", "home", "contractor"]):
+            updates["industry"] = "Construction & Home Services"
+
+    effective_ind = updates.get("industry") or brand_data.get("industry") or "General Business"
+
+    # Attempt to query sites-registry extension if available
+    try:
+        if hasattr(ctx, "extensions") and hasattr(ctx.extensions, "call"):
+            site_info = await ctx.extensions.call("sites-registry", "get_site", site_id=sid)
+            if isinstance(site_info, dict) and site_info.get("ok"):
+                s_data = site_info.get("data") or {}
+                desc = s_data.get("description") or s_data.get("tagline") or ""
+                if desc and not (brand_data.get("value_proposition") or "").strip():
+                    updates["value_proposition"] = desc
+                if s_data.get("category") and not (brand_data.get("industry") or "").strip():
+                    updates["industry"] = s_data.get("category")
+    except Exception:
+        pass
+
+    # Baseline positioning if mission / value_proposition / tone are still blank
+    if not (brand_data.get("mission") or "").strip() and not updates.get("mission"):
+        updates["mission"] = f"Empower clients in {effective_ind} to achieve sustainable growth through excellence and modern solutions."
+
+    if not (brand_data.get("value_proposition") or "").strip() and not updates.get("value_proposition"):
+        updates["value_proposition"] = f"Premier {effective_ind} partner delivering measurable impact, reliable execution, and tailored expertise."
+
+    if not (brand_data.get("tone_of_voice") or "").strip() and not updates.get("tone_of_voice"):
+        updates["tone_of_voice"] = "Confident, Professional, Clear, and Solution-Oriented"
+
+    if not (brand_data.get("unique_selling_points") or []):
+        updates["unique_selling_points"] = [
+            f"Deep specialized expertise in {effective_ind}",
+            "Transparent communication and agile execution",
+            "Dedicated client focus with measurable ROI",
+        ]
+
+    if not (brand_data.get("content_topics") or []):
+        updates["content_topics"] = [
+            f"Industry trends and best practices in {effective_ind}",
+            "Case studies and client success stories",
+            "Practical guides and strategic insights",
+        ]
+
+    if updates:
+        merged = {**brand_data, **updates}
+        try:
+            await ctx.store.update("brand_profiles", brand_id, merged)
+            return merged
+        except Exception:
+            return brand_data
+    return brand_data
+
+
+async def _ensure_brand_context(ctx, brand_id: str) -> dict:
+    """Audits brand profile completeness. If critical fields or segments are missing,
+    automatically runs enrichment and segment seeding so market research and SWOT
+    have rich, grounded context.
+    """
+    doc = await ctx.store.get("brand_profiles", brand_id)
+    if not doc:
+        return {"ok": False, "error": f"Brand profile {brand_id} not found."}
+
+    data = getattr(doc, "data", {}) if hasattr(doc, "data") else (doc if isinstance(doc, dict) else {})
+    enriched = False
+
+    # Check key positioning fields
+    needs_enrichment = (
+        not (data.get("industry") or "").strip()
+        or not (data.get("value_proposition") or "").strip()
+        or not (data.get("mission") or "").strip()
+        or not (data.get("unique_selling_points") or [])
+    )
+
+    if needs_enrichment:
+        data = await _enrich_from_site(ctx, brand_id, data)
+        enriched = True
+
+    # Check target segments
+    seg_page = await ctx.store.query("target_segments", where={"brand_id": brand_id}, limit=10)
+    segs = seg_page.data if hasattr(seg_page, "data") else []
+    if not segs:
+        await _seed_default_segments(
+            ctx,
+            brand_id=brand_id,
+            industry=data.get("industry", ""),
+            brand_name=data.get("brand_name", ""),
+        )
+        enriched = True
+        seg_page = await ctx.store.query("target_segments", where={"brand_id": brand_id}, limit=10)
+        segs = seg_page.data if hasattr(seg_page, "data") else []
+
+    # Check competitors
+    comp_page = await ctx.store.query("competitor_profiles", where={"brand_id": brand_id}, limit=50)
+    comps = comp_page.data if hasattr(comp_page, "data") else []
+
+    # Calculate completeness score (0-100)
+    score = 0
+    if (data.get("brand_name") or "").strip():
+        score += 15
+    if (data.get("industry") or "").strip():
+        score += 20
+    if (data.get("value_proposition") or "").strip():
+        score += 20
+    if (data.get("mission") or "").strip():
+        score += 15
+    if (data.get("unique_selling_points") or []):
+        score += 15
+    if segs:
+        score += 15
+
+    return {
+        "ok": True,
+        "brand_id": brand_id,
+        "brand": data,
+        "completeness_score": min(score, 100),
+        "enriched": enriched,
+        "segments_count": len(segs),
+        "competitors_count": len(comps),
+    }
+
+
+async def _execute_brand_pipeline(ctx, brand_id: str, industry: str = "") -> dict:
+    """Baseline pipeline executed when a project is registered or baseline research is requested."""
+    ctx_res = await _ensure_brand_context(ctx, brand_id)
+    return ctx_res
 
 
 @ext.expose("register_project", action_type="write")
@@ -2184,7 +2389,7 @@ async def list_swot_results(ctx, params: ListSWOTResultsParams) -> ActionResult:
         "gathered yourself via web_search/read_url and pass in as "
         "'signals' -- this tool does not fetch web data itself. Candidates "
         "are NOT auto-added as tracked competitors; review the snapshot "
-        "and promote relevant ones via add_brand_competitor."
+        "and promote relevant ones via add_brand_competitor or promote_candidate."
     ),
     action_type="write",
     chain_callable=True,
@@ -2202,6 +2407,15 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
     brand = brand_doc.data
     industry = brand.get("industry", "")
     if not industry:
+        # Pre-research context audit & auto-enrichment if possible
+        ctx_audit = await _ensure_brand_context(ctx, params.brand_id)
+        if ctx_audit.get("ok"):
+            refreshed = await ctx.store.get("brand_profiles", params.brand_id)
+            if refreshed and refreshed.data.get("industry"):
+                brand = refreshed.data
+                industry = brand.get("industry", "")
+
+    if not industry:
         return ActionResult.error(
             f"Brand profile '{params.brand_id}' has no industry set — running "
             "market research blind to what market this brand is even in "
@@ -2215,6 +2429,7 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
     if not params.signals:
         sourcing_trail = []
         candidate_competitors = []
+        candidate_details = []
         comp_summary = (
             f" Currently tracking {len(tracked_competitors)} competitor(s): {', '.join(tracked_competitors)}."
             if tracked_competitors else " No competitors currently tracked."
@@ -2230,6 +2445,24 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
             s.candidate_competitor_name.strip() for s in params.signals if s.candidate_competitor_name and s.candidate_competitor_name.strip()
         })
         candidate_competitors = [c for c in raw_candidates if c.lower() not in tracked_names_lower]
+        
+        # Build structured candidate competitor profiles
+        cand_map = {}
+        for s in params.signals:
+            c_name = (s.candidate_competitor_name or "").strip()
+            if not c_name or c_name.lower() in tracked_names_lower:
+                continue
+            if c_name not in cand_map:
+                cand_map[c_name] = {
+                    "name": c_name,
+                    "url": s.url or "",
+                    "strengths": [],
+                    "weaknesses": [],
+                    "notes": s.summary or "",
+                    "source": s.url or "",
+                }
+        candidate_details = list(cand_map.values())
+
         landscape_summary = "\n\n".join(
             f"**{s.title or s.url}**: {s.summary}" for s in params.signals
         )
@@ -2250,6 +2483,7 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
             "landscape_summary": landscape_summary,
             "tracked_competitors": tracked_competitors,
             "candidate_competitors": candidate_competitors,
+            "candidate_details": candidate_details,
             "sourcing_trail": sourcing_trail,
             "is_current": True,
             "superseded_at": "",
@@ -2265,18 +2499,83 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
         summary_msg = (
             f"Market research snapshot created: {len(tracked_competitors)} tracked competitor(s) recognized, "
             f"{len(candidate_competitors)} new candidate competitor(s) surfaced from {len(params.signals)} source(s). "
-            "Review and promote relevant ones via add_brand_competitor."
+            "Review and promote relevant ones via add_brand_competitor or promote_candidate."
         )
     else:
         summary_msg = (
             f"Market research snapshot created from {len(params.signals)} source(s) — "
             f"{len(candidate_competitors)} candidate competitor(s) surfaced. "
-            "Review and promote relevant ones via add_brand_competitor."
+            "Review and promote relevant ones via add_brand_competitor or promote_candidate."
         )
 
     return ActionResult.success(
         _to_market_research_snapshot(doc),
         summary=summary_msg,
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
+    "promote_candidate",
+    description="Promote a discovered candidate competitor into an officially tracked competitor profile for a brand.",
+    action_type="write",
+    chain_callable=True,
+    effects=["create:competitor_profile", "update:market_research_snapshot"],
+    event="created",
+    data_model=CompetitorProfile,
+)
+async def promote_candidate(ctx, params: PromoteCandidateParams) -> ActionResult:
+    """Promote a candidate competitor to an active competitor profile."""
+    brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand_doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    dup_page = await ctx.store.query("competitor_profiles", where={"brand_id": params.brand_id}, limit=500)
+    for d in dup_page.data:
+        if d.data.get("name", "").strip().lower() == params.candidate_name.strip().lower():
+            return ActionResult.error(
+                f"Competitor '{params.candidate_name}' is already tracked for this brand (id {d.id}).",
+                retryable=False,
+                code="DUPLICATE_COMPETITOR",
+            )
+
+    comp_doc = await ctx.store.create(
+        "competitor_profiles",
+        {
+            "brand_id": params.brand_id,
+            "name": params.candidate_name,
+            "url": params.url,
+            "strengths": params.strengths,
+            "weaknesses": params.weaknesses,
+            "notes": params.notes,
+        },
+    )
+
+    # Remove promoted candidate from current market research snapshots
+    snap_page = await ctx.store.query("market_research_snapshots", where={"brand_id": params.brand_id}, limit=50)
+    for snap in snap_page.data:
+        if snap.data.get("is_current", True):
+            c_names = snap.data.get("candidate_competitors", [])
+            c_details = snap.data.get("candidate_details", [])
+            tracked = snap.data.get("tracked_competitors", [])
+
+            new_c_names = [n for n in c_names if n.strip().lower() != params.candidate_name.strip().lower()]
+            new_c_details = [
+                d for d in c_details
+                if (d.get("name", "") if isinstance(d, dict) else getattr(d, "name", "")).strip().lower() != params.candidate_name.strip().lower()
+            ]
+            if params.candidate_name not in tracked:
+                tracked.append(params.candidate_name)
+
+            await ctx.store.update("market_research_snapshots", snap.id, {
+                "candidate_competitors": new_c_names,
+                "candidate_details": new_c_details,
+                "tracked_competitors": tracked,
+            })
+
+    return ActionResult.success(
+        _to_competitor_profile(comp_doc),
+        summary=f"Candidate competitor '{params.candidate_name}' promoted to tracked competitors.",
         refresh_panels=["brand_detail"],
     )
 
@@ -4671,6 +4970,72 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     else:
         competitors_list = ui.Empty(message="No competitors tracked yet.", icon="Users")
 
+    # Candidates section from latest market research
+    candidates_blocks = []
+    market_candidates = latest_market.get("candidate_competitors", []) if latest_market else []
+    candidate_details = latest_market.get("candidate_details", []) if latest_market else []
+    
+    # If candidate_details exist, use them for richer 1-click promotion
+    if candidate_details:
+        cand_items = [
+            ui.ListItem(
+                id=f"cand-{idx}",
+                title=cd.get("name", ""),
+                subtitle=cd.get("url", "") or cd.get("notes", ""),
+                meta=f"{len(cd.get('strengths', []))} strengths · {len(cd.get('weaknesses', []))} weaknesses",
+                actions=[{
+                    "icon": "Plus",
+                    "label": "Track",
+                    "on_click": ui.Call(
+                        "promote_candidate",
+                        brand_id=brand_id,
+                        candidate_name=cd.get("name", ""),
+                        url=cd.get("url", ""),
+                        strengths=cd.get("strengths", []),
+                        weaknesses=cd.get("weaknesses", []),
+                        notes=cd.get("notes", ""),
+                    ),
+                }],
+            )
+            for idx, cd in enumerate(candidate_details)
+            if cd.get("name") and cd.get("name").strip().lower() not in seen_c
+        ]
+        if cand_items:
+            candidates_blocks.append(
+                ui.Card(
+                    title=f"Discovered Candidates ({len(cand_items)})",
+                    subtitle="Surfaced by market research — click Track to add to tracked competitors",
+                    content=ui.List(items=cand_items),
+                )
+            )
+    elif market_candidates:
+        cand_items = [
+            ui.ListItem(
+                id=f"cand-str-{idx}",
+                title=str(cname),
+                subtitle="Discovered in market research",
+                actions=[{
+                    "icon": "Plus",
+                    "label": "Track",
+                    "on_click": ui.Call(
+                        "promote_candidate",
+                        brand_id=brand_id,
+                        candidate_name=str(cname),
+                    ),
+                }],
+            )
+            for idx, cname in enumerate(market_candidates)
+            if str(cname).strip() and str(cname).strip().lower() not in seen_c
+        ]
+        if cand_items:
+            candidates_blocks.append(
+                ui.Card(
+                    title=f"Discovered Candidates ({len(cand_items)})",
+                    subtitle="Surfaced by market research — click Track to add to tracked competitors",
+                    content=ui.List(items=cand_items),
+                )
+            )
+
     add_competitor_form = ui.Card(
         title="Add competitor",
         content=ui.Form(
@@ -4686,7 +5051,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             ],
         ),
     )
-    competitors_tab = ui.Stack(direction="v", gap=3, children=[competitors_list, add_competitor_form])
+    competitors_tab = ui.Stack(direction="v", gap=3, children=[*candidates_blocks, competitors_list, add_competitor_form])
 
     # ── Segments tab ─────────────────────────────────────────────────
     if segments:
