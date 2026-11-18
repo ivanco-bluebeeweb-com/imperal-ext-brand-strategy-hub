@@ -2599,17 +2599,17 @@ async def run_market_research(ctx, params: RunMarketResearchParams) -> ActionRes
     if tracked_competitors and not candidate_competitors:
         summary_msg = (
             f"Market research snapshot created: {len(tracked_competitors)} tracked competitor(s) recognized "
-            f"({', '.join(tracked_competitors)}). 0 new candidate(s) from {len(params.signals)} source(s)."
+            f"({', '.join(tracked_competitors)}). 0 new candidate(s) from {len(sourcing_trail)} source(s)."
         )
     elif tracked_competitors and candidate_competitors:
         summary_msg = (
             f"Market research snapshot created: {len(tracked_competitors)} tracked competitor(s) recognized, "
-            f"{len(candidate_competitors)} new candidate competitor(s) surfaced from {len(params.signals)} source(s). "
+            f"{len(candidate_competitors)} new candidate competitor(s) surfaced from {len(sourcing_trail)} source(s). "
             "Review and promote relevant ones via add_brand_competitor or promote_candidate."
         )
     else:
         summary_msg = (
-            f"Market research snapshot created from {len(params.signals)} source(s) — "
+            f"Market research snapshot created from {len(sourcing_trail)} source(s) — "
             f"{len(candidate_competitors)} candidate competitor(s) surfaced. "
             "Review and promote relevant ones via add_brand_competitor or promote_candidate."
         )
