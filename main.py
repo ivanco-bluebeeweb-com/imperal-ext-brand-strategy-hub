@@ -741,7 +741,7 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
     site_id = (brand.get("site_id") or "").strip()
     ind_lower = industry.lower()
 
-    # Pre-compiled benchmark market players and directories by sector
+    # Curated authoritative benchmarks by industry sector (real market players with real websites)
     industry_benchmarks: dict[str, list[dict]] = {
         "security": [
             {"name": "Securitas", "url": "https://www.securitas.com", "strengths": ["Global reach", "Guarding scale"], "weaknesses": ["Legacy processes", "High overhead"], "notes": "Major global security and protective services provider."},
@@ -751,49 +751,112 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
         "software": [
             {"name": "HubSpot", "url": "https://www.hubspot.com", "strengths": ["All-in-one CRM & inbound platform", "Extensive ecosystem"], "weaknesses": ["Steep pricing tiers"], "notes": "Market benchmark for growth software and customer platform."},
             {"name": "Zoho Suite", "url": "https://www.zoho.com", "strengths": ["Comprehensive product breadth", "Competitive pricing"], "weaknesses": ["UI complexity across modules"], "notes": "Broad cloud business suite and integrated apps."},
+            {"name": "Salesforce", "url": "https://www.salesforce.com", "strengths": ["Enterprise market dominance", "Customizability"], "weaknesses": ["High total cost of ownership"], "notes": "Enterprise benchmark for CRM and cloud platform."},
         ],
         "marketing": [
             {"name": "WebFX", "url": "https://www.webfx.com", "strengths": ["Proprietary tech platform", "Full-funnel digital marketing"], "weaknesses": ["High retainer minimums"], "notes": "Full-service digital marketing and ROI tracking agency."},
             {"name": "SmartSites", "url": "https://www.smartsites.com", "strengths": ["High client ratings", "PPC & Web design agility"], "weaknesses": ["Rapid scaling team shifts"], "notes": "Leading agency in search marketing and web development."},
+            {"name": "Ignite Visibility", "url": "https://ignitevisibility.com", "strengths": ["Multi-channel expertise", "Digital strategy consulting"], "weaknesses": ["Higher pricing tiers"], "notes": "Premier digital marketing and SEO consultancy."},
         ],
         "furniture": [
             {"name": "Herman Miller", "url": "https://www.hermanmiller.com", "strengths": ["Iconic ergonomic design", "Enterprise market dominance"], "weaknesses": ["Premium price barrier"], "notes": "Benchmark in high-end ergonomic design and workplace furniture."},
+            {"name": "Steelcase", "url": "https://www.steelcase.com", "strengths": ["Global workspace research", "Architectural product scale"], "weaknesses": ["Complex corporate procurement"], "notes": "Global leader in office furniture and architectural interior solutions."},
             {"name": "Muuto", "url": "https://www.muuto.com", "strengths": ["New Nordic aesthetics", "Architectural presence"], "weaknesses": ["Limited mass consumer distribution"], "notes": "Contemporary Scandinavian furniture and lighting brand."},
         ],
         "logistics": [
             {"name": "Flexport", "url": "https://www.flexport.com", "strengths": ["Digital freight forwarding platform", "Real-time visibility"], "weaknesses": ["Market volatility exposure"], "notes": "Modern tech-forward freight platform."},
             {"name": "C.H. Robinson", "url": "https://www.chrobinson.com", "strengths": ["Enormous carrier network", "Multimodal depth"], "weaknesses": ["Legacy enterprise systems"], "notes": "Major third-party logistics and freight brokerage."},
+            {"name": "Expeditors", "url": "https://www.expeditors.com", "strengths": ["Global compliance", "Customs brokerage"], "weaknesses": ["Strict enterprise focus"], "notes": "Global logistics and supply chain services."},
+        ],
+        "construction": [
+            {"name": "Turner Construction", "url": "https://www.turnerconstruction.com", "strengths": ["Scale and project management", "Commercial builder reputation"], "weaknesses": ["High overhead for smaller projects"], "notes": "Major international construction services company."},
+            {"name": "Skanska", "url": "https://www.skanska.com", "strengths": ["Sustainable building practices", "Infrastructure depth"], "weaknesses": ["Complex stakeholder management"], "notes": "Leading multinational construction and development firm."},
+            {"name": "Bechtel", "url": "https://www.bechtel.com", "strengths": ["Mega-project engineering", "Global procurement"], "weaknesses": ["Focused primarily on infrastructure and government"], "notes": "Global engineering, construction, and project management."},
+        ],
+        "home": [
+            {"name": "Angi", "url": "https://www.angi.com", "strengths": ["Mass consumer directory", "Contractor vetting network"], "weaknesses": ["Lead generation fee friction"], "notes": "Home services and contractor discovery platform."},
+            {"name": "Houzz", "url": "https://www.houzz.com", "strengths": ["Visual portfolio showcasing", "Direct homeowner engagement"], "weaknesses": ["High competition inside directory"], "notes": "Platform for home remodeling and design."},
+            {"name": "Taskrabbit", "url": "https://www.taskrabbit.com", "strengths": ["Instant booking", "Flexible hourly rates"], "weaknesses": ["Focus on small tasks rather than major renovations"], "notes": "Network for everyday home repairs and assembly."},
+        ],
+        "retail": [
+            {"name": "Shopify Merchants Network", "url": "https://www.shopify.com", "strengths": ["Direct-to-consumer infrastructure", "Multi-channel sales"], "weaknesses": ["Platform fee dependency"], "notes": "E-commerce and omnichannel retail platform."},
+            {"name": "Target", "url": "https://www.target.com", "strengths": ["Strong brand loyalty", "Omnichannel fulfillment"], "weaknesses": ["High operational costs"], "notes": "Mass retail and private-label merchandise brand."},
+        ],
+        "finance": [
+            {"name": "Stripe", "url": "https://stripe.com", "strengths": ["Developer ecosystem", "Global payments infrastructure"], "weaknesses": ["Developer-centric complexity for non-technical users"], "notes": "Financial infrastructure for the internet."},
+            {"name": "Square", "url": "https://squareup.com", "strengths": ["POS ecosystem", "SMB financial services"], "weaknesses": ["Transaction fees at high scale"], "notes": "Commerce and point-of-sale solutions for businesses."},
+        ],
+        "consulting": [
+            {"name": "McKinsey & Company", "url": "https://www.mckinsey.com", "strengths": ["Global prestige", "Executive board access"], "weaknesses": ["Very high premium fees"], "notes": "Global management consulting firm."},
+            {"name": "Bain & Company", "url": "https://www.bain.com", "strengths": ["Results-oriented delivery", "Private equity advisory"], "weaknesses": ["High budget barrier"], "notes": "Leading global business strategy consultancy."},
         ],
     }
 
-    # Find matching benchmarks or default general business competitors
+    # Step 1: Attempt live web-search discovery via inter-extension IPC if available
+    web_candidates: list[dict] = []
+    web_trail: list[str] = []
+    query_slug = industry.lower().replace(" ", "+")
+
+    try:
+        if hasattr(ctx, "extensions") and hasattr(ctx.extensions, "call"):
+            search_query = f"{industry} leading companies competitors directory"
+            # Call web-search extension
+            search_res = await ctx.extensions.call("web-search", "web_search", query=search_query, num_results=5)
+            if isinstance(search_res, dict) and "results" in search_res:
+                for item in search_res.get("results", []):
+                    u = item.get("url") or ""
+                    title = item.get("title") or ""
+                    snippet = item.get("snippet") or ""
+                    if u and not u.startswith("https://example.com") and ("http://" in u or "https://" in u):
+                        web_trail.append(u)
+                        # Extract domain/name candidate if title seems relevant
+                        cand_name = title.split(" - ")[0].split(" | ")[0].strip()
+                        if cand_name and len(cand_name) < 40 and cand_name.lower() != brand_name.lower():
+                            web_candidates.append({
+                                "name": cand_name,
+                                "url": u,
+                                "strengths": ["Live market discovery via web intelligence"],
+                                "weaknesses": [],
+                                "notes": snippet[:200] if snippet else f"Discovered via web search for {industry}.",
+                            })
+    except Exception:
+        # IPC not configured in test mock or runtime web-search not reachable - proceed to grounded directory
+        pass
+
+    # Step 2: Match pre-compiled authoritative benchmarks
     matched_candidates: list[dict] = []
     for key, benchmarks in industry_benchmarks.items():
         if key in ind_lower:
             matched_candidates.extend(benchmarks)
             break
 
+    # If web search returned candidates, prioritize or supplement them
+    if web_candidates:
+        matched_candidates = web_candidates + matched_candidates
+
+    # If still empty, assemble authentic industry registry & directory references with NO dummy example.com
     if not matched_candidates:
-        # Fallback dynamic market benchmarks based on industry naming
-        clean_ind = industry.replace("&", "and").title()
+        clean_ind = industry.replace("&", "and").strip().title()
+        ind_param = industry.lower().replace(" ", "+")
+        # Direct users to authentic, legitimate business registries and review directories
         matched_candidates = [
             {
-                "name": f"Premier {clean_ind} Group",
-                "url": f"https://example.com/{industry.lower().replace(' ', '-')}-benchmark",
-                "strengths": ["Established market tenure", "Broad portfolio"],
-                "weaknesses": ["Slower adaptation to modern tech"],
-                "notes": f"Established category benchmark in {industry}.",
+                "name": f"{clean_ind} Directory Benchmark",
+                "url": f"https://www.clutch.co/search?query={ind_param}",
+                "strengths": ["Verified client reviews", "Categorized service providers"],
+                "weaknesses": ["Directory listing rather than single competitor"],
+                "notes": f"Authoritative B2B market directory for {industry}.",
             },
             {
-                "name": f"NextGen {clean_ind} Solutions",
-                "url": f"https://example.com/nextgen-{industry.lower().replace(' ', '-')}",
-                "strengths": ["Digital-first approach", "Agile positioning"],
-                "weaknesses": ["Smaller regional market share"],
-                "notes": f"Emerging competitive challenger in {industry}.",
+                "name": f"{clean_ind} Industry Index",
+                "url": f"https://www.crunchbase.com/discover/organization.companies/{ind_param}",
+                "strengths": ["Investment and market footprint data", "Global scope"],
+                "weaknesses": ["Subscription barrier for advanced analytics"],
+                "notes": f"Global market intelligence index for {industry} organizations.",
             },
         ]
 
-    # Filter out already tracked competitors
+    # Filter out already tracked competitors and current brand name
     filtered_details = [
         c for c in matched_candidates
         if c["name"].strip().lower() not in tracked_names_lower
@@ -801,21 +864,23 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
     ]
     candidate_names = [c["name"] for c in filtered_details]
 
-    # Generate grounded sourcing trail
-    trail: list[str] = []
-    query_slug = industry.lower().replace(" ", "+")
+    # Step 3: Generate authentic, grounded sourcing trail
+    trail: list[str] = list(web_trail)
     if site_id:
         trail.append(f"https://www.google.com/search?q={site_id}+{query_slug}+competitors")
-    trail.append(f"https://www.clutch.co/directory/{industry.lower().replace(' ', '-')}")
+    trail.append(f"https://www.clutch.co/search?query={query_slug}")
+    trail.append(f"https://www.crunchbase.com/discover/organization.companies/{query_slug}")
+
     for c in filtered_details:
-        if c.get("url") and c["url"].startswith("http"):
-            trail.append(c["url"])
+        c_url = c.get("url") or ""
+        if c_url.startswith("http") and "example.com" not in c_url:
+            trail.append(c_url)
 
     # Deduplicate trail preserving order
     seen_urls = set()
     deduped_trail = []
     for u in trail:
-        if u and u not in seen_urls:
+        if u and u not in seen_urls and "example.com" not in u:
             seen_urls.add(u)
             deduped_trail.append(u)
 
