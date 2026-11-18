@@ -109,3 +109,34 @@ async def test_market_research_candidate_details_and_promotion():
     assert comps_res.status == "success"
     assert len(comps_res.data.items) == 1
     assert comps_res.data.items[0].name == "FreightWave"
+
+
+@pytest.mark.asyncio
+async def test_run_market_research_autonomous_discovery_when_no_signals():
+    ctx = MockContext(user_id="imp_u_test", tenant_id="tenant-test")
+    res = await create_brand_profile(
+        ctx,
+        CreateBrandProfileParams(
+            brand_name="CyberGuard",
+            industry="Cybersecurity & Managed SOC",
+            site_id="cyberguard.io",
+        ),
+    )
+    brand_id = res.data.id
+
+    # Run market research with empty signals (as clicking RUN in panel UI)
+    research_res = await run_market_research(
+        ctx,
+        RunMarketResearchParams(
+            brand_id=brand_id,
+            signals=[],
+        ),
+    )
+    assert research_res.status == "success"
+    snapshot = research_res.data
+    assert snapshot.is_current is True
+    # Verify autonomous discovery generated candidates and sourcing trail
+    assert len(snapshot.candidate_competitors) > 0
+    assert len(snapshot.candidate_details) > 0
+    assert len(snapshot.sourcing_trail) > 0
+    assert any("Cybersecurity" in trail or "search" in trail.lower() or "directory" in trail.lower() for trail in snapshot.sourcing_trail)
