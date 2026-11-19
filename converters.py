@@ -13,92 +13,96 @@ from schemas import (
 
 
 def to_brand_profile(d) -> BrandProfile:
-    data = d.data
+    data = d.data or {}
     return BrandProfile(
         id=d.id,
-        title=data.get("brand_name", "") or d.id,
-        site_id=data.get("site_id", ""),
-        brand_name=data.get("brand_name", ""),
-        mission=data.get("mission", ""),
-        vision=data.get("vision", ""),
-        value_proposition=data.get("value_proposition", ""),
-        tone_of_voice=data.get("tone_of_voice", ""),
-        unique_selling_points=data.get("unique_selling_points", []),
-        industry=data.get("industry", ""),
-        content_topics=data.get("content_topics", []),
+        title=data.get("brand_name") or d.id,
+        site_id=data.get("site_id") or "",
+        brand_name=data.get("brand_name") or "",
+        mission=data.get("mission") or "",
+        vision=data.get("vision") or "",
+        value_proposition=data.get("value_proposition") or "",
+        tone_of_voice=data.get("tone_of_voice") or "",
+        unique_selling_points=data.get("unique_selling_points") or [],
+        industry=data.get("industry") or "",
+        content_topics=data.get("content_topics") or [],
     )
 
 
 def to_competitor_profile(d) -> CompetitorProfile:
-    data = d.data
+    data = d.data or {}
     return CompetitorProfile(
         id=d.id,
-        title=data.get("name", "") or d.id,
-        brand_id=data.get("brand_id", ""),
-        name=data.get("name", ""),
-        url=data.get("url", ""),
-        strengths=data.get("strengths", []),
-        weaknesses=data.get("weaknesses", []),
-        notes=data.get("notes", ""),
+        title=data.get("name") or d.id,
+        brand_id=data.get("brand_id") or "",
+        name=data.get("name") or "",
+        url=data.get("url") or "",
+        strengths=data.get("strengths") or [],
+        weaknesses=data.get("weaknesses") or [],
+        notes=data.get("notes") or "",
     )
 
 
 def to_target_segment(d) -> TargetSegment:
-    data = d.data
+    data = d.data or {}
     return TargetSegment(
         id=d.id,
-        title=data.get("segment_name", "") or d.id,
-        brand_id=data.get("brand_id", ""),
-        segment_name=data.get("segment_name", ""),
-        demographics=data.get("demographics", ""),
-        psychographics=data.get("psychographics", ""),
-        pain_points=data.get("pain_points", []),
-        needs=data.get("needs", []),
-        preferred_channels=data.get("preferred_channels", []),
+        title=data.get("segment_name") or d.id,
+        brand_id=data.get("brand_id") or "",
+        segment_name=data.get("segment_name") or "",
+        demographics=data.get("demographics") or "",
+        psychographics=data.get("psychographics") or "",
+        pain_points=data.get("pain_points") or [],
+        needs=data.get("needs") or [],
+        preferred_channels=data.get("preferred_channels") or [],
     )
 
 
 def to_swot_result(d) -> SWOTResult:
-    data = d.data
-    strengths = data.get("strengths", [])
-    weaknesses = data.get("weaknesses", [])
-    opportunities = data.get("opportunities", [])
-    threats = data.get("threats", [])
-    is_current = data.get("is_current", True)
+    data = d.data or {}
+    strengths = data.get("strengths") or []
+    weaknesses = data.get("weaknesses") or []
+    opportunities = data.get("opportunities") or []
+    threats = data.get("threats") or []
+    is_current = data.get("is_current")
+    if is_current is None:
+        is_current = True
     body = _swot_markdown(strengths, weaknesses, opportunities, threats)
     if not is_current:
         body = "_⚠ SUPERSEDED — a newer SWOT exists for this brand._\n\n" + body
     return SWOTResult(
         id=d.id,
         title=f"SWOT — {data.get('brand_id', d.id)}" + ("" if is_current else " (superseded)"),
-        brand_id=data.get("brand_id", ""),
+        brand_id=data.get("brand_id") or "",
         strengths=strengths,
         weaknesses=weaknesses,
         opportunities=opportunities,
         threats=threats,
         is_current=is_current,
-        superseded_at=data.get("superseded_at", ""),
+        superseded_at=data.get("superseded_at") or "",
         body=body,
     )
 
 
 def to_gap_analysis_result(d) -> GapAnalysisResult:
-    data = d.data
-    gaps = data.get("gaps", [])
-    recommendations = data.get("recommendations", [])
-    is_current = data.get("is_current", True)
+    data = d.data or {}
+    gaps = data.get("gaps") or []
+    recommendations = data.get("recommendations") or []
+    is_current = data.get("is_current")
+    if is_current is None:
+        is_current = True
     body = _gap_markdown(gaps, recommendations)
     if not is_current:
         body = "_⚠ SUPERSEDED — a newer gap analysis exists for this segment._\n\n" + body
     return GapAnalysisResult(
         id=d.id,
         title=f"Gap analysis — {data.get('brand_id', d.id)}" + ("" if is_current else " (superseded)"),
-        brand_id=data.get("brand_id", ""),
-        segment_id=data.get("segment_id", ""),
+        brand_id=data.get("brand_id") or "",
+        segment_id=data.get("segment_id") or "",
         gaps=gaps,
         recommendations=recommendations,
         is_current=is_current,
-        superseded_at=data.get("superseded_at", ""),
+        superseded_at=data.get("superseded_at") or "",
         body=body,
     )
 
@@ -131,11 +135,13 @@ def _market_research_markdown(industry: str, landscape_summary: str, candidates:
 
 
 def to_market_research_snapshot(d) -> MarketResearchSnapshot:
-    data = d.data
-    is_current = data.get("is_current", True)
-    tracked = data.get("tracked_competitors", [])
-    candidate_names = data.get("candidate_competitors", [])
-    raw_details = data.get("candidate_details", [])
+    data = d.data or {}
+    is_current = data.get("is_current")
+    if is_current is None:
+        is_current = True
+    tracked = data.get("tracked_competitors") or []
+    candidate_names = data.get("candidate_competitors") or []
+    raw_details = data.get("candidate_details") or []
     candidate_details = []
     for cd in raw_details:
         if isinstance(cd, dict):
@@ -143,8 +149,8 @@ def to_market_research_snapshot(d) -> MarketResearchSnapshot:
         elif isinstance(cd, CandidateCompetitor):
             candidate_details.append(cd)
     body = _market_research_markdown(
-        data.get("industry", ""), data.get("landscape_summary", ""),
-        candidate_names, data.get("sourcing_trail", []),
+        data.get("industry") or "", data.get("landscape_summary") or "",
+        candidate_names, data.get("sourcing_trail") or [],
         tracked_competitors=tracked,
     )
     if not is_current:
@@ -152,15 +158,15 @@ def to_market_research_snapshot(d) -> MarketResearchSnapshot:
     return MarketResearchSnapshot(
         id=d.id,
         title=f"Market research — {data.get('brand_id', d.id)}" + ("" if is_current else " (superseded)"),
-        brand_id=data.get("brand_id", ""),
-        industry=data.get("industry", ""),
-        landscape_summary=data.get("landscape_summary", ""),
+        brand_id=data.get("brand_id") or "",
+        industry=data.get("industry") or "",
+        landscape_summary=data.get("landscape_summary") or "",
         tracked_competitors=tracked,
         candidate_competitors=candidate_names,
         candidate_details=candidate_details,
-        sourcing_trail=data.get("sourcing_trail", []),
+        sourcing_trail=data.get("sourcing_trail") or [],
         is_current=is_current,
-        superseded_at=data.get("superseded_at", ""),
+        superseded_at=data.get("superseded_at") or "",
         body=body,
     )
 
@@ -180,7 +186,8 @@ def build_swot(brand: dict, competitors: list[dict]) -> tuple[list[str], list[st
     This is intentionally simple and transparent (no LLM call) — a human or
     Webbee reviews and edits it, this just gives a structured starting point.
     """
-    strengths = list(brand.get("unique_selling_points", []))
+    brand = brand or {}
+    strengths = list(brand.get("unique_selling_points") or [])
     if brand.get("value_proposition"):
         strengths.append(f"Clear value proposition: {brand['value_proposition']}")
     if brand.get("tone_of_voice"):
@@ -199,22 +206,15 @@ def build_swot(brand: dict, competitors: list[dict]) -> tuple[list[str], list[st
     # Word-overlap check against the brand's own strengths, used below to spot
     # relative weaknesses -- a competitor strength the brand's own profile
     # text never addresses at all.
-    strengths_text = " ".join(strengths).lower()
-    for comp in competitors:
-        for w in comp.get("weaknesses", []):
+    strengths_text = " ".join(str(s) for s in strengths).lower()
+    for comp in competitors or []:
+        if not isinstance(comp, dict):
+            continue
+        for w in comp.get("weaknesses") or []:
             opportunities.append(f"{comp.get('name', 'Competitor')} weakness to exploit: {w}")
-        for s in comp.get("strengths", []):
+        for s in comp.get("strengths") or []:
             threats.append(f"{comp.get('name', 'Competitor')} strength to watch: {s}")
-            # Previously weaknesses only ever came from gaps in the brand's OWN
-            # stated fields (mission/value_proposition/USPs) -- if those were
-            # all filled in, weaknesses was permanently empty no matter how
-            # many competitor advantages existed. Opportunities/Threats were
-            # already derived from competitor data; Weaknesses was the only
-            # SWOT quadrant that never looked outward. Mirroring the
-            # opportunities logic: a tracked competitor's strength that the
-            # brand's own strengths text shares no words with is a real,
-            # evidence-based relative weakness, not an invented one.
-            s_words = {w for w in s.lower().split() if len(w) > 3}
+            s_words = {w for w in str(s).lower().split() if len(w) > 3}
             if s_words and not (s_words & set(strengths_text.split())):
                 weaknesses.append(
                     f"Relative to {comp.get('name', 'Competitor')}, unmatched: {s}"
@@ -234,16 +234,20 @@ def build_gap_analysis(brand: dict, segment: dict) -> tuple[list[str], list[str]
     unaddressed need. Simple keyword-overlap heuristic, not NLP — a
     transparent starting point for a human/Webbee review pass.
     """
+    brand = brand or {}
+    segment = segment or {}
+    brand_usps = brand.get("unique_selling_points") or []
+    val_prop = brand.get("value_proposition") or ""
     brand_text = " ".join(
-        brand.get("unique_selling_points", []) + [brand.get("value_proposition", "")]
+        [str(u) for u in brand_usps] + [str(val_prop)]
     ).lower()
 
     gaps = []
-    for need in segment.get("needs", []):
-        if need and need.lower() not in brand_text:
+    for need in segment.get("needs") or []:
+        if need and str(need).lower() not in brand_text:
             gaps.append(f"Segment need not addressed by current positioning: {need}")
-    for pain in segment.get("pain_points", []):
-        if pain and pain.lower() not in brand_text:
+    for pain in segment.get("pain_points") or []:
+        if pain and str(pain).lower() not in brand_text:
             gaps.append(f"Segment pain point not addressed by current positioning: {pain}")
 
     if not gaps:
@@ -254,22 +258,26 @@ def build_gap_analysis(brand: dict, segment: dict) -> tuple[list[str], list[str]
         if "not addressed" in gap:
             what = gap.split(": ", 1)[-1]
             recommendations.append(f"Address '{what}' explicitly in messaging/content for this segment")
-    if segment.get("preferred_channels"):
+    pref_channels = segment.get("preferred_channels") or []
+    if pref_channels:
         recommendations.append(
-            f"Prioritise these channels for this segment: {', '.join(segment['preferred_channels'])}"
+            f"Prioritise these channels for this segment: {', '.join(str(c) for c in pref_channels)}"
         )
 
     return gaps, recommendations
 
 
 def to_content_handoff(brand: dict, brand_id: str, site_id: str, domain: str, target_languages: list[str]) -> BrandContentHandoff:
+    brand = brand or {}
+    usps = brand.get("unique_selling_points") or []
+    topics = brand.get("content_topics") or []
     body = (
         f"# {brand.get('brand_name', site_id)} — brand context for content planning\n\n"
         f"**Mission:** {brand.get('mission', '(not set)')}\n\n"
         f"**Value proposition:** {brand.get('value_proposition', '(not set)')}\n\n"
         f"**Tone of voice:** {brand.get('tone_of_voice', '(not set)')}\n\n"
-        f"**Unique selling points:** {', '.join(brand.get('unique_selling_points', [])) or '(none)'}\n\n"
-        f"**Content topics:** {', '.join(brand.get('content_topics', [])) or '(none set)'}\n"
+        f"**Unique selling points:** {', '.join(str(u) for u in usps) or '(none)'}\n\n"
+        f"**Content topics:** {', '.join(str(t) for t in topics) or '(none set)'}\n"
     )
     return BrandContentHandoff(
         id=brand_id,
@@ -277,14 +285,14 @@ def to_content_handoff(brand: dict, brand_id: str, site_id: str, domain: str, ta
         brand_id=brand_id,
         site_id=site_id,
         domain=domain or site_id,
-        brand_name=brand.get("brand_name", ""),
-        business_description=brand.get("value_proposition", "") or brand.get("mission", ""),
+        brand_name=brand.get("brand_name", "") or "",
+        business_description=brand.get("value_proposition", "") or brand.get("mission", "") or "",
         # Honest mapping: content_categories reflects ONLY content_topics (what
         # this brand's content should cover). It used to silently fall back to
         # unique_selling_points (differentiators, not topics) when content_topics
         # was empty, which mislabeled USPs as content categories -- see task #1891.
-        content_categories=brand.get("content_topics", []),
+        content_categories=topics,
         cta_default="",
-        target_languages=target_languages,
+        target_languages=target_languages or [],
         body=body,
     )

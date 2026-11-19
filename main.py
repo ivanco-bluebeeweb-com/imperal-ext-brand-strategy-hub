@@ -618,7 +618,10 @@ async def _enrich_from_site(ctx, brand_id: str, brand_data: dict) -> dict:
     # Attempt to query sites-registry extension if available
     try:
         if hasattr(ctx, "extensions") and hasattr(ctx.extensions, "call"):
-            site_info = await ctx.extensions.call("sites-registry", "get_site", site_id=sid)
+            site_info = await asyncio.wait_for(
+                ctx.extensions.call("sites-registry", "get_site", site_id=sid),
+                timeout=5.0,
+            )
             if isinstance(site_info, dict) and site_info.get("ok"):
                 s_data = site_info.get("data") or {}
                 desc = s_data.get("description") or s_data.get("tagline") or ""
@@ -831,8 +834,11 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
     try:
         if hasattr(ctx, "extensions") and hasattr(ctx.extensions, "call"):
             search_query = f"{industry} leading companies competitors -aggregator -directory"
-            # Call web-search extension
-            search_res = await ctx.extensions.call("web-search", "web_search", query=search_query, num_results=5)
+            # Call web-search extension with strict timeout
+            search_res = await asyncio.wait_for(
+                ctx.extensions.call("web-search", "web_search", query=search_query, num_results=5),
+                timeout=5.0,
+            )
             if isinstance(search_res, dict) and "results" in search_res:
                 for item in search_res.get("results", []):
                     u = item.get("url") or ""
@@ -1158,7 +1164,10 @@ async def fetch_connected_sites(ctx) -> tuple[list[dict], list[dict]]:
     problems: list[dict] = []
     for app_id in SITE_PROVIDER_APP_IDS:
         try:
-            rows = await ctx.extensions.call(app_id, "list_connected_sites")
+            rows = await asyncio.wait_for(
+                ctx.extensions.call(app_id, "list_connected_sites"),
+                timeout=5.0,
+            )
         except Exception as exc:  # noqa: BLE001 -- surfaced to the panel, not swallowed
             problems.append({
                 "provider": app_id,
@@ -5562,7 +5571,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 id=c.get("id", ""),
                 title=c.get("name", ""),
                 subtitle=c.get("url", ""),
-                meta=f"{len(c.get('strengths', []))} strengths · {len(c.get('weaknesses', []))} weaknesses",
+                meta=f"{len(c.get('strengths') or [])} strengths · {len(c.get('weaknesses') or [])} weaknesses",
                 actions=[{
                     "icon": "Trash2",
                     "on_click": ui.Call("delete_brand_competitor", competitor_id=c.get("id", "")),
@@ -5577,8 +5586,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
 
     # Candidates section from latest market research
     candidates_blocks = []
-    market_candidates = latest_market.get("candidate_competitors", []) if latest_market else []
-    candidate_details = latest_market.get("candidate_details", []) if latest_market else []
+    market_candidates = (latest_market.get("candidate_competitors") or []) if latest_market else []
+    candidate_details = (latest_market.get("candidate_details") or []) if latest_market else []
     
     # If candidate_details exist, use them for richer 1-click promotion
     if candidate_details:
@@ -5587,7 +5596,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 id=f"cand-{idx}",
                 title=cd.get("name", ""),
                 subtitle=cd.get("url", "") or cd.get("notes", ""),
-                meta=f"{len(cd.get('strengths', []))} strengths · {len(cd.get('weaknesses', []))} weaknesses",
+                meta=f"{len(cd.get('strengths') or [])} strengths · {len(cd.get('weaknesses') or [])} weaknesses",
                 actions=[{
                     "icon": "Plus",
                     "label": "Track",
@@ -5596,8 +5605,8 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                         brand_id=brand_id,
                         candidate_name=cd.get("name", ""),
                         url=cd.get("url", ""),
-                        strengths=cd.get("strengths", []),
-                        weaknesses=cd.get("weaknesses", []),
+                        strengths=cd.get("strengths") or [],
+                        weaknesses=cd.get("weaknesses") or [],
                         notes=cd.get("notes", ""),
                     ),
                 }],
@@ -5680,7 +5689,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 id=d.id,
                 title=d.data.get("segment_name", "") or d.id,
                 subtitle=d.data.get("demographics", ""),
-                meta=f"{len(d.data.get('pain_points', []))} pain points · {len(d.data.get('needs', []))} needs",
+                meta=f"{len(d.data.get('pain_points') or [])} pain points · {len(d.data.get('needs') or [])} needs",
                 actions=[{
                     "icon": "Trash2",
                     "on_click": ui.Call("delete_target_segment", segment_id=d.id),
