@@ -140,3 +140,44 @@ async def test_run_market_research_autonomous_discovery_when_no_signals():
     assert len(snapshot.candidate_details) > 0
     assert len(snapshot.sourcing_trail) > 0
     assert any("Cybersecurity" in trail or "search" in trail.lower() or "directory" in trail.lower() for trail in snapshot.sourcing_trail)
+
+
+@pytest.mark.asyncio
+async def test_market_research_filters_out_aggregators_and_directories():
+    """Verify that aggregators like Angi, Houzz, Yelp, Thumbtack, Clutch etc.
+    are never suggested as candidate competitors."""
+    ctx = MockContext(user_id="imp_u_test", tenant_id="tenant-test")
+    res = await create_brand_profile(
+        ctx,
+        CreateBrandProfileParams(
+            brand_name="TRD Builders",
+            industry="home remodeling & general contracting",
+            site_id="trdbuilders.com",
+        ),
+    )
+    brand_id = res.data.id
+
+    # Run market research autonomously
+    research_res = await run_market_research(
+        ctx,
+        RunMarketResearchParams(
+            brand_id=brand_id,
+            signals=[],
+        ),
+    )
+    assert research_res.status == "success"
+    snapshot = research_res.data
+
+    # Ensure none of the candidate competitors or their URLs are aggregators
+    from main import AGGREGATOR_DOMAINS
+    for cand in snapshot.candidate_competitors:
+        assert not any(agg in cand.lower() for agg in ["angi", "houzz", "yelp", "thumbtack", "clutch", "directory"]), f"Aggregator found in candidates: {cand}"
+
+    for detail in snapshot.candidate_details:
+        cand_url = getattr(detail, "url", "") if not isinstance(detail, dict) else detail.get("url", "")
+        cand_name = getattr(detail, "name", "") if not isinstance(detail, dict) else detail.get("name", "")
+        cand_url = cand_url.lower()
+        cand_name = cand_name.lower()
+        for agg in AGGREGATOR_DOMAINS:
+            assert agg not in cand_url, f"Aggregator domain {agg} found in candidate url {cand_url}"
+        assert not any(kw in cand_name for kw in ["directory", "aggregator", "marketplace", "finder"]), f"Aggregator name keyword found: {cand_name}"

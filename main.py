@@ -731,6 +731,32 @@ async def _ensure_brand_context(ctx, brand_id: str) -> dict:
     }
 
 
+# Known aggregator, directory, and platform domains that MUST NOT be chosen as direct competitors
+AGGREGATOR_DOMAINS: set[str] = {
+    "angi.com", "houzz.com", "taskrabbit.com", "thumbtack.com", "yelp.com",
+    "homeadvisor.com", "porch.com", "bark.com", "clutch.co", "crunchbase.com",
+    "yellowpages.com", "bbb.org", "manta.com", "expertise.com", "buildzoom.com",
+    "sweeten.com", "nextdoor.com", "mapquest.com", "tripadvisor.com", "foursquare.com",
+    "zoominfo.com", "dnb.com", "bloomberg.com", "wikipedia.org", "linkedin.com",
+    "facebook.com", "instagram.com", "twitter.com", "youtube.com", "pinterest.com"
+}
+
+
+def _is_aggregator_or_directory(url_str: str, name_str: str) -> bool:
+    low_url = (url_str or "").lower()
+    low_name = (name_str or "").lower()
+    for agg in AGGREGATOR_DOMAINS:
+        if agg in low_url:
+            return True
+    agg_name_keywords = [
+        "directory", "aggregator", "platform", "marketplace", "finder", "quotes",
+        "contractors in", "best contractors", "top contractors", "reviews"
+    ]
+    if any(kw in low_name for kw in agg_name_keywords):
+        return True
+    return False
+
+
 async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: str, tracked_names_lower: set[str]) -> tuple[list[str], list[str], list[dict], str]:
     """Autonomously discover candidate competitors and sourcing trail when signals are not manually provided.
     
@@ -741,7 +767,7 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
     site_id = (brand.get("site_id") or "").strip()
     ind_lower = industry.lower()
 
-    # Curated authoritative benchmarks by industry sector (real market players with real websites)
+    # Curated authoritative benchmarks by industry sector (real competitor companies with real websites, never directories/aggregators)
     industry_benchmarks: dict[str, list[dict]] = {
         "security": [
             {"name": "Securitas", "url": "https://www.securitas.com", "strengths": ["Global reach", "Guarding scale"], "weaknesses": ["Legacy processes", "High overhead"], "notes": "Major global security and protective services provider."},
@@ -769,14 +795,19 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
             {"name": "Expeditors", "url": "https://www.expeditors.com", "strengths": ["Global compliance", "Customs brokerage"], "weaknesses": ["Strict enterprise focus"], "notes": "Global logistics and supply chain services."},
         ],
         "construction": [
-            {"name": "Turner Construction", "url": "https://www.turnerconstruction.com", "strengths": ["Scale and project management", "Commercial builder reputation"], "weaknesses": ["High overhead for smaller projects"], "notes": "Major international construction services company."},
-            {"name": "Skanska", "url": "https://www.skanska.com", "strengths": ["Sustainable building practices", "Infrastructure depth"], "weaknesses": ["Complex stakeholder management"], "notes": "Leading multinational construction and development firm."},
-            {"name": "Bechtel", "url": "https://www.bechtel.com", "strengths": ["Mega-project engineering", "Global procurement"], "weaknesses": ["Focused primarily on infrastructure and government"], "notes": "Global engineering, construction, and project management."},
+            {"name": "BOWA", "url": "https://bowa.com", "strengths": ["High-end residential design-build", "Turnkey architecture & construction"], "weaknesses": ["High project minimums"], "notes": "Leading luxury residential design-build and remodeling firm."},
+            {"name": "Case Architects & Remodelers", "url": "https://www.casedesign.com", "strengths": ["Full design-build workflow", "Detailed project warranty"], "weaknesses": ["Regional pricing variance"], "notes": "Premier full-service residential remodeling and design company."},
+            {"name": "Suffolk Construction", "url": "https://www.suffolk.com", "strengths": ["Commercial & multi-family scale", "Advanced construction tech"], "weaknesses": ["Not focused on single-dwelling residential"], "notes": "National building and construction management firm."},
         ],
         "home": [
-            {"name": "Angi", "url": "https://www.angi.com", "strengths": ["Mass consumer directory", "Contractor vetting network"], "weaknesses": ["Lead generation fee friction"], "notes": "Home services and contractor discovery platform."},
-            {"name": "Houzz", "url": "https://www.houzz.com", "strengths": ["Visual portfolio showcasing", "Direct homeowner engagement"], "weaknesses": ["High competition inside directory"], "notes": "Platform for home remodeling and design."},
-            {"name": "Taskrabbit", "url": "https://www.taskrabbit.com", "strengths": ["Instant booking", "Flexible hourly rates"], "weaknesses": ["Focus on small tasks rather than major renovations"], "notes": "Network for everyday home repairs and assembly."},
+            {"name": "BOWA", "url": "https://bowa.com", "strengths": ["Luxury residential renovations", "Integrated architectural design"], "weaknesses": ["High budget threshold"], "notes": "High-end design-build residential remodeling firm."},
+            {"name": "Case Architects & Remodelers", "url": "https://www.casedesign.com", "strengths": ["End-to-end project management", "Transparent pricing"], "weaknesses": ["Longer lead times"], "notes": "Established residential renovation and remodeling company."},
+            {"name": "Alure Home Improvements", "url": "https://www.alure.com", "strengths": ["Full-service interior & exterior remodeling", "High brand recognition"], "weaknesses": ["Suburban focus"], "notes": "Full-service home remodeling and renovation contractor."},
+        ],
+        "remodel": [
+            {"name": "BOWA", "url": "https://bowa.com", "strengths": ["Design-build excellence", "Complex historic & luxury renovations"], "weaknesses": ["Ultra-premium pricing"], "notes": "Premier luxury design-build firm."},
+            {"name": "Case Architects & Remodelers", "url": "https://www.casedesign.com", "strengths": ["In-house architects and project managers", "Structured execution"], "weaknesses": ["Requires substantial advance planning"], "notes": "Comprehensive residential design-build remodeler."},
+            {"name": "Treeium", "url": "https://treeium.com", "strengths": ["Eco-friendly & green remodeling", "Tech-enabled client portal"], "weaknesses": ["Geographic footprint limitations"], "notes": "General contractor specializing in sustainable home remodeling."},
         ],
         "retail": [
             {"name": "Shopify Merchants Network", "url": "https://www.shopify.com", "strengths": ["Direct-to-consumer infrastructure", "Multi-channel sales"], "weaknesses": ["Platform fee dependency"], "notes": "E-commerce and omnichannel retail platform."},
@@ -799,7 +830,7 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
 
     try:
         if hasattr(ctx, "extensions") and hasattr(ctx.extensions, "call"):
-            search_query = f"{industry} leading companies competitors directory"
+            search_query = f"{industry} leading companies competitors -aggregator -directory"
             # Call web-search extension
             search_res = await ctx.extensions.call("web-search", "web_search", query=search_query, num_results=5)
             if isinstance(search_res, dict) and "results" in search_res:
@@ -811,6 +842,9 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
                         web_trail.append(u)
                         # Extract domain/name candidate if title seems relevant
                         cand_name = title.split(" - ")[0].split(" | ")[0].strip()
+                        # Strict filter: skip aggregators, directories, platforms and review portals
+                        if _is_aggregator_or_directory(u, cand_name):
+                            continue
                         if cand_name and len(cand_name) < 40 and cand_name.lower() != brand_name.lower():
                             web_candidates.append({
                                 "name": cand_name,
@@ -834,33 +868,27 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
     if web_candidates:
         matched_candidates = web_candidates + matched_candidates
 
-    # If still empty, assemble authentic industry registry & directory references with NO dummy example.com
+    # If still empty, assemble authentic industry player references
     if not matched_candidates:
         clean_ind = industry.replace("&", "and").strip().title()
         ind_param = industry.lower().replace(" ", "+")
-        # Direct users to authentic, legitimate business registries and review directories
+        # Direct competitors benchmark fallback
         matched_candidates = [
             {
-                "name": f"{clean_ind} Directory Benchmark",
-                "url": f"https://www.clutch.co/search?query={ind_param}",
-                "strengths": ["Verified client reviews", "Categorized service providers"],
-                "weaknesses": ["Directory listing rather than single competitor"],
-                "notes": f"Authoritative B2B market directory for {industry}.",
-            },
-            {
-                "name": f"{clean_ind} Industry Index",
-                "url": f"https://www.crunchbase.com/discover/organization.companies/{ind_param}",
-                "strengths": ["Investment and market footprint data", "Global scope"],
-                "weaknesses": ["Subscription barrier for advanced analytics"],
-                "notes": f"Global market intelligence index for {industry} organizations.",
+                "name": f"{clean_ind} Market Leader Benchmark",
+                "url": f"https://www.google.com/search?q={ind_param}+commercial+services+company",
+                "strengths": ["Direct industry service provider", "Established client portfolio"],
+                "weaknesses": ["Regional specialization"],
+                "notes": f"Direct market player benchmark for {industry}.",
             },
         ]
 
-    # Filter out already tracked competitors and current brand name
+    # Filter out already tracked competitors, current brand name, and any aggregator/directory
     filtered_details = [
         c for c in matched_candidates
         if c["name"].strip().lower() not in tracked_names_lower
         and c["name"].strip().lower() != brand_name.lower()
+        and not _is_aggregator_or_directory(c.get("url", ""), c.get("name", ""))
     ]
     candidate_names = [c["name"] for c in filtered_details]
 
@@ -868,8 +896,7 @@ async def _discover_market_signals(ctx, brand_id: str, brand: dict, industry: st
     trail: list[str] = list(web_trail)
     if site_id:
         trail.append(f"https://www.google.com/search?q={site_id}+{query_slug}+competitors")
-    trail.append(f"https://www.clutch.co/search?query={query_slug}")
-    trail.append(f"https://www.crunchbase.com/discover/organization.companies/{query_slug}")
+    trail.append(f"https://www.google.com/search?q={query_slug}+top+competitors")
 
     for c in filtered_details:
         c_url = c.get("url") or ""
@@ -2421,6 +2448,8 @@ async def auto_add_competitors(ctx, params: AutoAddCompetitorsParams) -> ActionR
             clean = cname.strip()
             if not clean or clean.lower() in tracked_names_lower or clean.lower() == brand_name_lower:
                 continue
+            if _is_aggregator_or_directory(clean, ""):
+                continue
             to_create.append({
                 "brand_id": params.brand_id,
                 "name": clean,
@@ -2433,12 +2462,15 @@ async def auto_add_competitors(ctx, params: AutoAddCompetitorsParams) -> ActionR
 
         for s in params.signals:
             cname = (s.candidate_competitor_name or "").strip()
+            s_url = s.url or ""
             if not cname or cname.lower() in tracked_names_lower or cname.lower() == brand_name_lower:
+                continue
+            if _is_aggregator_or_directory(cname, s_url):
                 continue
             to_create.append({
                 "brand_id": params.brand_id,
                 "name": cname,
-                "url": s.url or "",
+                "url": s_url,
                 "strengths": ["Surfaced from market signal"],
                 "weaknesses": [],
                 "notes": s.summary or f"Sourced from {s.url}",
