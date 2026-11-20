@@ -8601,6 +8601,1021 @@
       "long_running": false,
       "scopes": [],
       "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "remove_candidate",
+      "description": "Remove a discovered candidate competitor from market research snapshots without tracking it.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "update:market_research_snapshot"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "description": "Name of candidate competitor to remove from discovered candidates",
+            "minLength": 1,
+            "title": "Candidate Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "candidate_name"
+        ],
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a single-record delete.",
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "updated",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "promote_candidate",
+      "description": "Promote a discovered candidate competitor into an officially tracked competitor profile for a brand.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:competitor_profile",
+        "update:market_research_snapshot"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "description": "Name of candidate competitor to promote to tracked competitors",
+            "minLength": 1,
+            "title": "Candidate Name",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "description": "Competitor website",
+            "title": "Url",
+            "type": "string"
+          },
+          "strengths": {
+            "description": "What the competitor does well",
+            "items": {
+              "type": "string"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "description": "Where the competitor falls short",
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaknesses",
+            "type": "array"
+          },
+          "notes": {
+            "default": "",
+            "description": "Freeform observations or rationale",
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id",
+          "candidate_name"
+        ],
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "One named competitor tracked against a brand.",
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          },
+          "brand_id": {
+            "default": "",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "strengths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Weaknesses",
+            "type": "array"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "bulk_delete_brand_profiles",
+      "description": "Bulk permanently delete multiple brand profiles by their IDs or brand names and cascade-delete all dependents anchored to each: competitors, target segments, SWOT snapshots, gap analyses, market research snapshots, and any associated private Visual Brand System workspaces.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "delete:brand_profile",
+        "delete:competitor_profile",
+        "delete:target_segment",
+        "delete:swot_result",
+        "delete:gap_analysis_result",
+        "delete:market_research_snapshot",
+        "delete:vbs_workspace",
+        "delete:visual_brand_system",
+        "delete:visual_evidence",
+        "delete:visual_profile",
+        "delete:vbs_brand_membership",
+        "delete:visual_brand_audit_event",
+        "delete:visual_brand_audit_incident",
+        "delete:vbs_media_conformance"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_ids": {
+            "description": "List of brand profile UUIDs to delete.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Brand Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "brand_ids"
+        ],
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a bulk brand-profile delete operation.",
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subtitle"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "deleted_count": {
+            "default": 0,
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "deleted_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deleted Ids",
+            "type": "array"
+          },
+          "failed_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Ids",
+            "type": "array"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "deleted",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "auto_add_competitors",
+      "description": "Autonomously discover and add competitor profiles for a brand, either from auxiliary signals/candidates or via industry benchmarks when no signals are provided.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:competitor_profile"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "$defs": {
+          "AddCompetitorParams": {
+            "properties": {
+              "brand_id": {
+                "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "name": {
+                "description": "Competitor name",
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "url": {
+                "default": "",
+                "description": "Competitor website",
+                "title": "Url",
+                "type": "string"
+              },
+              "strengths": {
+                "description": "What the competitor does well",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Strengths",
+                "type": "array"
+              },
+              "weaknesses": {
+                "description": "Where the competitor falls short",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Weaknesses",
+                "type": "array"
+              },
+              "notes": {
+                "default": "",
+                "description": "Freeform observations",
+                "title": "Notes",
+                "type": "string"
+              }
+            },
+            "required": [
+              "brand_id",
+              "name"
+            ],
+            "title": "AddCompetitorParams",
+            "type": "object"
+          },
+          "MarketSignal": {
+            "description": "One piece of market evidence Webbee already gathered via her own\nweb_search/read_url (chat-level, NOT IPC-callable from this backend --\nweb-search is a system app with owner_chat_tool, unlike\nwordpress-hub/google-search-console-connector). Passed into\nrun_market_research the same way Content Strategy Hub's\ndiscover_opportunities receives pre-fetched QuerySignal instead of\nfetching GSC data itself.",
+            "properties": {
+              "url": {
+                "description": "Source URL Webbee read (a competitor site, a market report, a directory listing, etc.)",
+                "title": "Url",
+                "type": "string"
+              },
+              "title": {
+                "default": "",
+                "description": "Page title, if known",
+                "title": "Title",
+                "type": "string"
+              },
+              "summary": {
+                "description": "What this source actually says, in Webbee's own words -- not a guess",
+                "title": "Summary",
+                "type": "string"
+              },
+              "candidate_competitor_name": {
+                "default": "",
+                "description": "If this source points to a specific named competitor, its name -- empty if this source is general market context, not a competitor",
+                "title": "Candidate Competitor Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "summary"
+            ],
+            "title": "MarketSignal",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "signals": {
+            "description": "Optional auxiliary market signals or web evidence gathered beforehand.",
+            "items": {
+              "$ref": "#/$defs/MarketSignal"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "candidates": {
+            "description": "Optional explicit competitor candidate names or objects to add.",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/AddCompetitorParams"
+                }
+              ]
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "limit": {
+            "default": 5,
+            "description": "Max number of competitors to add (1-20)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "CompetitorProfile": {
+            "description": "One named competitor tracked against a brand.",
+            "properties": {
+              "id": {
+                "default": "",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "default": "",
+                "title": "Url",
+                "type": "string"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "name": {
+                "default": "",
+                "title": "Name",
+                "type": "string"
+              },
+              "strengths": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Strengths",
+                "type": "array"
+              },
+              "weaknesses": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Weaknesses",
+                "type": "array"
+              },
+              "notes": {
+                "default": "",
+                "title": "Notes",
+                "type": "string"
+              }
+            },
+            "title": "CompetitorProfile",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/CompetitorProfile"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "auto_add_segments",
+      "description": "Autonomously discover and add target audience segments for a brand, either from auxiliary signals/candidates or via industry audience benchmarks when no signals are provided.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "create:target_segment"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "$defs": {
+          "CreateTargetSegmentParams": {
+            "properties": {
+              "brand_id": {
+                "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "segment_name": {
+                "description": "Segment label, e.g. 'SMB office managers'",
+                "minLength": 1,
+                "title": "Segment Name",
+                "type": "string"
+              },
+              "demographics": {
+                "default": "",
+                "description": "Age, role, company size, location, etc.",
+                "title": "Demographics",
+                "type": "string"
+              },
+              "psychographics": {
+                "default": "",
+                "description": "Values, motivations, attitudes",
+                "title": "Psychographics",
+                "type": "string"
+              },
+              "pain_points": {
+                "description": "Problems this segment currently has",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Pain Points",
+                "type": "array"
+              },
+              "needs": {
+                "description": "What this segment is looking for",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Needs",
+                "type": "array"
+              },
+              "preferred_channels": {
+                "description": "Where this segment can be reached, e.g. 'LinkedIn', 'local search'",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Preferred Channels",
+                "type": "array"
+              }
+            },
+            "required": [
+              "brand_id",
+              "segment_name"
+            ],
+            "title": "CreateTargetSegmentParams",
+            "type": "object"
+          },
+          "MarketSignal": {
+            "description": "One piece of market evidence Webbee already gathered via her own\nweb_search/read_url (chat-level, NOT IPC-callable from this backend --\nweb-search is a system app with owner_chat_tool, unlike\nwordpress-hub/google-search-console-connector). Passed into\nrun_market_research the same way Content Strategy Hub's\ndiscover_opportunities receives pre-fetched QuerySignal instead of\nfetching GSC data itself.",
+            "properties": {
+              "url": {
+                "description": "Source URL Webbee read (a competitor site, a market report, a directory listing, etc.)",
+                "title": "Url",
+                "type": "string"
+              },
+              "title": {
+                "default": "",
+                "description": "Page title, if known",
+                "title": "Title",
+                "type": "string"
+              },
+              "summary": {
+                "description": "What this source actually says, in Webbee's own words -- not a guess",
+                "title": "Summary",
+                "type": "string"
+              },
+              "candidate_competitor_name": {
+                "default": "",
+                "description": "If this source points to a specific named competitor, its name -- empty if this source is general market context, not a competitor",
+                "title": "Candidate Competitor Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "summary"
+            ],
+            "title": "MarketSignal",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          },
+          "signals": {
+            "description": "Optional auxiliary market signals or audience research gathered beforehand.",
+            "items": {
+              "$ref": "#/$defs/MarketSignal"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "candidates": {
+            "description": "Optional explicit segment candidates to create.",
+            "items": {
+              "$ref": "#/$defs/CreateTargetSegmentParams"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "limit": {
+            "default": 5,
+            "description": "Max number of segments to add (1-20)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "TargetSegment": {
+            "description": "One audience segment a brand is trying to reach.",
+            "properties": {
+              "id": {
+                "default": "",
+                "title": "Id",
+                "type": "string"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "brand_id": {
+                "default": "",
+                "title": "Brand Id",
+                "type": "string"
+              },
+              "segment_name": {
+                "default": "",
+                "title": "Segment Name",
+                "type": "string"
+              },
+              "demographics": {
+                "default": "",
+                "title": "Demographics",
+                "type": "string"
+              },
+              "psychographics": {
+                "default": "",
+                "title": "Psychographics",
+                "type": "string"
+              },
+              "pain_points": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Pain Points",
+                "type": "array"
+              },
+              "needs": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Needs",
+                "type": "array"
+              },
+              "preferred_channels": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Preferred Channels",
+                "type": "array"
+              }
+            },
+            "title": "TargetSegment",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/TargetSegment"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "created",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
     }
   ],
   "signals": [],
