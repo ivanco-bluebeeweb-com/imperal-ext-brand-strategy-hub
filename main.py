@@ -55,7 +55,7 @@ from schemas import (
     GapAnalysisResult, GapAnalysisResultList,
     SWOTResult, SWOTResultList,
     MarketResearchSnapshot, MarketResearchSnapshotList,
-    CandidateCompetitor, PromoteCandidateParams,
+    CandidateCompetitor, PromoteCandidateParams, RemoveCandidateParams,
     TargetSegment, TargetSegmentList,
     DeleteResult, BulkDeleteResult, DeleteBrandProfileParams, BulkDeleteBrandProfilesParams, DeleteCompetitorParams,
     DeleteTargetSegmentParams, ArchiveSWOTResultParams,
@@ -3195,6 +3195,48 @@ async def promote_candidate(ctx, params: PromoteCandidateParams) -> ActionResult
 
 
 @chat.function(
+    "remove_candidate",
+    description="Remove a discovered candidate competitor from market research snapshots without tracking it.",
+    action_type="write",
+    chain_callable=True,
+    effects=["update:market_research_snapshot"],
+    event="updated",
+    data_model=DeleteResult,
+)
+async def remove_candidate(ctx, params: RemoveCandidateParams) -> ActionResult:
+    """Remove a candidate competitor from current market research snapshots."""
+    brand_doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not brand_doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    removed = False
+    snap_page = await ctx.store.query("market_research_snapshots", where={"brand_id": params.brand_id}, limit=50)
+    for snap in snap_page.data:
+        if snap.data.get("is_current", True):
+            c_names = snap.data.get("candidate_competitors", [])
+            c_details = snap.data.get("candidate_details", [])
+
+            cand_lower = params.candidate_name.strip().lower()
+            new_c_names = [n for n in c_names if n.strip().lower() != cand_lower]
+            new_c_details = [
+                d for d in c_details
+                if (d.get("name", "") if isinstance(d, dict) else getattr(d, "name", "")).strip().lower() != cand_lower
+            ]
+            if len(new_c_names) != len(c_names) or len(new_c_details) != len(c_details):
+                removed = True
+                await ctx.store.update("market_research_snapshots", snap.id, {
+                    "candidate_competitors": new_c_names,
+                    "candidate_details": new_c_details,
+                })
+
+    return ActionResult.success(
+        DeleteResult(id=params.candidate_name, title=params.candidate_name, deleted=removed),
+        summary=f"Candidate competitor '{params.candidate_name}' removed from discovered candidates." if removed else f"Candidate '{params.candidate_name}' not found in current snapshots.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
     "list_market_research_results",
     description="List past market-research snapshots, optionally filtered by brand.",
     action_type="read",
@@ -5597,19 +5639,31 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 title=cd.get("name", ""),
                 subtitle=cd.get("url", "") or cd.get("notes", ""),
                 meta=f"{len(cd.get('strengths') or [])} strengths · {len(cd.get('weaknesses') or [])} weaknesses",
-                actions=[{
-                    "icon": "Plus",
-                    "label": "Track",
-                    "on_click": ui.Call(
-                        "promote_candidate",
-                        brand_id=brand_id,
-                        candidate_name=cd.get("name", ""),
-                        url=cd.get("url", ""),
-                        strengths=cd.get("strengths") or [],
-                        weaknesses=cd.get("weaknesses") or [],
-                        notes=cd.get("notes", ""),
-                    ),
-                }],
+                actions=[
+                    {
+                        "icon": "Plus",
+                        "label": "Track",
+                        "on_click": ui.Call(
+                            "promote_candidate",
+                            brand_id=brand_id,
+                            candidate_name=cd.get("name", ""),
+                            url=cd.get("url", ""),
+                            strengths=cd.get("strengths") or [],
+                            weaknesses=cd.get("weaknesses") or [],
+                            notes=cd.get("notes", ""),
+                        ),
+                    },
+                    {
+                        "icon": "Trash2",
+                        "label": "Remove",
+                        "on_click": ui.Call(
+                            "remove_candidate",
+                            brand_id=brand_id,
+                            candidate_name=cd.get("name", ""),
+                        ),
+                        "confirm": f"Remove candidate '{cd.get('name', '')}' from discovered candidates?",
+                    },
+                ],
             )
             for idx, cd in enumerate(candidate_details)
             if cd.get("name") and cd.get("name").strip().lower() not in seen_c
@@ -5628,15 +5682,27 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 id=f"cand-str-{idx}",
                 title=str(cname),
                 subtitle="Discovered in market research",
-                actions=[{
-                    "icon": "Plus",
-                    "label": "Track",
-                    "on_click": ui.Call(
-                        "promote_candidate",
-                        brand_id=brand_id,
-                        candidate_name=str(cname),
-                    ),
-                }],
+                actions=[
+                    {
+                        "icon": "Plus",
+                        "label": "Track",
+                        "on_click": ui.Call(
+                            "promote_candidate",
+                            brand_id=brand_id,
+                            candidate_name=str(cname),
+                        ),
+                    },
+                    {
+                        "icon": "Trash2",
+                        "label": "Remove",
+                        "on_click": ui.Call(
+                            "remove_candidate",
+                            brand_id=brand_id,
+                            candidate_name=str(cname),
+                        ),
+                        "confirm": f"Remove candidate '{str(cname)}' from discovered candidates?",
+                    },
+                ],
             )
             for idx, cname in enumerate(market_candidates)
             if str(cname).strip() and str(cname).strip().lower() not in seen_c

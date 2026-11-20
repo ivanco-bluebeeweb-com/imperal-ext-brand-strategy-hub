@@ -697,6 +697,11 @@ class PromoteCandidateParams(BaseModel):
     notes: str = Field("", description="Freeform observations or rationale")
 
 
+class RemoveCandidateParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+    candidate_name: str = Field(min_length=1, description="Name of candidate competitor to remove from discovered candidates")
+
+
 class ListCompetitorsParams(BaseModel):
     brand_id: str = Field("", description="Optional brand filter. Empty = all.")
     limit: int = Field(20, description="Max items to return (1-100)")
