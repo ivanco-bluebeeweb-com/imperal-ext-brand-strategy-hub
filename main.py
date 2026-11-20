@@ -57,7 +57,7 @@ from schemas import (
     MarketResearchSnapshot, MarketResearchSnapshotList,
     CandidateCompetitor, PromoteCandidateParams, RemoveCandidateParams,
     TargetSegment, TargetSegmentList,
-    DeleteResult, BulkDeleteResult, DeleteBrandProfileParams, BulkDeleteBrandProfilesParams, DeleteCompetitorParams,
+    DeleteResult, BulkDeleteResult, DeleteBrandProfileParams, EraseBrandProjectDataParams, BulkDeleteBrandProfilesParams, DeleteCompetitorParams,
     DeleteTargetSegmentParams, ArchiveSWOTResultParams,
     ArchiveGapAnalysisParams, PurgeBrandStrategyDataParams, PurgeResult,
 )
@@ -3482,6 +3482,57 @@ async def delete_brand_profile(ctx, params: DeleteBrandProfileParams) -> ActionR
 
 
 @chat.function(
+    "erase_brand_project_data",
+    description=(
+        "Erase all working data and content for a brand project (competitors, segments, "
+        "SWOTs, gap analyses, market research, and visual brand system) while keeping the "
+        "brand profile itself intact."
+    ),
+    action_type="destructive",
+    chain_callable=True,
+    effects=[
+        "delete:competitor_profile", "delete:target_segment",
+        "delete:swot_result", "delete:gap_analysis_result", "delete:market_research_snapshot", "delete:vbs_workspace",
+        "delete:visual_brand_system", "delete:visual_evidence", "delete:visual_profile",
+        "delete:vbs_brand_membership", "delete:visual_brand_audit_event",
+        "delete:visual_brand_audit_incident", "delete:vbs_media_conformance",
+    ],
+    event="brand_project_data_erased",
+    data_model=DeleteResult,
+)
+async def erase_brand_project_data(ctx, params: EraseBrandProjectDataParams) -> ActionResult:
+    """Erase all subsidiary data for a brand profile, but keep the brand profile itself."""
+    doc = await ctx.store.get("brand_profiles", params.brand_id)
+    if not doc:
+        return ActionResult.error(f"Brand profile '{params.brand_id}' not found.", retryable=False)
+
+    for collection in ("competitor_profiles", "target_segments", "swot_results", "gap_analysis_results", "market_research_snapshots"):
+        page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=1000)
+        for d in page.data:
+            await ctx.store.delete(collection, d.id)
+
+    # Cascade the private VBS workspace, if one was ever initialized for this brand.
+    for collection in (
+        VBS_SYSTEMS, VBS_EVIDENCE, VBS_PROFILES, VBS_MEMBERSHIPS,
+        VBS_AUDIT_EVENTS, VBS_AUDIT_INCIDENTS, VBS_MEDIA_CONFORMANCE,
+    ):
+        page = await ctx.store.query(collection, where={"brand_id": params.brand_id}, limit=1000)
+        for d in page.data:
+            await ctx.store.delete(collection, d.id)
+
+    vbs_workspace = await _workspace_for_brand(ctx, params.brand_id)
+    if vbs_workspace:
+        await ctx.store.delete(VBS_WORKSPACES, vbs_workspace.id)
+
+    brand_name = doc.data.get("brand_name", params.brand_id)
+    return ActionResult.success(
+        DeleteResult(id=params.brand_id, title=f"All project data erased for '{brand_name}'", deleted=True),
+        summary=f"All content and project data for brand '{brand_name}' have been erased. Brand profile kept.",
+        refresh_panels=["brand_detail"],
+    )
+
+
+@chat.function(
     "bulk_delete_brand_profiles",
     description=(
         "Bulk permanently delete multiple brand profiles by their IDs or brand names and "
@@ -4743,8 +4794,15 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
             "Erase all project data",
             variant="danger",
             size="sm",
-            icon="Trash2",
+            icon="Eraser",
             on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_erase="1"),
+        ),
+        ui.Button(
+            "Delete Project",
+            variant="danger",
+            size="sm",
+            icon="Trash2",
+            on_click=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_delete="1"),
         ),
     ]
 
@@ -4760,6 +4818,7 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
     show_export = kwargs.get("show_export", "")
     show_import = kwargs.get("show_import", "")
     show_erase = kwargs.get("show_erase", "")
+    show_delete = kwargs.get("show_delete", "")
     dialogs = []
 
     if show_erase:
@@ -4770,22 +4829,22 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                     direction="v", gap=3,
                     children=[
                         ui.Alert(
-                            title="Permanent Deletion Warning",
+                            title="Erase All Project Data Warning",
                             message=(
-                                "Are you absolutely sure? This action will permanently erase all data "
-                                "for this brand project, including competitor analysis, target segments, "
-                                "SWOT results, gap analysis, market research, and visual brand system. "
-                                "This action is irreversible and cannot be undone."
+                                "Are you sure? This action will erase all contents within this brand project "
+                                "(competitor analysis, target segments, SWOT results, gap analysis, "
+                                "market research, and visual brand system). "
+                                "The brand project itself will remain intact."
                             ),
                             type="danger",
                         ),
                         ui.Text(
-                            "To confirm permanent deletion of all project data, click 'Erase Everything' below.",
+                            "To confirm erasing all data while keeping the project, click 'Erase Project Data' below.",
                             variant="caption",
                         ),
                         ui.Form(
-                            action="delete_brand_profile",
-                            submit_label="Erase Everything (Irreversible)",
+                            action="erase_brand_project_data",
+                            submit_label="Erase Project Data",
                             defaults={"brand_id": brand_id},
                             children=[],
                         ),
@@ -4793,7 +4852,40 @@ async def _render_brand_detail_panel(ctx, brand_id: str = "", tab: str = "profil
                 ),
                 confirm_label="",
                 cancel_label="Cancel",
-                on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_erase="", show_export="", show_import=""),
+                on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_erase="", show_delete="", show_export="", show_import=""),
+            )
+        )
+
+    if show_delete:
+        dialogs.append(
+            ui.Dialog(
+                title=f"Delete Project · {brand_name}",
+                content=ui.Stack(
+                    direction="v", gap=3,
+                    children=[
+                        ui.Alert(
+                            title="Permanent Project Deletion Warning",
+                            message=(
+                                "Are you absolutely sure? This action will permanently delete this entire brand "
+                                "project along with all of its data. This action is irreversible and cannot be undone."
+                            ),
+                            type="danger",
+                        ),
+                        ui.Text(
+                            "To confirm permanent deletion of the entire project, click 'Delete Project' below.",
+                            variant="caption",
+                        ),
+                        ui.Form(
+                            action="delete_brand_profile",
+                            submit_label="Delete Project (Irreversible)",
+                            defaults={"brand_id": brand_id},
+                            children=[],
+                        ),
+                    ],
+                ),
+                confirm_label="",
+                cancel_label="Cancel",
+                on_close=ui.Call("__panel__brand_detail", brand_id=brand_id, tab=requested_tab, show_erase="", show_delete="", show_export="", show_import=""),
             )
         )
 

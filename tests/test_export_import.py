@@ -177,12 +177,20 @@ async def test_panel_has_export_and_import():
 
     # Test erase button and confirmation modal rendering
     assert "Erase all project data" in serialized
+    assert "Delete Project" in serialized
     panel_erase = await _render_brand_detail_panel(ctx, brand_id=b_id, tab="profile", show_erase="1")
     serialized_erase = str(panel_erase)
     assert "Erase All Project Data · PanelTest" in serialized_erase
-    assert "action is irreversible" in serialized_erase
-    assert "delete_brand_profile" in serialized_erase
-    assert "Erase Everything (Irreversible)" in serialized_erase
+    assert "erase_brand_project_data" in serialized_erase
+    assert "Erase Project Data" in serialized_erase
+
+    # Test delete project button and confirmation modal rendering
+    panel_delete = await _render_brand_detail_panel(ctx, brand_id=b_id, tab="profile", show_delete="1")
+    serialized_delete = str(panel_delete)
+    assert "Delete Project · PanelTest" in serialized_delete
+    assert "delete_brand_profile" in serialized_delete
+    assert "Delete Project (Irreversible)" in serialized_delete
+    assert "action is irreversible" in serialized_delete
 
 def test_backups_exist():
     import os

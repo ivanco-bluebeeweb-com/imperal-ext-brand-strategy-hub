@@ -846,6 +846,10 @@ class DeleteBrandProfileParams(BaseModel):
     brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
 
 
+class EraseBrandProjectDataParams(BaseModel):
+    brand_id: str = Field(description="UUID of an existing brand profile — from list_brand_profiles, never invented")
+
+
 class BulkDeleteBrandProfilesParams(BaseModel):
     brand_ids: list[str] = Field(
         ...,

@@ -9616,6 +9616,70 @@
       "long_running": false,
       "scopes": [],
       "owner_chat_tool": "brand-strategy-hub"
+    },
+    {
+      "name": "erase_brand_project_data",
+      "description": "Erase all working data and content for a brand project (competitors, segments, SWOTs, gap analyses, market research, and visual brand system) while keeping the brand profile itself intact.",
+      "action_type": "destructive",
+      "chain_callable": true,
+      "effects": [
+        "delete:competitor_profile",
+        "delete:target_segment",
+        "delete:swot_result",
+        "delete:gap_analysis_result",
+        "delete:market_research_snapshot",
+        "delete:vbs_workspace",
+        "delete:visual_brand_system",
+        "delete:visual_evidence",
+        "delete:visual_profile",
+        "delete:vbs_brand_membership",
+        "delete:visual_brand_audit_event",
+        "delete:visual_brand_audit_incident",
+        "delete:vbs_media_conformance"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "brand_id": {
+            "description": "UUID of an existing brand profile — from list_brand_profiles, never invented",
+            "title": "Brand Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand_id"
+        ],
+        "title": "EraseBrandProjectDataParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "description": "Outcome of a single-record delete or erase.",
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "title": "DeleteResult",
+        "type": "object",
+        "x-sdl": "entity"
+      },
+      "event": "deleted",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "brand-strategy-hub"
     }
   ],
   "signals": [],
